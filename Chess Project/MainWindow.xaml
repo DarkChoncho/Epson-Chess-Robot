@@ -1,0 +1,886 @@
+﻿<Window x:Class="Chess_Project.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Chess_Project"
+        mc:Ignorable="d"
+        x:Name="mainWindow" Title="Chess Program" KeyDown="Window_KeyDown" Height="450" Width="800" RenderTransformOrigin="0.5,0.5" WindowState="Maximized" WindowStyle="SingleBorderWindow" SizeChanged="EvaluationInterface" WindowStartupLocation="CenterOwner">
+
+    <Window.RenderTransform>
+        <TransformGroup>
+            <ScaleTransform/>
+            <SkewTransform/>
+            <RotateTransform/>
+            <TranslateTransform/>
+        </TransformGroup>
+    </Window.RenderTransform>
+
+    <Grid x:Name="Screen" Loaded="LoadBackground">
+        <Viewbox Name="Board" HorizontalAlignment="Center" Margin="20,77,20,77" RenderTransformOrigin="0.5,0.5">
+            <Border Name="BoardBorder" BorderBrush="#FFD0D0D0" BorderThickness="2">
+                <Grid x:Name ="Chess_Board" Loaded="LoadBoard" HorizontalAlignment="Center" VerticalAlignment ="Center" Tag="GridSpot">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="40"/>
+                        <RowDefinition Height="40"/>
+                        <RowDefinition Height="40"/>
+                        <RowDefinition Height="40"/>
+                        <RowDefinition Height="40"/>
+                        <RowDefinition Height="40"/>
+                        <RowDefinition Height="40"/>
+                        <RowDefinition Height="40"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="40"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Name="a8" Grid.Row="0" Grid.Column="0" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="b8" Grid.Row="0" Grid.Column="1" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="c8" Grid.Row="0" Grid.Column="2" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="d8" Grid.Row="0" Grid.Column="3" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="e8" Grid.Row="0" Grid.Column="4" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="f8" Grid.Row="0" Grid.Column="5" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="g8" Grid.Row="0" Grid.Column="6" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="h8" Grid.Row="0" Grid.Column="7" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="a7" Grid.Row="1" Grid.Column="0" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="b7" Grid.Row="1" Grid.Column="1" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="c7" Grid.Row="1" Grid.Column="2" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="d7" Grid.Row="1" Grid.Column="3" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="e7" Grid.Row="1" Grid.Column="4" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="f7" Grid.Row="1" Grid.Column="5" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="g7" Grid.Row="1" Grid.Column="6" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="h7" Grid.Row="1" Grid.Column="7" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="a6" Grid.Row="2" Grid.Column="0" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="b6" Grid.Row="2" Grid.Column="1" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="c6" Grid.Row="2" Grid.Column="2" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="d6" Grid.Row="2" Grid.Column="3" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="e6" Grid.Row="2" Grid.Column="4" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="f6" Grid.Row="2" Grid.Column="5" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="g6" Grid.Row="2" Grid.Column="6" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="h6" Grid.Row="2" Grid.Column="7" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="a5" Grid.Row="3" Grid.Column="0" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="b5" Grid.Row="3" Grid.Column="1" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="c5" Grid.Row="3" Grid.Column="2" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="d5" Grid.Row="3" Grid.Column="3" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="e5" Grid.Row="3" Grid.Column="4" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="f5" Grid.Row="3" Grid.Column="5" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="g5" Grid.Row="3" Grid.Column="6" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="h5" Grid.Row="3" Grid.Column="7" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="a4" Grid.Row="4" Grid.Column="0" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="b4" Grid.Row="4" Grid.Column="1" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="c4" Grid.Row="4" Grid.Column="2" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="d4" Grid.Row="4" Grid.Column="3" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="e4" Grid.Row="4" Grid.Column="4" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="f4" Grid.Row="4" Grid.Column="5" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="g4" Grid.Row="4" Grid.Column="6" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="h4" Grid.Row="4" Grid.Column="7" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="a3" Grid.Row="5" Grid.Column="0" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="b3" Grid.Row="5" Grid.Column="1" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="c3" Grid.Row="5" Grid.Column="2" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="d3" Grid.Row="5" Grid.Column="3" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="e3" Grid.Row="5" Grid.Column="4" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="f3" Grid.Row="5" Grid.Column="5" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="g3" Grid.Row="5" Grid.Column="6" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="h3" Grid.Row="5" Grid.Column="7" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="a2" Grid.Row="6" Grid.Column="0" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="b2" Grid.Row="6" Grid.Column="1" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="c2" Grid.Row="6" Grid.Column="2" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="d2" Grid.Row="6" Grid.Column="3" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="e2" Grid.Row="6" Grid.Column="4" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="f2" Grid.Row="6" Grid.Column="5" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="g2" Grid.Row="6" Grid.Column="6" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="h2" Grid.Row="6" Grid.Column="7" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="a1" Grid.Row="7" Grid.Column="0" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="b1" Grid.Row="7" Grid.Column="1" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="c1" Grid.Row="7" Grid.Column="2" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="d1" Grid.Row="7" Grid.Column="3" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="e1" Grid.Row="7" Grid.Column="4" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="f1" Grid.Row="7" Grid.Column="5" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="g1" Grid.Row="7" Grid.Column="6" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+                    <Button Name="h1" Grid.Row="7" Grid.Column="7" Background="Transparent" Click="Square_ClickAsync" MouseRightButtonDown="SquareAnnotate" Tag="GridSpot" BorderThickness="0,0,0,0" Focusable="False"/>
+
+                    <Rectangle Name="a8_RedOverlay" Grid.Row="0" Grid.Column="0" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b8_RedOverlay" Grid.Row="0" Grid.Column="1" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c8_RedOverlay" Grid.Row="0" Grid.Column="2" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d8_RedOverlay" Grid.Row="0" Grid.Column="3" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e8_RedOverlay" Grid.Row="0" Grid.Column="4" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f8_RedOverlay" Grid.Row="0" Grid.Column="5" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g8_RedOverlay" Grid.Row="0" Grid.Column="6" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h8_RedOverlay" Grid.Row="0" Grid.Column="7" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a7_RedOverlay" Grid.Row="1" Grid.Column="0" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b7_RedOverlay" Grid.Row="1" Grid.Column="1" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c7_RedOverlay" Grid.Row="1" Grid.Column="2" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d7_RedOverlay" Grid.Row="1" Grid.Column="3" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e7_RedOverlay" Grid.Row="1" Grid.Column="4" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f7_RedOverlay" Grid.Row="1" Grid.Column="5" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g7_RedOverlay" Grid.Row="1" Grid.Column="6" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h7_RedOverlay" Grid.Row="1" Grid.Column="7" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a6_RedOverlay" Grid.Row="2" Grid.Column="0" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b6_RedOverlay" Grid.Row="2" Grid.Column="1" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c6_RedOverlay" Grid.Row="2" Grid.Column="2" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d6_RedOverlay" Grid.Row="2" Grid.Column="3" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e6_RedOverlay" Grid.Row="2" Grid.Column="4" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f6_RedOverlay" Grid.Row="2" Grid.Column="5" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g6_RedOverlay" Grid.Row="2" Grid.Column="6" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h6_RedOverlay" Grid.Row="2" Grid.Column="7" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a5_RedOverlay" Grid.Row="3" Grid.Column="0" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b5_RedOverlay" Grid.Row="3" Grid.Column="1" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c5_RedOverlay" Grid.Row="3" Grid.Column="2" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d5_RedOverlay" Grid.Row="3" Grid.Column="3" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e5_RedOverlay" Grid.Row="3" Grid.Column="4" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f5_RedOverlay" Grid.Row="3" Grid.Column="5" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g5_RedOverlay" Grid.Row="3" Grid.Column="6" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h5_RedOverlay" Grid.Row="3" Grid.Column="7" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a4_RedOverlay" Grid.Row="4" Grid.Column="0" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b4_RedOverlay" Grid.Row="4" Grid.Column="1" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c4_RedOverlay" Grid.Row="4" Grid.Column="2" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d4_RedOverlay" Grid.Row="4" Grid.Column="3" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e4_RedOverlay" Grid.Row="4" Grid.Column="4" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f4_RedOverlay" Grid.Row="4" Grid.Column="5" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g4_RedOverlay" Grid.Row="4" Grid.Column="6" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h4_RedOverlay" Grid.Row="4" Grid.Column="7" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a3_RedOverlay" Grid.Row="5" Grid.Column="0" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b3_RedOverlay" Grid.Row="5" Grid.Column="1" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c3_RedOverlay" Grid.Row="5" Grid.Column="2" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d3_RedOverlay" Grid.Row="5" Grid.Column="3" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e3_RedOverlay" Grid.Row="5" Grid.Column="4" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f3_RedOverlay" Grid.Row="5" Grid.Column="5" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g3_RedOverlay" Grid.Row="5" Grid.Column="6" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h3_RedOverlay" Grid.Row="5" Grid.Column="7" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a2_RedOverlay" Grid.Row="6" Grid.Column="0" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b2_RedOverlay" Grid.Row="6" Grid.Column="1" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c2_RedOverlay" Grid.Row="6" Grid.Column="2" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d2_RedOverlay" Grid.Row="6" Grid.Column="3" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e2_RedOverlay" Grid.Row="6" Grid.Column="4" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f2_RedOverlay" Grid.Row="6" Grid.Column="5" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g2_RedOverlay" Grid.Row="6" Grid.Column="6" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h2_RedOverlay" Grid.Row="6" Grid.Column="7" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a1_RedOverlay" Grid.Row="7" Grid.Column="0" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b1_RedOverlay" Grid.Row="7" Grid.Column="1" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c1_RedOverlay" Grid.Row="7" Grid.Column="2" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d1_RedOverlay" Grid.Row="7" Grid.Column="3" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e1_RedOverlay" Grid.Row="7" Grid.Column="4" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f1_RedOverlay" Grid.Row="7" Grid.Column="5" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g1_RedOverlay" Grid.Row="7" Grid.Column="6" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h1_RedOverlay" Grid.Row="7" Grid.Column="7" Fill="Red" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+
+                    <Rectangle Name="a8_CTRLOverlay" Grid.Row="0" Grid.Column="0" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b8_CTRLOverlay" Grid.Row="0" Grid.Column="1" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c8_CTRLOverlay" Grid.Row="0" Grid.Column="2" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d8_CTRLOverlay" Grid.Row="0" Grid.Column="3" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e8_CTRLOverlay" Grid.Row="0" Grid.Column="4" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f8_CTRLOverlay" Grid.Row="0" Grid.Column="5" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g8_CTRLOverlay" Grid.Row="0" Grid.Column="6" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h8_CTRLOverlay" Grid.Row="0" Grid.Column="7" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a7_CTRLOverlay" Grid.Row="1" Grid.Column="0" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b7_CTRLOverlay" Grid.Row="1" Grid.Column="1" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c7_CTRLOverlay" Grid.Row="1" Grid.Column="2" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d7_CTRLOverlay" Grid.Row="1" Grid.Column="3" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e7_CTRLOverlay" Grid.Row="1" Grid.Column="4" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f7_CTRLOverlay" Grid.Row="1" Grid.Column="5" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g7_CTRLOverlay" Grid.Row="1" Grid.Column="6" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h7_CTRLOverlay" Grid.Row="1" Grid.Column="7" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a6_CTRLOverlay" Grid.Row="2" Grid.Column="0" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b6_CTRLOverlay" Grid.Row="2" Grid.Column="1" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c6_CTRLOverlay" Grid.Row="2" Grid.Column="2" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d6_CTRLOverlay" Grid.Row="2" Grid.Column="3" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e6_CTRLOverlay" Grid.Row="2" Grid.Column="4" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f6_CTRLOverlay" Grid.Row="2" Grid.Column="5" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g6_CTRLOverlay" Grid.Row="2" Grid.Column="6" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h6_CTRLOverlay" Grid.Row="2" Grid.Column="7" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a5_CTRLOverlay" Grid.Row="3" Grid.Column="0" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b5_CTRLOverlay" Grid.Row="3" Grid.Column="1" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c5_CTRLOverlay" Grid.Row="3" Grid.Column="2" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d5_CTRLOverlay" Grid.Row="3" Grid.Column="3" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e5_CTRLOverlay" Grid.Row="3" Grid.Column="4" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f5_CTRLOverlay" Grid.Row="3" Grid.Column="5" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g5_CTRLOverlay" Grid.Row="3" Grid.Column="6" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h5_CTRLOverlay" Grid.Row="3" Grid.Column="7" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a4_CTRLOverlay" Grid.Row="4" Grid.Column="0" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b4_CTRLOverlay" Grid.Row="4" Grid.Column="1" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c4_CTRLOverlay" Grid.Row="4" Grid.Column="2" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d4_CTRLOverlay" Grid.Row="4" Grid.Column="3" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e4_CTRLOverlay" Grid.Row="4" Grid.Column="4" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f4_CTRLOverlay" Grid.Row="4" Grid.Column="5" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g4_CTRLOverlay" Grid.Row="4" Grid.Column="6" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h4_CTRLOverlay" Grid.Row="4" Grid.Column="7" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a3_CTRLOverlay" Grid.Row="5" Grid.Column="0" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b3_CTRLOverlay" Grid.Row="5" Grid.Column="1" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c3_CTRLOverlay" Grid.Row="5" Grid.Column="2" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d3_CTRLOverlay" Grid.Row="5" Grid.Column="3" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e3_CTRLOverlay" Grid.Row="5" Grid.Column="4" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f3_CTRLOverlay" Grid.Row="5" Grid.Column="5" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g3_CTRLOverlay" Grid.Row="5" Grid.Column="6" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h3_CTRLOverlay" Grid.Row="5" Grid.Column="7" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a2_CTRLOverlay" Grid.Row="6" Grid.Column="0" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b2_CTRLOverlay" Grid.Row="6" Grid.Column="1" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c2_CTRLOverlay" Grid.Row="6" Grid.Column="2" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d2_CTRLOverlay" Grid.Row="6" Grid.Column="3" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e2_CTRLOverlay" Grid.Row="6" Grid.Column="4" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f2_CTRLOverlay" Grid.Row="6" Grid.Column="5" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g2_CTRLOverlay" Grid.Row="6" Grid.Column="6" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h2_CTRLOverlay" Grid.Row="6" Grid.Column="7" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a1_CTRLOverlay" Grid.Row="7" Grid.Column="0" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b1_CTRLOverlay" Grid.Row="7" Grid.Column="1" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c1_CTRLOverlay" Grid.Row="7" Grid.Column="2" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d1_CTRLOverlay" Grid.Row="7" Grid.Column="3" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e1_CTRLOverlay" Grid.Row="7" Grid.Column="4" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f1_CTRLOverlay" Grid.Row="7" Grid.Column="5" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g1_CTRLOverlay" Grid.Row="7" Grid.Column="6" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h1_CTRLOverlay" Grid.Row="7" Grid.Column="7" Fill="Orange" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+
+                    <Rectangle Name="a8_ALTOverlay" Grid.Row="0" Grid.Column="0" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b8_ALTOverlay" Grid.Row="0" Grid.Column="1" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c8_ALTOverlay" Grid.Row="0" Grid.Column="2" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d8_ALTOverlay" Grid.Row="0" Grid.Column="3" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e8_ALTOverlay" Grid.Row="0" Grid.Column="4" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f8_ALTOverlay" Grid.Row="0" Grid.Column="5" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g8_ALTOverlay" Grid.Row="0" Grid.Column="6" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h8_ALTOverlay" Grid.Row="0" Grid.Column="7" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a7_ALTOverlay" Grid.Row="1" Grid.Column="0" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b7_ALTOverlay" Grid.Row="1" Grid.Column="1" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c7_ALTOverlay" Grid.Row="1" Grid.Column="2" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d7_ALTOverlay" Grid.Row="1" Grid.Column="3" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e7_ALTOverlay" Grid.Row="1" Grid.Column="4" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f7_ALTOverlay" Grid.Row="1" Grid.Column="5" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g7_ALTOverlay" Grid.Row="1" Grid.Column="6" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h7_ALTOverlay" Grid.Row="1" Grid.Column="7" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a6_ALTOverlay" Grid.Row="2" Grid.Column="0" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b6_ALTOverlay" Grid.Row="2" Grid.Column="1" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c6_ALTOverlay" Grid.Row="2" Grid.Column="2" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d6_ALTOverlay" Grid.Row="2" Grid.Column="3" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e6_ALTOverlay" Grid.Row="2" Grid.Column="4" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f6_ALTOverlay" Grid.Row="2" Grid.Column="5" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g6_ALTOverlay" Grid.Row="2" Grid.Column="6" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h6_ALTOverlay" Grid.Row="2" Grid.Column="7" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a5_ALTOverlay" Grid.Row="3" Grid.Column="0" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b5_ALTOverlay" Grid.Row="3" Grid.Column="1" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c5_ALTOverlay" Grid.Row="3" Grid.Column="2" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d5_ALTOverlay" Grid.Row="3" Grid.Column="3" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e5_ALTOverlay" Grid.Row="3" Grid.Column="4" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f5_ALTOverlay" Grid.Row="3" Grid.Column="5" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g5_ALTOverlay" Grid.Row="3" Grid.Column="6" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h5_ALTOverlay" Grid.Row="3" Grid.Column="7" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a4_ALTOverlay" Grid.Row="4" Grid.Column="0" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b4_ALTOverlay" Grid.Row="4" Grid.Column="1" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c4_ALTOverlay" Grid.Row="4" Grid.Column="2" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d4_ALTOverlay" Grid.Row="4" Grid.Column="3" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e4_ALTOverlay" Grid.Row="4" Grid.Column="4" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f4_ALTOverlay" Grid.Row="4" Grid.Column="5" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g4_ALTOverlay" Grid.Row="4" Grid.Column="6" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h4_ALTOverlay" Grid.Row="4" Grid.Column="7" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a3_ALTOverlay" Grid.Row="5" Grid.Column="0" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b3_ALTOverlay" Grid.Row="5" Grid.Column="1" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c3_ALTOverlay" Grid.Row="5" Grid.Column="2" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d3_ALTOverlay" Grid.Row="5" Grid.Column="3" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e3_ALTOverlay" Grid.Row="5" Grid.Column="4" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f3_ALTOverlay" Grid.Row="5" Grid.Column="5" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g3_ALTOverlay" Grid.Row="5" Grid.Column="6" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h3_ALTOverlay" Grid.Row="5" Grid.Column="7" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a2_ALTOverlay" Grid.Row="6" Grid.Column="0" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b2_ALTOverlay" Grid.Row="6" Grid.Column="1" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c2_ALTOverlay" Grid.Row="6" Grid.Column="2" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d2_ALTOverlay" Grid.Row="6" Grid.Column="3" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e2_ALTOverlay" Grid.Row="6" Grid.Column="4" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f2_ALTOverlay" Grid.Row="6" Grid.Column="5" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g2_ALTOverlay" Grid.Row="6" Grid.Column="6" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h2_ALTOverlay" Grid.Row="6" Grid.Column="7" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a1_ALTOverlay" Grid.Row="7" Grid.Column="0" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b1_ALTOverlay" Grid.Row="7" Grid.Column="1" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c1_ALTOverlay" Grid.Row="7" Grid.Column="2" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d1_ALTOverlay" Grid.Row="7" Grid.Column="3" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e1_ALTOverlay" Grid.Row="7" Grid.Column="4" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f1_ALTOverlay" Grid.Row="7" Grid.Column="5" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g1_ALTOverlay" Grid.Row="7" Grid.Column="6" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h1_ALTOverlay" Grid.Row="7" Grid.Column="7" Fill="CornflowerBlue" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+
+                    <Rectangle Name="a8_ShiftOverlay" Grid.Row="0" Grid.Column="0" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b8_ShiftOverlay" Grid.Row="0" Grid.Column="1" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c8_ShiftOverlay" Grid.Row="0" Grid.Column="2" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d8_ShiftOverlay" Grid.Row="0" Grid.Column="3" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e8_ShiftOverlay" Grid.Row="0" Grid.Column="4" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f8_ShiftOverlay" Grid.Row="0" Grid.Column="5" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g8_ShiftOverlay" Grid.Row="0" Grid.Column="6" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h8_ShiftOverlay" Grid.Row="0" Grid.Column="7" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a7_ShiftOverlay" Grid.Row="1" Grid.Column="0" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b7_ShiftOverlay" Grid.Row="1" Grid.Column="1" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c7_ShiftOverlay" Grid.Row="1" Grid.Column="2" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d7_ShiftOverlay" Grid.Row="1" Grid.Column="3" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e7_ShiftOverlay" Grid.Row="1" Grid.Column="4" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f7_ShiftOverlay" Grid.Row="1" Grid.Column="5" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g7_ShiftOverlay" Grid.Row="1" Grid.Column="6" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h7_ShiftOverlay" Grid.Row="1" Grid.Column="7" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a6_ShiftOverlay" Grid.Row="2" Grid.Column="0" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b6_ShiftOverlay" Grid.Row="2" Grid.Column="1" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c6_ShiftOverlay" Grid.Row="2" Grid.Column="2" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d6_ShiftOverlay" Grid.Row="2" Grid.Column="3" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e6_ShiftOverlay" Grid.Row="2" Grid.Column="4" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f6_ShiftOverlay" Grid.Row="2" Grid.Column="5" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g6_ShiftOverlay" Grid.Row="2" Grid.Column="6" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h6_ShiftOverlay" Grid.Row="2" Grid.Column="7" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a5_ShiftOverlay" Grid.Row="3" Grid.Column="0" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b5_ShiftOverlay" Grid.Row="3" Grid.Column="1" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c5_ShiftOverlay" Grid.Row="3" Grid.Column="2" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d5_ShiftOverlay" Grid.Row="3" Grid.Column="3" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e5_ShiftOverlay" Grid.Row="3" Grid.Column="4" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f5_ShiftOverlay" Grid.Row="3" Grid.Column="5" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g5_ShiftOverlay" Grid.Row="3" Grid.Column="6" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h5_ShiftOverlay" Grid.Row="3" Grid.Column="7" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a4_ShiftOverlay" Grid.Row="4" Grid.Column="0" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b4_ShiftOverlay" Grid.Row="4" Grid.Column="1" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c4_ShiftOverlay" Grid.Row="4" Grid.Column="2" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d4_ShiftOverlay" Grid.Row="4" Grid.Column="3" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e4_ShiftOverlay" Grid.Row="4" Grid.Column="4" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f4_ShiftOverlay" Grid.Row="4" Grid.Column="5" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g4_ShiftOverlay" Grid.Row="4" Grid.Column="6" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h4_ShiftOverlay" Grid.Row="4" Grid.Column="7" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a3_ShiftOverlay" Grid.Row="5" Grid.Column="0" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b3_ShiftOverlay" Grid.Row="5" Grid.Column="1" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c3_ShiftOverlay" Grid.Row="5" Grid.Column="2" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d3_ShiftOverlay" Grid.Row="5" Grid.Column="3" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e3_ShiftOverlay" Grid.Row="5" Grid.Column="4" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f3_ShiftOverlay" Grid.Row="5" Grid.Column="5" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g3_ShiftOverlay" Grid.Row="5" Grid.Column="6" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h3_ShiftOverlay" Grid.Row="5" Grid.Column="7" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a2_ShiftOverlay" Grid.Row="6" Grid.Column="0" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b2_ShiftOverlay" Grid.Row="6" Grid.Column="1" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c2_ShiftOverlay" Grid.Row="6" Grid.Column="2" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d2_ShiftOverlay" Grid.Row="6" Grid.Column="3" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e2_ShiftOverlay" Grid.Row="6" Grid.Column="4" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f2_ShiftOverlay" Grid.Row="6" Grid.Column="5" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g2_ShiftOverlay" Grid.Row="6" Grid.Column="6" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h2_ShiftOverlay" Grid.Row="6" Grid.Column="7" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a1_ShiftOverlay" Grid.Row="7" Grid.Column="0" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b1_ShiftOverlay" Grid.Row="7" Grid.Column="1" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c1_ShiftOverlay" Grid.Row="7" Grid.Column="2" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d1_ShiftOverlay" Grid.Row="7" Grid.Column="3" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e1_ShiftOverlay" Grid.Row="7" Grid.Column="4" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f1_ShiftOverlay" Grid.Row="7" Grid.Column="5" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g1_ShiftOverlay" Grid.Row="7" Grid.Column="6" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h1_ShiftOverlay" Grid.Row="7" Grid.Column="7" Fill="GreenYellow" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+
+                    <Rectangle Name="a8_SelectedOverlay" Grid.Row="0" Grid.Column="0" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b8_SelectedOverlay" Grid.Row="0" Grid.Column="1" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c8_SelectedOverlay" Grid.Row="0" Grid.Column="2" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d8_SelectedOverlay" Grid.Row="0" Grid.Column="3" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e8_SelectedOverlay" Grid.Row="0" Grid.Column="4" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f8_SelectedOverlay" Grid.Row="0" Grid.Column="5" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g8_SelectedOverlay" Grid.Row="0" Grid.Column="6" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h8_SelectedOverlay" Grid.Row="0" Grid.Column="7" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a7_SelectedOverlay" Grid.Row="1" Grid.Column="0" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b7_SelectedOverlay" Grid.Row="1" Grid.Column="1" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c7_SelectedOverlay" Grid.Row="1" Grid.Column="2" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d7_SelectedOverlay" Grid.Row="1" Grid.Column="3" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e7_SelectedOverlay" Grid.Row="1" Grid.Column="4" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f7_SelectedOverlay" Grid.Row="1" Grid.Column="5" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g7_SelectedOverlay" Grid.Row="1" Grid.Column="6" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h7_SelectedOverlay" Grid.Row="1" Grid.Column="7" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a6_SelectedOverlay" Grid.Row="2" Grid.Column="0" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b6_SelectedOverlay" Grid.Row="2" Grid.Column="1" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c6_SelectedOverlay" Grid.Row="2" Grid.Column="2" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d6_SelectedOverlay" Grid.Row="2" Grid.Column="3" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e6_SelectedOverlay" Grid.Row="2" Grid.Column="4" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f6_SelectedOverlay" Grid.Row="2" Grid.Column="5" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g6_SelectedOverlay" Grid.Row="2" Grid.Column="6" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h6_SelectedOverlay" Grid.Row="2" Grid.Column="7" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a5_SelectedOverlay" Grid.Row="3" Grid.Column="0" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b5_SelectedOverlay" Grid.Row="3" Grid.Column="1" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c5_SelectedOverlay" Grid.Row="3" Grid.Column="2" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d5_SelectedOverlay" Grid.Row="3" Grid.Column="3" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e5_SelectedOverlay" Grid.Row="3" Grid.Column="4" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f5_SelectedOverlay" Grid.Row="3" Grid.Column="5" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g5_SelectedOverlay" Grid.Row="3" Grid.Column="6" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h5_SelectedOverlay" Grid.Row="3" Grid.Column="7" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a4_SelectedOverlay" Grid.Row="4" Grid.Column="0" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b4_SelectedOverlay" Grid.Row="4" Grid.Column="1" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c4_SelectedOverlay" Grid.Row="4" Grid.Column="2" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d4_SelectedOverlay" Grid.Row="4" Grid.Column="3" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e4_SelectedOverlay" Grid.Row="4" Grid.Column="4" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f4_SelectedOverlay" Grid.Row="4" Grid.Column="5" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g4_SelectedOverlay" Grid.Row="4" Grid.Column="6" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h4_SelectedOverlay" Grid.Row="4" Grid.Column="7" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a3_SelectedOverlay" Grid.Row="5" Grid.Column="0" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b3_SelectedOverlay" Grid.Row="5" Grid.Column="1" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c3_SelectedOverlay" Grid.Row="5" Grid.Column="2" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d3_SelectedOverlay" Grid.Row="5" Grid.Column="3" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e3_SelectedOverlay" Grid.Row="5" Grid.Column="4" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f3_SelectedOverlay" Grid.Row="5" Grid.Column="5" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g3_SelectedOverlay" Grid.Row="5" Grid.Column="6" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h3_SelectedOverlay" Grid.Row="5" Grid.Column="7" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a2_SelectedOverlay" Grid.Row="6" Grid.Column="0" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b2_SelectedOverlay" Grid.Row="6" Grid.Column="1" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c2_SelectedOverlay" Grid.Row="6" Grid.Column="2" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d2_SelectedOverlay" Grid.Row="6" Grid.Column="3" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e2_SelectedOverlay" Grid.Row="6" Grid.Column="4" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f2_SelectedOverlay" Grid.Row="6" Grid.Column="5" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g2_SelectedOverlay" Grid.Row="6" Grid.Column="6" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h2_SelectedOverlay" Grid.Row="6" Grid.Column="7" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a1_SelectedOverlay" Grid.Row="7" Grid.Column="0" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b1_SelectedOverlay" Grid.Row="7" Grid.Column="1" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c1_SelectedOverlay" Grid.Row="7" Grid.Column="2" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d1_SelectedOverlay" Grid.Row="7" Grid.Column="3" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e1_SelectedOverlay" Grid.Row="7" Grid.Column="4" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f1_SelectedOverlay" Grid.Row="7" Grid.Column="5" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g1_SelectedOverlay" Grid.Row="7" Grid.Column="6" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h1_SelectedOverlay" Grid.Row="7" Grid.Column="7" Fill="#5ed7f1" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+
+                    <Rectangle Name="a8_MoveCallout" Grid.Row="0" Grid.Column="0" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b8_MoveCallout" Grid.Row="0" Grid.Column="1" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c8_MoveCallout" Grid.Row="0" Grid.Column="2" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d8_MoveCallout" Grid.Row="0" Grid.Column="3" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e8_MoveCallout" Grid.Row="0" Grid.Column="4" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f8_MoveCallout" Grid.Row="0" Grid.Column="5" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g8_MoveCallout" Grid.Row="0" Grid.Column="6" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h8_MoveCallout" Grid.Row="0" Grid.Column="7" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a7_MoveCallout" Grid.Row="1" Grid.Column="0" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b7_MoveCallout" Grid.Row="1" Grid.Column="1" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c7_MoveCallout" Grid.Row="1" Grid.Column="2" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d7_MoveCallout" Grid.Row="1" Grid.Column="3" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e7_MoveCallout" Grid.Row="1" Grid.Column="4" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f7_MoveCallout" Grid.Row="1" Grid.Column="5" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g7_MoveCallout" Grid.Row="1" Grid.Column="6" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h7_MoveCallout" Grid.Row="1" Grid.Column="7" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a6_MoveCallout" Grid.Row="2" Grid.Column="0" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b6_MoveCallout" Grid.Row="2" Grid.Column="1" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c6_MoveCallout" Grid.Row="2" Grid.Column="2" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d6_MoveCallout" Grid.Row="2" Grid.Column="3" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e6_MoveCallout" Grid.Row="2" Grid.Column="4" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f6_MoveCallout" Grid.Row="2" Grid.Column="5" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g6_MoveCallout" Grid.Row="2" Grid.Column="6" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h6_MoveCallout" Grid.Row="2" Grid.Column="7" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a5_MoveCallout" Grid.Row="3" Grid.Column="0" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b5_MoveCallout" Grid.Row="3" Grid.Column="1" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c5_MoveCallout" Grid.Row="3" Grid.Column="2" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d5_MoveCallout" Grid.Row="3" Grid.Column="3" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e5_MoveCallout" Grid.Row="3" Grid.Column="4" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f5_MoveCallout" Grid.Row="3" Grid.Column="5" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g5_MoveCallout" Grid.Row="3" Grid.Column="6" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h5_MoveCallout" Grid.Row="3" Grid.Column="7" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a4_MoveCallout" Grid.Row="4" Grid.Column="0" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b4_MoveCallout" Grid.Row="4" Grid.Column="1" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c4_MoveCallout" Grid.Row="4" Grid.Column="2" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d4_MoveCallout" Grid.Row="4" Grid.Column="3" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e4_MoveCallout" Grid.Row="4" Grid.Column="4" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f4_MoveCallout" Grid.Row="4" Grid.Column="5" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g4_MoveCallout" Grid.Row="4" Grid.Column="6" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h4_MoveCallout" Grid.Row="4" Grid.Column="7" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a3_MoveCallout" Grid.Row="5" Grid.Column="0" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b3_MoveCallout" Grid.Row="5" Grid.Column="1" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c3_MoveCallout" Grid.Row="5" Grid.Column="2" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d3_MoveCallout" Grid.Row="5" Grid.Column="3" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e3_MoveCallout" Grid.Row="5" Grid.Column="4" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f3_MoveCallout" Grid.Row="5" Grid.Column="5" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g3_MoveCallout" Grid.Row="5" Grid.Column="6" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h3_MoveCallout" Grid.Row="5" Grid.Column="7" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a2_MoveCallout" Grid.Row="6" Grid.Column="0" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b2_MoveCallout" Grid.Row="6" Grid.Column="1" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c2_MoveCallout" Grid.Row="6" Grid.Column="2" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d2_MoveCallout" Grid.Row="6" Grid.Column="3" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e2_MoveCallout" Grid.Row="6" Grid.Column="4" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f2_MoveCallout" Grid.Row="6" Grid.Column="5" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g2_MoveCallout" Grid.Row="6" Grid.Column="6" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h2_MoveCallout" Grid.Row="6" Grid.Column="7" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="a1_MoveCallout" Grid.Row="7" Grid.Column="0" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="b1_MoveCallout" Grid.Row="7" Grid.Column="1" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="c1_MoveCallout" Grid.Row="7" Grid.Column="2" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="d1_MoveCallout" Grid.Row="7" Grid.Column="3" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="e1_MoveCallout" Grid.Row="7" Grid.Column="4" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="f1_MoveCallout" Grid.Row="7" Grid.Column="5" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="g1_MoveCallout" Grid.Row="7" Grid.Column="6" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+                    <Rectangle Name="h1_MoveCallout" Grid.Row="7" Grid.Column="7" Fill="#FFE8D400" Opacity="0.75" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="1"/>
+
+                    <TextBlock Name="aFile" Text="a" Grid.Row="7" Grid.Column="0" FontFamily="Sans Serif Collection" FontSize="10" FontWeight="Bold" VerticalAlignment="Top" Height="29" Margin="33,21,0,0" RenderTransformOrigin="0.5,0.45" HorizontalAlignment="Left"/>
+                    <TextBlock Name="bFile" Text="b" Grid.Row="7" Grid.Column="1" FontFamily="Sans Serif Collection" FontSize="10" FontWeight="Bold" VerticalAlignment="Top" Height="29" Margin="33,21,0,0" RenderTransformOrigin="0.5,0.45" HorizontalAlignment="Left"/>
+                    <TextBlock Name="cFile" Text="c" Grid.Row="7" Grid.Column="2" FontFamily="Sans Serif Collection" FontSize="10" FontWeight="Bold" VerticalAlignment="Top" Height="29" Margin="33,21,0,0" RenderTransformOrigin="0.5,0.45" HorizontalAlignment="Left"/>
+                    <TextBlock Name="dFile" Text="d" Grid.Row="7" Grid.Column="3" FontFamily="Sans Serif Collection" FontSize="10" FontWeight="Bold" VerticalAlignment="Top" Height="29" Margin="33,21,0,0" RenderTransformOrigin="0.5,0.45" HorizontalAlignment="Left"/>
+                    <TextBlock Name="eFile" Text="e" Grid.Row="7" Grid.Column="4" FontFamily="Sans Serif Collection" FontSize="10" FontWeight="Bold" VerticalAlignment="Top" Height="29" Margin="33,21,0,0" RenderTransformOrigin="0.5,0.45" HorizontalAlignment="Left"/>
+                    <TextBlock Name="fFile" Text="f" Grid.Row="7" Grid.Column="5" FontFamily="Sans Serif Collection" FontSize="10" FontWeight="Bold" VerticalAlignment="Top" Height="29" Margin="33,21,0,0" RenderTransformOrigin="0.5,0.45" HorizontalAlignment="Left"/>
+                    <TextBlock Name="gFile" Text="g" Grid.Row="7" Grid.Column="6" FontFamily="Sans Serif Collection" FontSize="10" FontWeight="Bold" VerticalAlignment="Top" Height="29" Margin="33,21,0,0" RenderTransformOrigin="0.5,0.45" HorizontalAlignment="Left"/>
+                    <TextBlock Name="hFile" Text="h" Grid.Row="7" Grid.Column="7" FontFamily="Sans Serif Collection" FontSize="10" FontWeight="Bold" VerticalAlignment="Top" Height="29" Margin="33,21,0,0" RenderTransformOrigin="0.5,0.45" HorizontalAlignment="Left"/>
+
+                    <TextBlock Name="firstRank" Text="1" Grid.Row="6" Grid.Column="0" FontFamily="Sans Serif Collection" FontSize="10" FontWeight="Bold" HorizontalAlignment="Left" Margin="1,33,0,0" VerticalAlignment="Top" Height="26" RenderTransformOrigin="0.5,0.5" Grid.RowSpan="2"/>
+                    <TextBlock Name="secondRank" Text="2" Grid.Row="5" Grid.Column="0" FontFamily="Sans Serif Collection" FontSize="10" FontWeight="Bold" HorizontalAlignment="Left" Margin="1,33,0,0" VerticalAlignment="Top" Height="26" RenderTransformOrigin="0.5,0.5" Grid.RowSpan="2"/>
+                    <TextBlock Name="thirdRank" Text="3" Grid.Row="4" Grid.Column="0" FontFamily="Sans Serif Collection" FontSize="10" FontWeight="Bold" HorizontalAlignment="Left" Margin="1,33,0,0" VerticalAlignment="Top" Height="26" RenderTransformOrigin="0.5,0.5" Grid.RowSpan="2"/>
+                    <TextBlock Name="fourthRank" Text="4" Grid.Row="3" Grid.Column="0" FontFamily="Sans Serif Collection" FontSize="10" FontWeight="Bold" HorizontalAlignment="Left" Margin="1,33,0,0" VerticalAlignment="Top" Height="26" RenderTransformOrigin="0.5,0.5" Grid.RowSpan="2"/>
+                    <TextBlock Name="fifthRank" Text="5" Grid.Row="2" Grid.Column="0" FontFamily="Sans Serif Collection" FontSize="10" FontWeight="Bold" HorizontalAlignment="Left" Margin="1,33,0,0" VerticalAlignment="Top" Height="26" RenderTransformOrigin="0.5,0.5" Grid.RowSpan="2"/>
+                    <TextBlock Name="sixthRank" Text="6" Grid.Row="1" Grid.Column="0" FontFamily="Sans Serif Collection" FontSize="10" FontWeight="Bold" HorizontalAlignment="Left" Margin="1,33,0,0" VerticalAlignment="Top" Height="26" RenderTransformOrigin="0.5,0.5" Grid.RowSpan="2"/>
+                    <TextBlock Name="seventhRank" Text="7" Grid.Row="0" Grid.Column="0" FontFamily="Sans Serif Collection" FontSize="10" FontWeight="Bold" HorizontalAlignment="Left" Margin="1,33,0,0" VerticalAlignment="Top" Height="26" RenderTransformOrigin="0.5,0.5" Grid.RowSpan="2"/>
+                    <TextBlock Name="eighthRank" Text="8" Grid.Column="0" FontFamily="Sans Serif Collection" FontSize="10" FontWeight="Bold" VerticalAlignment="Bottom" Height="33" Margin="1,0,0,14" RenderTransformOrigin="0.5,0.4" HorizontalAlignment="Left"/>
+
+                    <Image Name="WhitePawn1" Loaded="LoadImage" MouseLeftButtonUp="ChessPawn_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="6" Grid.Column="0" Panel.ZIndex="2" IsEnabled="False" Visibility="Collapsed" Tag="WhitePiece" RenderTransformOrigin="0.5,0.5"/>
+                    <Image Name="WhitePawn2" Loaded="LoadImage" MouseLeftButtonUp="ChessPawn_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="6" Grid.Column="1" Panel.ZIndex="2" IsEnabled="False" Visibility="Collapsed" Tag="WhitePiece" RenderTransformOrigin="0.5,0.5"/>
+                    <Image Name="WhitePawn3" Loaded="LoadImage" MouseLeftButtonUp="ChessPawn_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="6" Grid.Column="2" Panel.ZIndex="2" IsEnabled="False" Visibility="Collapsed" Tag="WhitePiece" RenderTransformOrigin="0.5,0.5"/>
+                    <Image Name="WhitePawn4" Loaded="LoadImage" MouseLeftButtonUp="ChessPawn_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="6" Grid.Column="3" Panel.ZIndex="2" IsEnabled="False" Visibility="Collapsed" Tag="WhitePiece" RenderTransformOrigin="0.5,0.5"/>
+                    <Image Name="WhitePawn5" Loaded="LoadImage" MouseLeftButtonUp="ChessPawn_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="6" Grid.Column="4" Panel.ZIndex="2" IsEnabled="False" Visibility="Collapsed" Tag="WhitePiece" RenderTransformOrigin="0.5,0.5"/>
+                    <Image Name="WhitePawn6" Loaded="LoadImage" MouseLeftButtonUp="ChessPawn_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="6" Grid.Column="5" Panel.ZIndex="2" IsEnabled="False" Visibility="Collapsed" Tag="WhitePiece" RenderTransformOrigin="0.5,0.5"/>
+                    <Image Name="WhitePawn7" Loaded="LoadImage" MouseLeftButtonUp="ChessPawn_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="6" Grid.Column="6" Panel.ZIndex="2" IsEnabled="False" Visibility="Collapsed" Tag="WhitePiece" RenderTransformOrigin="0.5,0.5"/>
+                    <Image Name="WhitePawn8" Loaded="LoadImage" MouseLeftButtonUp="ChessPawn_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="6" Grid.Column="7" Panel.ZIndex="2" IsEnabled="False" Visibility="Collapsed" Tag="WhitePiece" RenderTransformOrigin="0.5,0.5"/>
+                    <Image Name="WhiteRook1" Loaded="LoadImage" MouseLeftButtonUp="ChessRook_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="7" Grid.Column="0" Panel.ZIndex="2" IsEnabled="False" Visibility="Collapsed" Tag="WhitePiece" RenderTransformOrigin="0.5,0.5"/>
+                    <Image Name="WhiteKnight1" Loaded="LoadImage" MouseLeftButtonUp="ChessKnight_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="7" Grid.Column="1" Panel.ZIndex="2" IsEnabled="False" Visibility="Collapsed" Tag="WhitePiece" RenderTransformOrigin="0.5,0.5"/>
+                    <Image Name="WhiteBishop1" Loaded="LoadImage" MouseLeftButtonUp="ChessBishop_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="7" Grid.Column="2" Panel.ZIndex="2" IsEnabled="False" Visibility="Collapsed" Tag="WhitePiece" RenderTransformOrigin="0.5,0.5"/>
+                    <Image Name="WhiteQueen1" Loaded="LoadImage" MouseLeftButtonUp="ChessQueen_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="7" Grid.Column="3" Panel.ZIndex="2" IsEnabled="False" Visibility="Collapsed" Tag="WhitePiece" RenderTransformOrigin="0.5,0.5"/>
+                    <Image Name="WhiteKing" Loaded="LoadImage" MouseLeftButtonUp="ChessKing_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="7" Grid.Column="4" Panel.ZIndex="2" IsEnabled="False" Visibility="Collapsed" Tag="WhitePiece" RenderTransformOrigin="0.5,0.5"/>
+                    <Image Name="WhiteBishop2" Loaded="LoadImage" MouseLeftButtonUp="ChessBishop_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="7" Grid.Column="5" Panel.ZIndex="2" IsEnabled="False" Visibility="Collapsed" Tag="WhitePiece" RenderTransformOrigin="0.5,0.5"/>
+                    <Image Name="WhiteKnight2" Loaded="LoadImage" MouseLeftButtonUp="ChessKnight_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="7" Grid.Column="6" Panel.ZIndex="2" IsEnabled="False" Visibility="Collapsed" Tag="WhitePiece" RenderTransformOrigin="0.5,0.5"/>
+                    <Image Name="WhiteRook2" Loaded="LoadImage" MouseLeftButtonUp="ChessRook_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="7" Grid.Column="7" Panel.ZIndex="2" IsEnabled="False" Visibility="Collapsed" Tag="WhitePiece" RenderTransformOrigin="0.5,0.5"/>
+
+                    <Image Name="BlackPawn1" Loaded="LoadImage" MouseLeftButtonUp="ChessPawn_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="1" Grid.Column="0" IsEnabled="False" Visibility="Collapsed" Tag="BlackPiece" RenderTransformOrigin="0.5,0.5" Panel.ZIndex="2"/>
+                    <Image Name="BlackPawn2" Loaded="LoadImage" MouseLeftButtonUp="ChessPawn_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="1" Grid.Column="1" IsEnabled="False" Visibility="Collapsed" Tag="BlackPiece" RenderTransformOrigin="0.5,0.5" Panel.ZIndex="2"/>
+                    <Image Name="BlackPawn3" Loaded="LoadImage" MouseLeftButtonUp="ChessPawn_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="1" Grid.Column="2" IsEnabled="False" Visibility="Collapsed" Tag="BlackPiece" RenderTransformOrigin="0.5,0.5" Panel.ZIndex="2"/>
+                    <Image Name="BlackPawn4" Loaded="LoadImage" MouseLeftButtonUp="ChessPawn_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="1" Grid.Column="3" IsEnabled="False" Visibility="Collapsed" Tag="BlackPiece" RenderTransformOrigin="0.5,0.5" Panel.ZIndex="2"/>
+                    <Image Name="BlackPawn5" Loaded="LoadImage" MouseLeftButtonUp="ChessPawn_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="1" Grid.Column="4" IsEnabled="False" Visibility="Collapsed" Tag="BlackPiece" RenderTransformOrigin="0.5,0.5" Panel.ZIndex="2"/>
+                    <Image Name="BlackPawn6" Loaded="LoadImage" MouseLeftButtonUp="ChessPawn_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="1" Grid.Column="5" IsEnabled="False" Visibility="Collapsed" Tag="BlackPiece" RenderTransformOrigin="0.5,0.5" Panel.ZIndex="2"/>
+                    <Image Name="BlackPawn7" Loaded="LoadImage" MouseLeftButtonUp="ChessPawn_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="1" Grid.Column="6" IsEnabled="False" Visibility="Collapsed" Tag="BlackPiece" RenderTransformOrigin="0.5,0.5" Panel.ZIndex="2"/>
+                    <Image Name="BlackPawn8" Loaded="LoadImage" MouseLeftButtonUp="ChessPawn_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="1" Grid.Column="7" IsEnabled="False" Visibility="Collapsed" Tag="BlackPiece" RenderTransformOrigin="0.5,0.5" Panel.ZIndex="2"/>
+                    <Image Name="BlackRook1" Loaded="LoadImage" MouseLeftButtonUp="ChessRook_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="0" Grid.Column="0" IsEnabled="False" Visibility="Collapsed" Tag="BlackPiece" RenderTransformOrigin="0.5,0.5" Panel.ZIndex="2"/>
+                    <Image Name="BlackKnight1" Loaded="LoadImage" MouseLeftButtonUp="ChessKnight_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="0" Grid.Column="1" IsEnabled="False" Visibility="Collapsed" Tag="BlackPiece" RenderTransformOrigin="0.5,0.5" Panel.ZIndex="2"/>
+                    <Image Name="BlackBishop1" Loaded="LoadImage" MouseLeftButtonUp="ChessBishop_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="0" Grid.Column="2" IsEnabled="False" Visibility="Collapsed" Tag="BlackPiece" RenderTransformOrigin="0.5,0.5" Panel.ZIndex="2"/>
+                    <Image Name="BlackQueen1" Loaded="LoadImage" MouseLeftButtonUp="ChessQueen_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="0" Grid.Column="3" IsEnabled="False" Visibility="Collapsed" Tag="BlackPiece" RenderTransformOrigin="0.5,0.5" Panel.ZIndex="2"/>
+                    <Image Name="BlackKing" Loaded="LoadImage" MouseLeftButtonUp="ChessKing_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="0" Grid.Column="4" IsEnabled="False" Visibility="Collapsed" Tag="BlackPiece" RenderTransformOrigin="0.5,0.5" Panel.ZIndex="2"/>
+                    <Image Name="BlackBishop2" Loaded="LoadImage" MouseLeftButtonUp="ChessBishop_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="0" Grid.Column="5" IsEnabled="False" Visibility="Collapsed" Tag="BlackPiece" RenderTransformOrigin="0.5,0.5" Panel.ZIndex="2"/>
+                    <Image Name="BlackKnight2" Loaded="LoadImage" MouseLeftButtonUp="ChessKnight_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="0" Grid.Column="6" IsEnabled="False" Visibility="Collapsed" Tag="BlackPiece" RenderTransformOrigin="0.5,0.5" Panel.ZIndex="2"/>
+                    <Image Name="BlackRook2" Loaded="LoadImage" MouseLeftButtonUp="ChessRook_Click" MouseRightButtonDown="PieceAnnotate" Stretch="Fill" Grid.Row="0" Grid.Column="7" IsEnabled="False" Visibility="Collapsed" Tag="BlackPiece" RenderTransformOrigin="0.5,0.5" Panel.ZIndex="2"/>
+                </Grid>
+            </Border>
+        </Viewbox>
+
+        <Viewbox Name="ButtonBoard" HorizontalAlignment="Center" Margin="0,77,0,77" RenderTransformOrigin="0.5,0.5" Panel.ZIndex="0">
+            <Border Name="ButtonBorder" BorderBrush="Transparent" BorderThickness="2">
+                <Grid Name="SettingsandFlips">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="40"/>
+                        <RowDefinition Height="40"/>
+                        <RowDefinition Height="40"/>
+                        <RowDefinition Height="40"/>
+                        <RowDefinition Height="40"/>
+                        <RowDefinition Height="40"/>
+                        <RowDefinition Height="40"/>
+                        <RowDefinition Height="40"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="20"/>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="20"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Name="FlipButton" Content="↻" Click="FlipBoard" Grid.Row="0" Grid.Column="9" Width="15" Height="15" VerticalContentAlignment="Center" HorizontalAlignment="Left" VerticalAlignment="Top" FontFamily="Sans Serif Collection" FontWeight="Black" FontSize="13" Padding="1.5,-10,2,1" Margin="5,2.5,0,0" Foreground="Black" BorderBrush="{x:Null}" BorderThickness="0,0,0,0" Panel.ZIndex="0">
+                        <Button.Background>
+                            <SolidColorBrush Color="#FFCACACA" Opacity="0.75"/>
+                        </Button.Background>
+                    </Button>
+
+                    <Button Name="Settings" Click="SettingsMenu" Grid.Row="0" Grid.Column="9" Width="15" Height="15" VerticalContentAlignment="Center" HorizontalAlignment="Left" VerticalAlignment="Bottom" FontFamily="Sans Serif Collection" FontWeight="Black" FontSize="13" Padding="1.5,-10,2,1" Margin="5,1,0,2.5" Foreground="Black" BorderBrush="{x:Null}" BorderThickness="0,0,0,0" Panel.ZIndex="0">
+                        <Button.Background>
+                            <SolidColorBrush Color="#FFCACACA" Opacity="0.75"/>
+                        </Button.Background>
+                    </Button>
+
+                    <Button Name="ShowHideEngineEval" Click="EvaluationInterface" Grid.Row="1" Grid.Column="9" Width="15" Height="15" VerticalContentAlignment="Center" HorizontalAlignment="Left" VerticalAlignment="Top" FontFamily="Sans Serif Collection" FontWeight="Black" FontSize="13" Padding="1.5,-10,2,1" Margin="5,2.5,0,0" Foreground="Black" BorderBrush="{x:Null}" BorderThickness="0,0,0,0" Panel.ZIndex="0">
+                        <Button.Background>
+                            <SolidColorBrush Color="#FFCACACA" Opacity="0.75"/>
+                        </Button.Background>
+                    </Button>
+
+                    <Image Source="Assets/Icons/Gear.png" Grid.Row="0" Grid.Column="9" Width="15" Height="15" VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="5,0,0,2.5" IsHitTestVisible="False"/>
+
+                    <Image Source="Assets/Icons/ShowHide.png" Grid.Row="1" Grid.Column="9" Width="13" Height="13" VerticalAlignment="Top" HorizontalAlignment="Left" Margin="6,3.5,0,0" IsHitTestVisible="False"/>
+                </Grid>
+            </Border>
+        </Viewbox>
+
+        <Popup x:Name="SettingsInterface" AllowsTransparency="True" PlacementTarget="{Binding ElementName=Settings}" Placement="Right" Width="150" Height="350" IsOpen="False" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,0,0" PopupAnimation="Scroll" HorizontalOffset="10">
+            <Border Background="#FF404040" CornerRadius="5">
+                <StackPanel Margin="0">
+                    <TextBlock Text="Background" Margin="0,10,0,0" HorizontalAlignment="Center" VerticalAlignment="Top" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" FontSize="12" Width="140" Height="25" TextAlignment="Center" Foreground="#FFD0D0D0" Panel.ZIndex="1"/>
+                    <ComboBox Name="BackgroundSelection" SelectionChanged="ThemeChange" Width="100" Height="25" Margin="5, 5" HorizontalAlignment="Center" VerticalAlignment="Top" VerticalContentAlignment="Top" IsSynchronizedWithCurrentItem="True" FontFamily="Sans Serif Collection" FontSize="10" Padding="6,0,0,6" MaxDropDownHeight="350">
+                        <ComboBoxItem Content="Bases"/>
+                        <ComboBoxItem Content="Classic"/>
+                        <ComboBoxItem Content="Cosmos"/>
+                        <ComboBoxItem Content="Game Room"/>
+                        <ComboBoxItem Content="Glass"/>
+                        <ComboBoxItem Content="Icy Sea"/>
+                        <ComboBoxItem Content="Light"/>
+                        <ComboBoxItem Content="Neon"/>
+                        <ComboBoxItem Content="Tournament"/>
+                        <ComboBoxItem Content="Valentine's Day"/>
+                        <ComboBoxItem Content="Wood"/>
+                    </ComboBox>
+
+                    <TextBlock Text="Pieces" Margin="0,10,0,0" HorizontalAlignment="Center" VerticalAlignment="Top" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" FontSize="12" Width="140" Height="25" TextAlignment="Center" Foreground="#FFD0D0D0" Panel.ZIndex="1"/>
+                    <ComboBox Name="PieceSelection" SelectionChanged="ThemeChange" Width="100" Height="25" Margin="5, 5" HorizontalAlignment="Center" VerticalAlignment="Top" VerticalContentAlignment="Top" IsSynchronizedWithCurrentItem="True" FontFamily="Sans Serif Collection" FontSize="10" Padding="6,0,0,6" MaxDropDownHeight="350">
+                        <ComboBoxItem Content="Alpha"/>
+                        <ComboBoxItem Content="Baseball"/>
+                        <ComboBoxItem Content="Bases"/>
+                        <ComboBoxItem Content="Basketball"/>
+                        <ComboBoxItem Content="Bubblegum"/>
+                        <ComboBoxItem Content="Classic"/>
+                        <ComboBoxItem Content="Game Room"/>
+                        <ComboBoxItem Content="Glass"/>
+                        <ComboBoxItem Content="Icy Sea"/>
+                        <ComboBoxItem Content="Light"/>
+                        <ComboBoxItem Content="Nature"/>
+                        <ComboBoxItem Content="Neo"/>
+                        <ComboBoxItem Content="Neon"/>
+                        <ComboBoxItem Content="Neo Wood"/>
+                        <ComboBoxItem Content="Ocean"/>
+                        <ComboBoxItem Content="Space"/>
+                        <ComboBoxItem Content="Valentine's Day"/>
+                        <ComboBoxItem Content="Wood"/>
+                    </ComboBox>
+
+                    <TextBlock Text="Board" Margin="0,10,0,0" HorizontalAlignment="Center" VerticalAlignment="Top" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" FontSize="12" Width="140" Height="25" TextAlignment="Center" Foreground="#FFD0D0D0" Panel.ZIndex="1"/>
+                    <ComboBox Name="BoardSelection" SelectionChanged="ThemeChange" Width="100" Height="25" Margin="5, 5" HorizontalAlignment="Center" VerticalAlignment="Top" VerticalContentAlignment="Top" IsSynchronizedWithCurrentItem="True" FontFamily="Sans Serif Collection" FontSize="10" Padding="6,0,0,6" MaxDropDownHeight="500">
+                        <ComboBoxItem Content="Baseball"/>
+                        <ComboBoxItem Content="Basketball"/>
+                        <ComboBoxItem Content="Blue"/>
+                        <ComboBoxItem Content="Brown"/>
+                        <ComboBoxItem Content="Bubblegum"/>
+                        <ComboBoxItem Content="Dash"/>
+                        <ComboBoxItem Content="Glass"/>
+                        <ComboBoxItem Content="Green"/>
+                        <ComboBoxItem Content="Icy Sea"/>
+                        <ComboBoxItem Content="Light"/>
+                        <ComboBoxItem Content="Purple"/>
+                        <ComboBoxItem Content="Red"/>
+                        <ComboBoxItem Content="Sky"/>
+                        <ComboBoxItem Content="Tournament"/>
+                        <ComboBoxItem Content="Valentine's Day"/>
+                        <ComboBoxItem Content="Walnut"/>
+                        <ComboBoxItem Content="8-Bit"/>
+                    </ComboBox>
+
+                    <CheckBox Name="FullscreenEnable" Checked="Fullscreen" Unchecked="Windowed" Width="100" Height="25" Margin="20,15,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Content="Fullscreen" FontFamily="Sans Serif Collection" FontSize="12" FontWeight="Heavy" Foreground="#FFD0D0D0" VerticalContentAlignment="Center"/>
+                    <CheckBox Name="Sounds" Click="PieceSoundsSetting" Width="100" Height="25" Margin="20,5,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Content="Piece Sounds" FontFamily="Sans Serif Collection" FontSize="12" FontWeight="Heavy" Foreground="#FFD0D0D0" VerticalContentAlignment="Center"/>
+                    <CheckBox Name="ConfirmMove" Click="ConfirmMoveSetting" Width="120" Height="25" Margin="20,5,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Content="Confirm Moves" FontFamily="Sans Serif Collection" FontSize="12" FontWeight="Heavy" Foreground="#FFD0D0D0" VerticalContentAlignment="Center"/>
+                    <CheckBox Name="EpsonRCConnection" Click="EpsonRcAsync" Width="120" Height="25" Margin="20,5,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Content="Epson RC+" FontFamily="Sans Serif Collection" FontSize="12" FontWeight="Heavy" Foreground="#FFD0D0D0" VerticalContentAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <Popup x:Name="EngineEvaluation" AllowsTransparency="True" Loaded="EvaluationInterface" PopupAnimation="Scroll" PlacementTarget="{Binding ElementName=Screen}" Placement="Left" Height="{Binding ActualHeight, ElementName=ButtonBoard}" IsOpen="False">
+            <Border Background="#FF404040" CornerRadius="5">
+                <StackPanel>
+                    <TextBlock Name="StockfishEvaluationText" Text="Stockfish Evaluation" HorizontalAlignment="Center" VerticalAlignment="Top" Height="35" FontFamily="Sans Serif Collection" FontWeight="Medium" FontSize="20" Foreground="#FFD0D0D0" Margin="10,0,10,0"/>
+                    <Rectangle Name="EvalBar" HorizontalAlignment="Right" VerticalAlignment="Top" Fill="#FFD0D0D0" Panel.ZIndex="1"/>
+                    <Rectangle Name="AdvantageGauge" HorizontalAlignment="Right" VerticalAlignment="Top" Fill="Black" Panel.ZIndex="2"/>
+                    <TextBlock Name="WhiteAdvantage" HorizontalAlignment="Right" VerticalAlignment="Top" Foreground="Black" TextAlignment="Center" FontFamily="Sans Serif Collection" FontWeight="Medium" Panel.ZIndex="3" LineStackingStrategy="BlockLineHeight"/>
+                    <TextBlock Name="BlackAdvantage" HorizontalAlignment="Right" VerticalAlignment="Top" Foreground="#FFD0D0D0" TextAlignment="Center" FontFamily="Sans Serif Collection" FontWeight="Medium" Panel.ZIndex="3" LineStackingStrategy="BlockLineHeight" Visibility="Collapsed"/>
+
+                    <ScrollViewer Name="PlayedMoves" VerticalScrollBarVisibility="Hidden" HorizontalAlignment="Left">
+                        <Grid Name="Moves">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="30"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="30"/>
+                            </Grid.RowDefinitions>
+
+                            <Border Grid.Row="0" Grid.ColumnSpan="3" BorderThickness="2" BorderBrush="#FFD0D0D0"/>
+                            <Border Grid.Column="0" Grid.RowSpan="400" BorderThickness="2,0.5,0.5,2" BorderBrush="#FFD0D0D0"/>
+                            <Border Grid.Column="1" Grid.RowSpan="400" BorderThickness="0.5,0.5,0.5,2" BorderBrush="#FFD0D0D0"/>
+                            <Border Grid.Column="2" Grid.RowSpan="400" BorderThickness="0.5,0.5,2,2" BorderBrush="#FFD0D0D0"/>
+
+                            <TextBlock Text="White" Grid.Row="0" Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FFD0D0D0" FontFamily="Sans Serif Collection" FontSize="14" FontWeight="Bold"/>
+                            <TextBlock Text="Black" Grid.Row="0" Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#FFD0D0D0" FontFamily="Sans Serif Collection" FontSize="14" FontWeight="Bold"/>
+                        </Grid>
+                    </ScrollViewer>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <TextBlock Text="Created by Tyler Reed and Quinn Sullivan" Margin="5,0,0,6" HorizontalAlignment="Left" VerticalAlignment="Bottom" Width="225" FontFamily="Sans Serif Collection" FontWeight="Medium" FontStyle="Italic" FontSize="12" Height="23" Foreground="#FFD0D0D0" Panel.ZIndex="1"/>
+        <Rectangle Fill="#FF404040" Width="235" Height="30" VerticalAlignment="Bottom" HorizontalAlignment="Left">
+            <Rectangle.Clip>
+                <RectangleGeometry Rect="-10, 0, 245, 40" RadiusX="5" RadiusY="5"/>
+            </Rectangle.Clip>
+        </Rectangle>
+
+        <TextBlock Text="Epson RC+ Connection:" HorizontalAlignment="Center" VerticalAlignment="Top" Width="130" FontFamily="Sans Serif Collection" FontWeight="Bold" FontStyle="Normal" FontSize="12" Height="23" Foreground="#FFD0D0D0" Panel.ZIndex="1" Margin="0,1,35,0"/>
+        <TextBlock Name="AttemptingConnection" Text="Attempting to connect..." HorizontalAlignment="Center" VerticalAlignment="Top" Width="130" FontFamily="Sans Serif Collection" FontWeight="Medium" FontStyle="Italic" FontSize="11" Height="23" Foreground="#FFD0D0D0" Panel.ZIndex="1" Margin="0,20,0,0" Visibility="Collapsed"/>
+        <Rectangle Name="EpsonRCRect" Fill="#FF404040" Width="180" Height="30" VerticalAlignment="Top" HorizontalAlignment="Center">
+            <Rectangle.Clip>
+                <RectangleGeometry Rect="0, -10, 180, 40" RadiusX="5" RadiusY="5"/>
+            </Rectangle.Clip>
+        </Rectangle>
+        <Ellipse x:Name="uoStatus" Width="12" Height="12" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="120,10,0,0" Panel.ZIndex="1" Stroke="#FFD0D0D0"/>
+        <Ellipse x:Name="osuStatus" Width="12" Height="12" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="155,10,0,0" Panel.ZIndex="1" Stroke="#FFD0D0D0"/>
+
+        <Image Name="InfoSymbol" Source="Assets/Icons/Info.png" HorizontalAlignment="Right" VerticalAlignment="Bottom" Height="25" Width="25" Margin="0,0,137.5,67.5" Panel.ZIndex="1" Visibility="Collapsed"/>
+        <TextBlock Name="InProgressText" Text="Move in progress.&#x0a;Please wait..." LineHeight="15" LineStackingStrategy="BlockLineHeight" HorizontalAlignment="Right" VerticalAlignment="Bottom" Height="33" Width="120" FontFamily="Sans Serif Collection" FontSize="12" FontWeight="Medium" FontStyle="Normal" Foreground="#FFD0D0D0" Margin="0,0,10,60" Panel.ZIndex="1" Visibility="Collapsed"/>
+        <TextBlock Name="SetupText" Text="Setup in progress.&#x0a;Please wait..." LineHeight="15" LineStackingStrategy="BlockLineHeight" HorizontalAlignment="Right" VerticalAlignment="Bottom" Height="33" Width="120" FontFamily="Sans Serif Collection" FontSize="12" FontWeight="Medium" FontStyle="Normal" Foreground="#FFD0D0D0" Margin="0,0,10,60" Panel.ZIndex="1" Visibility="Collapsed"/>
+        <TextBlock Name="CleanupText" Text="Cleanup in progress.&#x0a;Please wait..." LineHeight="15" LineStackingStrategy="BlockLineHeight" HorizontalAlignment="Right" VerticalAlignment="Bottom" Height="33" Width="120" FontFamily="Sans Serif Collection" FontSize="12" FontWeight="Medium" FontStyle="Normal" Foreground="#FFD0D0D0" Margin="0,0,10,60" Panel.ZIndex="1" Visibility="Collapsed"/>
+        <Rectangle Name="MoveInProgRect" Fill="#FF404040" Width="160" Height="40" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,10,60" Visibility="Collapsed">
+            <Rectangle.Clip>
+                <RectangleGeometry Rect="0, 0, 160, 40" RadiusX="5" RadiusY="5"/>
+            </Rectangle.Clip>
+        </Rectangle>
+
+        <Grid Name ="Game_Start" HorizontalAlignment="Right" Width="180" Panel.ZIndex="0">
+            <TextBlock Text="Select Play Type:" Margin="10,10,0,10" HorizontalAlignment="Right" VerticalAlignment="Top" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" Width="140" TextAlignment="Center" Foreground="#FFD0D0D0" Panel.ZIndex="1"/>
+            <ComboBox Name="Play_Type" SelectionChanged="PlayTypeChanged" Width="100" Height="30" Margin="20, 40" HorizontalAlignment="Right" VerticalAlignment="Top" IsSynchronizedWithCurrentItem="True" FontFamily="Sans Serif Collection" FontSize="11" Panel.ZIndex="1">
+                <ComboBox.ItemContainerStyle>
+                    <Style TargetType="ComboBoxItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                    </Style>
+                </ComboBox.ItemContainerStyle>
+                <ComboBoxItem Content="Com Vs. Com"/>
+                <ComboBoxItem Content="User Vs. Com"/>
+                <ComboBoxItem Content="User Vs. User"/>
+            </ComboBox>
+
+            <Rectangle Fill="#FF404040" Width="145" Height="230" VerticalAlignment="Top" HorizontalAlignment="Right">
+                <Rectangle.Clip>
+                    <RectangleGeometry Rect="0, -10, 155, 240" RadiusX="5" RadiusY="5"/>
+                </Rectangle.Clip>
+            </Rectangle>
+        </Grid>
+
+        <Grid Name ="UvCorUvU" HorizontalAlignment="Right" Width="180" Panel.ZIndex="0">
+            <TextBlock Text="Computer Elo:" Margin="10,80,0,80" HorizontalAlignment="Right" VerticalAlignment="Top" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" Width="140" TextAlignment="Center" Foreground="#FFD0D0D0" Panel.ZIndex="1"/>
+            <ComboBox Name="Elo" SelectionChanged="CheckDropdownSelections" Width="100" Height="30" Margin="20, 110" HorizontalAlignment="Right" VerticalAlignment="Top" IsSynchronizedWithCurrentItem="True" IsEnabled="False" FontFamily="Sans Serif Collection" FontSize="11" MaxDropDownHeight="660" Panel.ZIndex="1">
+                <ComboBox.ItemContainerStyle>
+                    <Style TargetType="ComboBoxItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                    </Style>
+                </ComboBox.ItemContainerStyle>
+                <ComboBoxItem Content="Random"/>
+                <ComboBoxItem Content="200"/>
+                <ComboBoxItem Content="300"/>
+                <ComboBoxItem Content="400"/>
+                <ComboBoxItem Content="500"/>
+                <ComboBoxItem Content="600"/>
+                <ComboBoxItem Content="700"/>
+                <ComboBoxItem Content="800"/>
+                <ComboBoxItem Content="900"/>
+                <ComboBoxItem Content="1000"/>
+                <ComboBoxItem Content="1200"/>
+                <ComboBoxItem Content="1400"/>
+                <ComboBoxItem Content="1600"/>
+                <ComboBoxItem Content="1800"/>
+                <ComboBoxItem Content="2000"/>
+                <ComboBoxItem Content="2200"/>
+                <ComboBoxItem Content="2400"/>
+                <ComboBoxItem Content="2600"/>
+                <ComboBoxItem Content="2800"/>
+                <ComboBoxItem Content="3000"/>
+                <ComboBoxItem Content="3700"/>
+            </ComboBox>
+
+            <TextBlock Text="User Color:" Margin="10,150,0,150" HorizontalAlignment="Right" VerticalAlignment="Top" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" Width="140" TextAlignment="Center" Foreground="#FFD0D0D0"/>
+            <ComboBox Name="Color" SelectionChanged="CheckDropdownSelections" Width="100" Height="30" MinHeight="30" Margin="20, 180" HorizontalAlignment="Right" VerticalAlignment="Top" IsSynchronizedWithCurrentItem="True" IsEnabled="False" FontFamily="Sans Serif Collection" FontSize="11" Panel.ZIndex="1">
+                <ComboBox.ItemContainerStyle>
+                    <Style TargetType="ComboBoxItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                    </Style>
+                </ComboBox.ItemContainerStyle>
+                <ComboBoxItem Content="White" />
+                <ComboBoxItem Content="Black" />
+            </ComboBox>
+        </Grid>
+
+        <Grid Name ="CvC" HorizontalAlignment="Right" Width="140" Visibility="Hidden" IsEnabled="False">
+            <TextBlock Text="White Elo:" Margin="10, 80" HorizontalAlignment="Center" VerticalAlignment="Top" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" Width="140" TextAlignment="Center" Foreground="#FFD0D0D0"/>
+            <ComboBox Name="WhiteCPUElo" SelectionChanged="CheckDropdownSelections" Width="100" Height="30" Margin="20, 110" HorizontalAlignment="Center" VerticalAlignment="Top" IsSynchronizedWithCurrentItem="True" IsEnabled="False" FontFamily="Sans Serif Collection" FontSize="11" MaxDropDownHeight="660">
+                <ComboBox.ItemContainerStyle>
+                    <Style TargetType="ComboBoxItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                    </Style>
+                </ComboBox.ItemContainerStyle>
+                <ComboBoxItem Content="Random"/>
+                <ComboBoxItem Content="200"/>
+                <ComboBoxItem Content="300"/>
+                <ComboBoxItem Content="400"/>
+                <ComboBoxItem Content="500"/>
+                <ComboBoxItem Content="600"/>
+                <ComboBoxItem Content="700"/>
+                <ComboBoxItem Content="800"/>
+                <ComboBoxItem Content="900"/>
+                <ComboBoxItem Content="1000"/>
+                <ComboBoxItem Content="1200"/>
+                <ComboBoxItem Content="1400"/>
+                <ComboBoxItem Content="1600"/>
+                <ComboBoxItem Content="1800"/>
+                <ComboBoxItem Content="2000"/>
+                <ComboBoxItem Content="2200"/>
+                <ComboBoxItem Content="2400"/>
+                <ComboBoxItem Content="2600"/>
+                <ComboBoxItem Content="2800"/>
+                <ComboBoxItem Content="3000"/>
+                <ComboBoxItem Content="3700"/>
+            </ComboBox>
+
+            <TextBlock Text="Black Elo:" Margin="10, 150" HorizontalAlignment="Center" VerticalAlignment="Top" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" Width="140" TextAlignment="Center" Foreground="#FFD0D0D0"/>
+            <ComboBox Name="BlackCPUElo" SelectionChanged="CheckDropdownSelections" Width="100" Height="30" Margin="20, 180" HorizontalAlignment="Center" VerticalAlignment="Top" IsSynchronizedWithCurrentItem="True" IsEnabled="False" FontFamily="Sans Serif Collection" FontSize="11" MaxDropDownHeight="660">
+                <ComboBox.ItemContainerStyle>
+                    <Style TargetType="ComboBoxItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                    </Style>
+                </ComboBox.ItemContainerStyle>
+                <ComboBoxItem Content="Random"/>
+                <ComboBoxItem Content="200"/>
+                <ComboBoxItem Content="300"/>
+                <ComboBoxItem Content="400"/>
+                <ComboBoxItem Content="500"/>
+                <ComboBoxItem Content="600"/>
+                <ComboBoxItem Content="700"/>
+                <ComboBoxItem Content="800"/>
+                <ComboBoxItem Content="900"/>
+                <ComboBoxItem Content="1000"/>
+                <ComboBoxItem Content="1200"/>
+                <ComboBoxItem Content="1400"/>
+                <ComboBoxItem Content="1600"/>
+                <ComboBoxItem Content="1800"/>
+                <ComboBoxItem Content="2000"/>
+                <ComboBoxItem Content="2200"/>
+                <ComboBoxItem Content="2400"/>
+                <ComboBoxItem Content="2600"/>
+                <ComboBoxItem Content="2800"/>
+                <ComboBoxItem Content="3000"/>
+                <ComboBoxItem Content="3700"/>
+            </ComboBox>
+        </Grid>
+
+        <Button Name="PlayButton" Content="Play" Click="PlayAsync" Width="100" Height="30" Margin="20" HorizontalAlignment="Right" VerticalAlignment="Bottom" VerticalContentAlignment="Center" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" FontSize="14" IsEnabled="False" Padding="1,-4,1,1"/>
+        <Button Name="PauseButton" Content="II" Click="Pause" Width="30" Height="30" Margin="20,20,130,20" HorizontalAlignment="Right" VerticalAlignment="Bottom" VerticalContentAlignment="Center" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" FontSize="18" IsEnabled="False" Padding="1, -9, 1, 1"/>
+        <Button Name="ResumeButton" Content="Resume" Click="Resume" Width="100" Height="30" Margin="20" HorizontalAlignment="Right" VerticalAlignment="Bottom" VerticalContentAlignment="Center" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" FontSize="14" IsEnabled="False" Padding="1,-4,1,1" Visibility="Collapsed"/>
+
+        <Button Name="Confirm" Width="90" Height="40" Margin="100,0,0,20" HorizontalAlignment="Center" VerticalAlignment="Bottom" VerticalContentAlignment="Center" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" FontSize="16" IsEnabled="False" Foreground="White" BorderThickness="0,0,0,0" Padding="1, -4, 1, 1" Visibility="Collapsed">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border Background="#FF9FCD5E" CornerRadius="3">
+                        <ContentPresenter Content="✔" HorizontalAlignment="Center" VerticalAlignment="Top"/>
+                    </Border>
+                </ControlTemplate>
+            </Button.Template>
+        </Button>
+
+        <Button Name="Reject" Width="90" Height="40" Margin="0,0,100,20" HorizontalAlignment="Center" VerticalAlignment="Bottom" VerticalContentAlignment="Center" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" FontSize="16" IsEnabled="False" Foreground="White" BorderThickness="0,0,0,0" Padding="1, -4, 1, 1" Visibility="Collapsed">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border Background="#FF616161" CornerRadius="3">
+                        <ContentPresenter Content="❌" HorizontalAlignment="Center" VerticalAlignment="Top"/>
+                    </Border>
+                </ControlTemplate>
+            </Button.Template>
+        </Button>
+    </Grid>
+</Window>

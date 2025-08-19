@@ -1,0 +1,3 @@
+Background:Cosmos
+Pieces:NeoWood
+Board:IcySea

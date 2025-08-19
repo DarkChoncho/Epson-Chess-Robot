@@ -1,0 +1,1047 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows7.0</TargetFramework>
+    <RootNamespace>Chess_Project</RootNamespace>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <Authors>Tyler Reed</Authors>
+    <Company>Olympus Controls</Company>
+    <Configurations>Debug;Release</Configurations>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Chess Pieces\**" />
+    <Compile Remove="Configuration Settings\**" />
+    <Compile Remove="Piece Sounds\**" />
+    <EmbeddedResource Remove="Chess Pieces\**" />
+    <EmbeddedResource Remove="Configuration Settings\**" />
+    <EmbeddedResource Remove="Piece Sounds\**" />
+    <None Remove="Chess Pieces\**" />
+    <None Remove="Configuration Settings\**" />
+    <None Remove="Piece Sounds\**" />
+    <Page Remove="Chess Pieces\**" />
+    <Page Remove="Configuration Settings\**" />
+    <Page Remove="Piece Sounds\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Assets\Backgrounds\Bases.png" />
+    <None Remove="Assets\Backgrounds\Classic.png" />
+    <None Remove="Assets\Backgrounds\Cosmos.png" />
+    <None Remove="Assets\Backgrounds\GameRoom.png" />
+    <None Remove="Assets\Backgrounds\Glass.png" />
+    <None Remove="Assets\Backgrounds\IcySea.png" />
+    <None Remove="Assets\Backgrounds\Light.png" />
+    <None Remove="Assets\Backgrounds\Neon.png" />
+    <None Remove="Assets\Backgrounds\Tournament.png" />
+    <None Remove="Assets\Backgrounds\Wood.png" />
+    <None Remove="Assets\Boards\8-Bit.png" />
+    <None Remove="Assets\Boards\Blue.png" />
+    <None Remove="Assets\Boards\Brown.png" />
+    <None Remove="Assets\Boards\Bubblegum.png" />
+    <None Remove="Assets\Boards\Dash.png" />
+    <None Remove="Assets\Boards\Glass.png" />
+    <None Remove="Assets\Boards\Green.png" />
+    <None Remove="Assets\Boards\IcySea.png" />
+    <None Remove="Assets\Boards\Icy_Sea.png" />
+    <None Remove="Assets\Boards\Light.png" />
+    <None Remove="Assets\Boards\Purple.png" />
+    <None Remove="Assets\Boards\Red.png" />
+    <None Remove="Assets\Boards\Sky.png" />
+    <None Remove="Assets\Boards\Tournament.png" />
+    <None Remove="Assets\Boards\Walnut.png" />
+    <None Remove="Assets\Icons\Gear.PNG" />
+    <None Remove="Assets\Icons\Info.png" />
+    <None Remove="Assets\Icons\ShowHide.PNG" />
+    <None Remove="Assets\Pieces\Alpha\BlackBishop.png" />
+    <None Remove="Assets\Pieces\Alpha\BlackKing.png" />
+    <None Remove="Assets\Pieces\Alpha\BlackKnight.png" />
+    <None Remove="Assets\Pieces\Alpha\BlackPawn.png" />
+    <None Remove="Assets\Pieces\Alpha\BlackQueen.png" />
+    <None Remove="Assets\Pieces\Alpha\BlackRook.png" />
+    <None Remove="Assets\Pieces\Alpha\WhiteBishop.png" />
+    <None Remove="Assets\Pieces\Alpha\WhiteKing.png" />
+    <None Remove="Assets\Pieces\Alpha\WhiteKnight.png" />
+    <None Remove="Assets\Pieces\Alpha\WhitePawn.png" />
+    <None Remove="Assets\Pieces\Alpha\WhiteQueen.png" />
+    <None Remove="Assets\Pieces\Alpha\WhiteRook.png" />
+    <None Remove="Assets\Pieces\Bases\BlackBishop.png" />
+    <None Remove="Assets\Pieces\Bases\BlackKing.png" />
+    <None Remove="Assets\Pieces\Bases\BlackKnight.png" />
+    <None Remove="Assets\Pieces\Bases\BlackPawn.png" />
+    <None Remove="Assets\Pieces\Bases\BlackQueen.png" />
+    <None Remove="Assets\Pieces\Bases\BlackRook.png" />
+    <None Remove="Assets\Pieces\Bases\WhiteBishop.png" />
+    <None Remove="Assets\Pieces\Bases\WhiteKing.png" />
+    <None Remove="Assets\Pieces\Bases\WhiteKnight.png" />
+    <None Remove="Assets\Pieces\Bases\WhitePawn.png" />
+    <None Remove="Assets\Pieces\Bases\WhiteQueen.png" />
+    <None Remove="Assets\Pieces\Bases\WhiteRook.png" />
+    <None Remove="Assets\Pieces\BlackBishop.PNG" />
+    <None Remove="Assets\Pieces\BlackBishop_Bases.png" />
+    <None Remove="Assets\Pieces\BlackBishop_Classic.png" />
+    <None Remove="Assets\Pieces\BlackBishop_GameRoom.png" />
+    <None Remove="Assets\Pieces\BlackBishop_Glass.png" />
+    <None Remove="Assets\Pieces\BlackBishop_IcySea.png" />
+    <None Remove="Assets\Pieces\BlackBishop_Neo.PNG" />
+    <None Remove="Assets\Pieces\BlackBishop_NeoWood.png" />
+    <None Remove="Assets\Pieces\BlackBishop_Ocean.png" />
+    <None Remove="Assets\Pieces\BlackKing.PNG" />
+    <None Remove="Assets\Pieces\BlackKing_Bases.png" />
+    <None Remove="Assets\Pieces\BlackKing_Classic.png" />
+    <None Remove="Assets\Pieces\BlackKing_GameRoom.png" />
+    <None Remove="Assets\Pieces\BlackKing_Glass.png" />
+    <None Remove="Assets\Pieces\BlackKing_IcySea.png" />
+    <None Remove="Assets\Pieces\BlackKing_Neo.PNG" />
+    <None Remove="Assets\Pieces\BlackKing_NeoWood.png" />
+    <None Remove="Assets\Pieces\BlackKing_Ocean.png" />
+    <None Remove="Assets\Pieces\BlackKnight.PNG" />
+    <None Remove="Assets\Pieces\BlackKnight_Bases.png" />
+    <None Remove="Assets\Pieces\BlackKnight_Classic.png" />
+    <None Remove="Assets\Pieces\BlackKnight_GameRoom.png" />
+    <None Remove="Assets\Pieces\BlackKnight_Glass.png" />
+    <None Remove="Assets\Pieces\BlackKnight_IcySea.png" />
+    <None Remove="Assets\Pieces\BlackKnight_Neo.PNG" />
+    <None Remove="Assets\Pieces\BlackKnight_NeoWood.png" />
+    <None Remove="Assets\Pieces\BlackKnight_Ocean.png" />
+    <None Remove="Assets\Pieces\BlackPawn.PNG" />
+    <None Remove="Assets\Pieces\BlackPawn_Bases.png" />
+    <None Remove="Assets\Pieces\BlackPawn_Classic.png" />
+    <None Remove="Assets\Pieces\BlackPawn_GameRoom.png" />
+    <None Remove="Assets\Pieces\BlackPawn_Glass.png" />
+    <None Remove="Assets\Pieces\BlackPawn_IcySea.png" />
+    <None Remove="Assets\Pieces\BlackPawn_Neo.PNG" />
+    <None Remove="Assets\Pieces\BlackPawn_NeoWood.png" />
+    <None Remove="Assets\Pieces\BlackPawn_Ocean.png" />
+    <None Remove="Assets\Pieces\BlackQueen.PNG" />
+    <None Remove="Assets\Pieces\BlackQueen_Bases.png" />
+    <None Remove="Assets\Pieces\BlackQueen_Classic.png" />
+    <None Remove="Assets\Pieces\BlackQueen_GameRoom.png" />
+    <None Remove="Assets\Pieces\BlackQueen_Glass.png" />
+    <None Remove="Assets\Pieces\BlackQueen_IcySea.png" />
+    <None Remove="Assets\Pieces\BlackQueen_Neo.PNG" />
+    <None Remove="Assets\Pieces\BlackQueen_NeoWood.png" />
+    <None Remove="Assets\Pieces\BlackQueen_Ocean.png" />
+    <None Remove="Assets\Pieces\BlackRook.PNG" />
+    <None Remove="Assets\Pieces\BlackRook_Bases.png" />
+    <None Remove="Assets\Pieces\BlackRook_Classic.png" />
+    <None Remove="Assets\Pieces\BlackRook_GameRoom.png" />
+    <None Remove="Assets\Pieces\BlackRook_Glass.png" />
+    <None Remove="Assets\Pieces\BlackRook_IcySea.png" />
+    <None Remove="Assets\Pieces\BlackRook_Neo.PNG" />
+    <None Remove="Assets\Pieces\BlackRook_NeoWood.png" />
+    <None Remove="Assets\Pieces\BlackRook_Ocean.png" />
+    <None Remove="Assets\Pieces\Bubblegum\BlackBishop.png" />
+    <None Remove="Assets\Pieces\Bubblegum\BlackKing.png" />
+    <None Remove="Assets\Pieces\Bubblegum\BlackKnight.png" />
+    <None Remove="Assets\Pieces\Bubblegum\BlackPawn.png" />
+    <None Remove="Assets\Pieces\Bubblegum\BlackQueen.png" />
+    <None Remove="Assets\Pieces\Bubblegum\BlackRook.png" />
+    <None Remove="Assets\Pieces\Bubblegum\WhiteBishop.png" />
+    <None Remove="Assets\Pieces\Bubblegum\WhiteKing.png" />
+    <None Remove="Assets\Pieces\Bubblegum\WhiteKnight.png" />
+    <None Remove="Assets\Pieces\Bubblegum\WhitePawn.png" />
+    <None Remove="Assets\Pieces\Bubblegum\WhiteQueen.png" />
+    <None Remove="Assets\Pieces\Bubblegum\WhiteRook.png" />
+    <None Remove="Assets\Pieces\Classic\BlackBishop.png" />
+    <None Remove="Assets\Pieces\Classic\BlackKing.png" />
+    <None Remove="Assets\Pieces\Classic\BlackKnight.png" />
+    <None Remove="Assets\Pieces\Classic\BlackPawn.png" />
+    <None Remove="Assets\Pieces\Classic\BlackQueen.png" />
+    <None Remove="Assets\Pieces\Classic\BlackRook.png" />
+    <None Remove="Assets\Pieces\Classic\WhiteBishop.png" />
+    <None Remove="Assets\Pieces\Classic\WhiteKing.png" />
+    <None Remove="Assets\Pieces\Classic\WhiteKnight.png" />
+    <None Remove="Assets\Pieces\Classic\WhitePawn.png" />
+    <None Remove="Assets\Pieces\Classic\WhiteQueen.png" />
+    <None Remove="Assets\Pieces\Classic\WhiteRook.png" />
+    <None Remove="Assets\Pieces\GameRoom\BlackBishop.png" />
+    <None Remove="Assets\Pieces\GameRoom\BlackKing.png" />
+    <None Remove="Assets\Pieces\GameRoom\BlackKnight.png" />
+    <None Remove="Assets\Pieces\GameRoom\BlackPawn.png" />
+    <None Remove="Assets\Pieces\GameRoom\BlackQueen.png" />
+    <None Remove="Assets\Pieces\GameRoom\BlackRook.png" />
+    <None Remove="Assets\Pieces\GameRoom\WhiteBishop.png" />
+    <None Remove="Assets\Pieces\GameRoom\WhiteKing.png" />
+    <None Remove="Assets\Pieces\GameRoom\WhiteKnight.png" />
+    <None Remove="Assets\Pieces\GameRoom\WhitePawn.png" />
+    <None Remove="Assets\Pieces\GameRoom\WhiteQueen.png" />
+    <None Remove="Assets\Pieces\GameRoom\WhiteRook.png" />
+    <None Remove="Assets\Pieces\Glass\BlackBishop.png" />
+    <None Remove="Assets\Pieces\Glass\BlackKing.png" />
+    <None Remove="Assets\Pieces\Glass\BlackKnight.png" />
+    <None Remove="Assets\Pieces\Glass\BlackPawn.png" />
+    <None Remove="Assets\Pieces\Glass\BlackQueen.png" />
+    <None Remove="Assets\Pieces\Glass\BlackRook.png" />
+    <None Remove="Assets\Pieces\Glass\WhiteBishop.png" />
+    <None Remove="Assets\Pieces\Glass\WhiteKing.png" />
+    <None Remove="Assets\Pieces\Glass\WhiteKnight.png" />
+    <None Remove="Assets\Pieces\Glass\WhitePawn.png" />
+    <None Remove="Assets\Pieces\Glass\WhiteQueen.png" />
+    <None Remove="Assets\Pieces\Glass\WhiteRook.png" />
+    <None Remove="Assets\Pieces\IcySea\BlackBishop.png" />
+    <None Remove="Assets\Pieces\IcySea\BlackKing.png" />
+    <None Remove="Assets\Pieces\IcySea\BlackKnight.png" />
+    <None Remove="Assets\Pieces\IcySea\BlackPawn.png" />
+    <None Remove="Assets\Pieces\IcySea\BlackQueen.png" />
+    <None Remove="Assets\Pieces\IcySea\BlackRook.png" />
+    <None Remove="Assets\Pieces\IcySea\WhiteBishop.png" />
+    <None Remove="Assets\Pieces\IcySea\WhiteKing.png" />
+    <None Remove="Assets\Pieces\IcySea\WhiteKnight.png" />
+    <None Remove="Assets\Pieces\IcySea\WhitePawn.png" />
+    <None Remove="Assets\Pieces\IcySea\WhiteQueen.png" />
+    <None Remove="Assets\Pieces\IcySea\WhiteRook.png" />
+    <None Remove="Assets\Pieces\KnightRook_NeoWood.png" />
+    <None Remove="Assets\Pieces\Light\BlackBishop.png" />
+    <None Remove="Assets\Pieces\Light\BlackKing.png" />
+    <None Remove="Assets\Pieces\Light\BlackKnight.png" />
+    <None Remove="Assets\Pieces\Light\BlackPawn.png" />
+    <None Remove="Assets\Pieces\Light\BlackQueen.png" />
+    <None Remove="Assets\Pieces\Light\BlackRook.png" />
+    <None Remove="Assets\Pieces\Light\WhiteBishop.png" />
+    <None Remove="Assets\Pieces\Light\WhiteKing.png" />
+    <None Remove="Assets\Pieces\Light\WhiteKnight.png" />
+    <None Remove="Assets\Pieces\Light\WhitePawn.png" />
+    <None Remove="Assets\Pieces\Light\WhiteQueen.png" />
+    <None Remove="Assets\Pieces\Light\WhiteRook.png" />
+    <None Remove="Assets\Pieces\Nature\BlackBishop.png" />
+    <None Remove="Assets\Pieces\Nature\BlackKing.png" />
+    <None Remove="Assets\Pieces\Nature\BlackKnight.png" />
+    <None Remove="Assets\Pieces\Nature\BlackPawn.png" />
+    <None Remove="Assets\Pieces\Nature\BlackQueen.png" />
+    <None Remove="Assets\Pieces\Nature\BlackRook.png" />
+    <None Remove="Assets\Pieces\Nature\WhiteBishop.png" />
+    <None Remove="Assets\Pieces\Nature\WhiteKing.png" />
+    <None Remove="Assets\Pieces\Nature\WhiteKnight.png" />
+    <None Remove="Assets\Pieces\Nature\WhitePawn.png" />
+    <None Remove="Assets\Pieces\Nature\WhiteQueen.png" />
+    <None Remove="Assets\Pieces\Nature\WhiteRook.png" />
+    <None Remove="Assets\Pieces\Neon\BlackBishop.png" />
+    <None Remove="Assets\Pieces\Neon\BlackKing.png" />
+    <None Remove="Assets\Pieces\Neon\BlackKnight.png" />
+    <None Remove="Assets\Pieces\Neon\BlackPawn.png" />
+    <None Remove="Assets\Pieces\Neon\BlackQueen.png" />
+    <None Remove="Assets\Pieces\Neon\BlackRook.png" />
+    <None Remove="Assets\Pieces\Neon\WhiteBishop.png" />
+    <None Remove="Assets\Pieces\Neon\WhiteKing.png" />
+    <None Remove="Assets\Pieces\Neon\WhiteKnight.png" />
+    <None Remove="Assets\Pieces\Neon\WhitePawn.png" />
+    <None Remove="Assets\Pieces\Neon\WhiteQueen.png" />
+    <None Remove="Assets\Pieces\Neon\WhiteRook.png" />
+    <None Remove="Assets\Pieces\NeoWood\BlackBishop.png" />
+    <None Remove="Assets\Pieces\NeoWood\BlackKing.png" />
+    <None Remove="Assets\Pieces\NeoWood\BlackKnight.png" />
+    <None Remove="Assets\Pieces\NeoWood\BlackPawn.png" />
+    <None Remove="Assets\Pieces\NeoWood\BlackQueen.png" />
+    <None Remove="Assets\Pieces\NeoWood\BlackRook.png" />
+    <None Remove="Assets\Pieces\NeoWood\WhiteBishop.png" />
+    <None Remove="Assets\Pieces\NeoWood\WhiteKing.png" />
+    <None Remove="Assets\Pieces\NeoWood\WhiteKnight.png" />
+    <None Remove="Assets\Pieces\NeoWood\WhitePawn.png" />
+    <None Remove="Assets\Pieces\NeoWood\WhiteQueen.png" />
+    <None Remove="Assets\Pieces\NeoWood\WhiteRook.png" />
+    <None Remove="Assets\Pieces\Neo\BlackBishop.PNG" />
+    <None Remove="Assets\Pieces\Neo\BlackKing.PNG" />
+    <None Remove="Assets\Pieces\Neo\BlackKnight.PNG" />
+    <None Remove="Assets\Pieces\Neo\BlackPawn.PNG" />
+    <None Remove="Assets\Pieces\Neo\BlackQueen.PNG" />
+    <None Remove="Assets\Pieces\Neo\BlackRook.PNG" />
+    <None Remove="Assets\Pieces\Neo\WhiteBishop.PNG" />
+    <None Remove="Assets\Pieces\Neo\WhiteKing.PNG" />
+    <None Remove="Assets\Pieces\Neo\WhiteKnight.PNG" />
+    <None Remove="Assets\Pieces\Neo\WhitePawn.PNG" />
+    <None Remove="Assets\Pieces\Neo\WhiteQueen.PNG" />
+    <None Remove="Assets\Pieces\Neo\WhiteRook.PNG" />
+    <None Remove="Assets\Pieces\Ocean\BlackBishop.png" />
+    <None Remove="Assets\Pieces\Ocean\BlackKing.png" />
+    <None Remove="Assets\Pieces\Ocean\BlackKnight.png" />
+    <None Remove="Assets\Pieces\Ocean\BlackPawn.png" />
+    <None Remove="Assets\Pieces\Ocean\BlackQueen.png" />
+    <None Remove="Assets\Pieces\Ocean\BlackRook.png" />
+    <None Remove="Assets\Pieces\Ocean\WhiteBishop.png" />
+    <None Remove="Assets\Pieces\Ocean\WhiteKing.png" />
+    <None Remove="Assets\Pieces\Ocean\WhiteKnight.png" />
+    <None Remove="Assets\Pieces\Ocean\WhitePawn.png" />
+    <None Remove="Assets\Pieces\Ocean\WhiteQueen.png" />
+    <None Remove="Assets\Pieces\Ocean\WhiteRook.png" />
+    <None Remove="Assets\Pieces\Space\BlackBishop.png" />
+    <None Remove="Assets\Pieces\Space\BlackKing.png" />
+    <None Remove="Assets\Pieces\Space\BlackKnight.png" />
+    <None Remove="Assets\Pieces\Space\BlackPawn.png" />
+    <None Remove="Assets\Pieces\Space\BlackQueen.png" />
+    <None Remove="Assets\Pieces\Space\BlackRook.png" />
+    <None Remove="Assets\Pieces\Space\WhiteBishop.png" />
+    <None Remove="Assets\Pieces\Space\WhiteKing.png" />
+    <None Remove="Assets\Pieces\Space\WhiteKnight.png" />
+    <None Remove="Assets\Pieces\Space\WhitePawn.png" />
+    <None Remove="Assets\Pieces\Space\WhiteQueen.png" />
+    <None Remove="Assets\Pieces\Space\WhiteRook.png" />
+    <None Remove="Assets\Pieces\WhiteBishop.PNG" />
+    <None Remove="Assets\Pieces\WhiteBishop_Bases.png" />
+    <None Remove="Assets\Pieces\WhiteBishop_Classic.png" />
+    <None Remove="Assets\Pieces\WhiteBishop_GameRoom.png" />
+    <None Remove="Assets\Pieces\WhiteBishop_Glass.png" />
+    <None Remove="Assets\Pieces\WhiteBishop_IcySea.png" />
+    <None Remove="Assets\Pieces\WhiteBishop_Neo.PNG" />
+    <None Remove="Assets\Pieces\WhiteBishop_NeoWood.png" />
+    <None Remove="Assets\Pieces\WhiteBishop_Ocean.png" />
+    <None Remove="Assets\Pieces\WhiteKing.PNG" />
+    <None Remove="Assets\Pieces\WhiteKing_Bases.png" />
+    <None Remove="Assets\Pieces\WhiteKing_Classic.png" />
+    <None Remove="Assets\Pieces\WhiteKing_GameRoom.png" />
+    <None Remove="Assets\Pieces\WhiteKing_Glass.png" />
+    <None Remove="Assets\Pieces\WhiteKing_IcySea.png" />
+    <None Remove="Assets\Pieces\WhiteKing_Neo.PNG" />
+    <None Remove="Assets\Pieces\WhiteKing_NeoWood.png" />
+    <None Remove="Assets\Pieces\WhiteKing_Ocean.png" />
+    <None Remove="Assets\Pieces\WhiteKnight.PNG" />
+    <None Remove="Assets\Pieces\WhiteKnight_Bases.png" />
+    <None Remove="Assets\Pieces\WhiteKnight_Classic.png" />
+    <None Remove="Assets\Pieces\WhiteKnight_GameRoom.png" />
+    <None Remove="Assets\Pieces\WhiteKnight_Glass.png" />
+    <None Remove="Assets\Pieces\WhiteKnight_IcySea.png" />
+    <None Remove="Assets\Pieces\WhiteKnight_Neo.PNG" />
+    <None Remove="Assets\Pieces\WhiteKnight_NeoWood.png" />
+    <None Remove="Assets\Pieces\WhiteKnight_Ocean.png" />
+    <None Remove="Assets\Pieces\WhitePawn.PNG" />
+    <None Remove="Assets\Pieces\WhitePawn_Bases.png" />
+    <None Remove="Assets\Pieces\WhitePawn_Classic.png" />
+    <None Remove="Assets\Pieces\WhitePawn_GameRoom.png" />
+    <None Remove="Assets\Pieces\WhitePawn_Glass.png" />
+    <None Remove="Assets\Pieces\WhitePawn_IcySea.png" />
+    <None Remove="Assets\Pieces\WhitePawn_Neo.PNG" />
+    <None Remove="Assets\Pieces\WhitePawn_NeoWood.png" />
+    <None Remove="Assets\Pieces\WhitePawn_Ocean.png" />
+    <None Remove="Assets\Pieces\WhiteQueen.PNG" />
+    <None Remove="Assets\Pieces\WhiteQueen_Bases.png" />
+    <None Remove="Assets\Pieces\WhiteQueen_Classic.png" />
+    <None Remove="Assets\Pieces\WhiteQueen_GameRoom.png" />
+    <None Remove="Assets\Pieces\WhiteQueen_Glass.png" />
+    <None Remove="Assets\Pieces\WhiteQueen_IcySea.png" />
+    <None Remove="Assets\Pieces\WhiteQueen_Neo.PNG" />
+    <None Remove="Assets\Pieces\WhiteQueen_NeoWood.png" />
+    <None Remove="Assets\Pieces\WhiteQueen_Ocean.png" />
+    <None Remove="Assets\Pieces\WhiteRook.PNG" />
+    <None Remove="Assets\Pieces\WhiteRook_Bases.png" />
+    <None Remove="Assets\Pieces\WhiteRook_Classic.png" />
+    <None Remove="Assets\Pieces\WhiteRook_GameRoom.png" />
+    <None Remove="Assets\Pieces\WhiteRook_Glass.png" />
+    <None Remove="Assets\Pieces\WhiteRook_IcySea.png" />
+    <None Remove="Assets\Pieces\WhiteRook_Neo.PNG" />
+    <None Remove="Assets\Pieces\WhiteRook_NeoWood.png" />
+    <None Remove="Assets\Pieces\WhiteRook_Ocean.png" />
+    <None Remove="Assets\Pieces\Wood\BlackBishop.png" />
+    <None Remove="Assets\Pieces\Wood\BlackKing.png" />
+    <None Remove="Assets\Pieces\Wood\BlackKnight.png" />
+    <None Remove="Assets\Pieces\Wood\BlackPawn.png" />
+    <None Remove="Assets\Pieces\Wood\BlackQueen.png" />
+    <None Remove="Assets\Pieces\Wood\BlackRook.png" />
+    <None Remove="Assets\Pieces\Wood\WhiteBishop.png" />
+    <None Remove="Assets\Pieces\Wood\WhiteKing.png" />
+    <None Remove="Assets\Pieces\Wood\WhiteKnight.png" />
+    <None Remove="Assets\Pieces\Wood\WhitePawn.png" />
+    <None Remove="Assets\Pieces\Wood\WhiteQueen.png" />
+    <None Remove="Assets\Pieces\Wood\WhiteRook.png" />
+    <None Remove="Assets\Sounds\GameEnd.wav" />
+    <None Remove="Assets\Sounds\GameStart.wav" />
+    <None Remove="Assets\Sounds\PieceCapture.wav" />
+    <None Remove="Assets\Sounds\PieceCastle.wav" />
+    <None Remove="Assets\Sounds\PieceCheck.wav" />
+    <None Remove="Assets\Sounds\PieceClick.wav" />
+    <None Remove="Assets\Sounds\PieceIllegal.wav" />
+    <None Remove="Assets\Sounds\PieceMove.wav" />
+    <None Remove="Assets\Sounds\PieceOpponent.wav" />
+    <None Remove="Assets\Sounds\PiecePromote.wav" />
+    <None Remove="Configuration\Preferences.txt" />
+    <None Remove="Stockfish.exe" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\Backgrounds\Bases.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Backgrounds\Classic.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Backgrounds\Cosmos.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Backgrounds\GameRoom.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Backgrounds\Glass.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Backgrounds\IcySea.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Backgrounds\Light.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Backgrounds\Neon.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Backgrounds\Tournament.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Backgrounds\Wood.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Boards\8-Bit.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Boards\Blue.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Boards\Brown.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Boards\Bubblegum.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Boards\Dash.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Boards\Glass.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Boards\Green.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Boards\IcySea.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Boards\Light.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Boards\Purple.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Boards\Red.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Boards\Sky.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Boards\Tournament.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Boards\Walnut.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Alpha\BlackBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Alpha\BlackKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Alpha\BlackKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Alpha\BlackPawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Alpha\BlackQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Alpha\BlackRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Alpha\WhiteBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Alpha\WhiteKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Alpha\WhiteKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Alpha\WhitePawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Alpha\WhiteQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Alpha\WhiteRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bases\BlackBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bases\BlackKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bases\BlackKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bases\BlackPawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bases\BlackQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bases\BlackRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bases\WhiteBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bases\WhiteKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bases\WhiteKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bases\WhitePawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bases\WhiteQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bases\WhiteRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bubblegum\BlackBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bubblegum\BlackKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bubblegum\BlackKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bubblegum\BlackPawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bubblegum\BlackQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bubblegum\BlackRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bubblegum\WhiteBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bubblegum\WhiteKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bubblegum\WhiteKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bubblegum\WhitePawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bubblegum\WhiteQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Bubblegum\WhiteRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Classic\BlackBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Classic\BlackKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Classic\BlackKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Classic\BlackPawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Classic\BlackQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Classic\BlackRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Classic\WhiteBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Classic\WhiteKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Classic\WhiteKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Classic\WhitePawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Classic\WhiteQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Classic\WhiteRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\GameRoom\BlackBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\GameRoom\BlackKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\GameRoom\BlackKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\GameRoom\BlackPawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\GameRoom\BlackQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\GameRoom\BlackRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\GameRoom\WhiteBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\GameRoom\WhiteKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\GameRoom\WhiteKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\GameRoom\WhitePawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\GameRoom\WhiteQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\GameRoom\WhiteRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Glass\BlackBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Glass\BlackKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Glass\BlackKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Glass\BlackPawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Glass\BlackQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Glass\BlackRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Glass\WhiteBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Glass\WhiteKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Glass\WhiteKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Glass\WhitePawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Glass\WhiteQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Glass\WhiteRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\IcySea\BlackBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\IcySea\BlackKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\IcySea\BlackKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\IcySea\BlackPawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\IcySea\BlackQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\IcySea\BlackRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\IcySea\WhiteBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\IcySea\WhiteKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\IcySea\WhiteKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\IcySea\WhitePawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\IcySea\WhiteQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\IcySea\WhiteRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Light\BlackBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Light\BlackKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Light\BlackKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Light\BlackPawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Light\BlackQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Light\BlackRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Light\WhiteBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Light\WhiteKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Light\WhiteKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Light\WhitePawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Light\WhiteQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Light\WhiteRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Nature\BlackBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Nature\BlackKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Nature\BlackKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Nature\BlackPawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Nature\BlackQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Nature\BlackRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Nature\WhiteBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Nature\WhiteKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Nature\WhiteKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Nature\WhitePawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Nature\WhiteQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Nature\WhiteRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neon\BlackBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neon\BlackKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neon\BlackKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neon\BlackPawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neon\BlackQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neon\BlackRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neon\WhiteBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neon\WhiteKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neon\WhiteKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neon\WhitePawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neon\WhiteQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neon\WhiteRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\NeoWood\BlackBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\NeoWood\BlackKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\NeoWood\BlackKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\NeoWood\BlackPawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\NeoWood\BlackQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\NeoWood\BlackRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\NeoWood\WhiteBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\NeoWood\WhiteKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\NeoWood\WhiteKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\NeoWood\WhitePawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\NeoWood\WhiteQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\NeoWood\WhiteRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neo\BlackBishop.PNG">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neo\BlackKing.PNG">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neo\BlackKnight.PNG">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neo\BlackPawn.PNG">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neo\BlackQueen.PNG">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neo\BlackRook.PNG">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neo\WhiteBishop.PNG">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neo\WhiteKing.PNG">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neo\WhiteKnight.PNG">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neo\WhitePawn.PNG">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neo\WhiteQueen.PNG">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Neo\WhiteRook.PNG">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Ocean\BlackBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Ocean\BlackKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Ocean\BlackKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Ocean\BlackPawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Ocean\BlackQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Ocean\BlackRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Ocean\WhiteBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Ocean\WhiteKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Ocean\WhiteKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Ocean\WhitePawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Ocean\WhiteQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Ocean\WhiteRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Space\BlackBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Space\BlackKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Space\BlackKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Space\BlackPawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Space\BlackQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Space\BlackRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Space\WhiteBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Space\WhiteKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Space\WhiteKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Space\WhitePawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Space\WhiteQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Space\WhiteRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Wood\BlackBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Wood\BlackKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Wood\BlackKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Wood\BlackPawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Wood\BlackQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Wood\BlackRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Wood\WhiteBishop.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Wood\WhiteKing.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Wood\WhiteKnight.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Wood\WhitePawn.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Wood\WhiteQueen.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Pieces\Wood\WhiteRook.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Configuration\Preferences.txt">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Stockfish.exe">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Resource Include="Assets\Icons\Gear.PNG">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Resource>
+    <Resource Include="Assets\Icons\Info.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Resource>
+    <Resource Include="Assets\Icons\ShowHide.PNG">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Resource>
+    <Content Include="Assets\Sounds\GameEnd.wav">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Sounds\GameStart.wav">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Sounds\PieceCapture.wav">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Sounds\PieceCastle.wav">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Sounds\PieceCheck.wav">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Sounds\PieceIllegal.wav">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Sounds\PieceMove.wav">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Sounds\PieceOpponent.wav">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Sounds\PiecePromote.wav">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog" Version="4.3.0" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="9.0.2" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="RCAPINet">
+      <HintPath>..\..\..\EpsonRC70\exe\RCAPINet.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Properties\Settings.Designer.cs">
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Settings.settings</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Properties\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
+  </ItemGroup>
+
+</Project>
