@@ -182,8 +182,6 @@ namespace Chess_Project
                 notation += "=" + promotedTo;   // Add promotion notation to move (Ex. e8=Q)
             }
 
-            notation += checkModifier;   // Append check or checkmate symbol to move
-
             if (kingCastle)
             {
                 notation = "O-O";
@@ -191,8 +189,10 @@ namespace Chess_Project
 
             else if (queenCastle)
             {
-                notation = "O-O-O";                
+                notation = "O-O-O";
             }
+
+            notation += checkModifier;   // Append check or checkmate symbol to move
 
             return notation;
         }

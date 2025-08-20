@@ -10,6 +10,7 @@ using System.Media;
 using System.Net.Sockets;
 using System.Numerics;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Automation.Peers;
@@ -788,7 +789,7 @@ namespace Chess_Project
             }
 
             // Initialize FEN and PGN
-            FENCode();
+            CreateFenCode();
             File.WriteAllText(_fenFilePath, string.Empty);
 
             // Determine game mode
@@ -800,7 +801,7 @@ namespace Chess_Project
                     _userTurn = false;
                     Chess_Board.IsHitTestVisible = false;
 
-                    ComputerMove();
+                    ComputerMoveAsync();
                     break;
 
                 case "User Vs. Com":
@@ -817,7 +818,7 @@ namespace Chess_Project
                     {
                         _moving = true;
                         _userTurn = false;
-                        ComputerMove();
+                        ComputerMoveAsync();
                     }
                     else
                     {
@@ -832,7 +833,7 @@ namespace Chess_Project
                     break;
             }
 
-            await WriteFENCode();
+            await WriteFenCodeAsync();
             WritePGNFile();
         }
 
@@ -914,7 +915,7 @@ namespace Chess_Project
                 {
                     MoveCallout(_oldRow, _oldColumn, _newRow, _newColumn);
                     await FinalizeMoveAsync(activePawn);
-                    await WriteFENCode();
+                    await WriteFenCodeAsync();
                     await CheckmateVerifierAsync();
                     DeselectPieces();
                 }
@@ -927,7 +928,7 @@ namespace Chess_Project
 
             // Immediate finalize path
             await FinalizeMoveAsync(activePawn);
-            await WriteFENCode();
+            await WriteFenCodeAsync();
             await CheckmateVerifierAsync();
             DeselectPieces();
         }
@@ -946,7 +947,7 @@ namespace Chess_Project
 
             // King-specific pre-processing (e.g., castling)
             if (activePiece.Name.Contains("King"))
-                KingMoveManager();
+                KingMoveManager(activePiece);
 
             // Captures and castling rights
             HandlePieceCapture(activePiece);
@@ -982,7 +983,7 @@ namespace Chess_Project
                 {
                     MoveCallout(_oldRow, _oldColumn, _kingCastle ? _oldRow : _queenCastle ? _oldRow : _newRow, _kingCastle ? 7 : _queenCastle ? 0 : _newColumn);
                     await FinalizeMoveAsync(activePiece);
-                    await WriteFENCode();
+                    await WriteFenCodeAsync();
                     await CheckmateVerifierAsync();
                     DeselectPieces();
                 }
@@ -995,7 +996,7 @@ namespace Chess_Project
 
             // Immediate finalize path
             await FinalizeMoveAsync(activePiece);
-            await WriteFENCode();
+            await WriteFenCodeAsync();
             await CheckmateVerifierAsync();
             DeselectPieces();
         }
@@ -1005,7 +1006,7 @@ namespace Chess_Project
         /// position to its castled square and sets the appropriate castling flag.
         /// </summary>
         /// <remarks>✅ Updated on 8/18/2025</remarks>
-        public void KingMoveManager()
+        public void KingMoveManager(Image activePiece)
         {
             // Not a castling move unless the king shifts exactly two files.
             if (Math.Abs(_oldColumn - _newColumn) != 2)
@@ -1015,7 +1016,7 @@ namespace Chess_Project
 
             // Determine which side (White/Black) from the active piece name.
             // Assumes _activePiece is set (e.g., in Square_ClickAsync) to the moving piece's name.
-            bool isWhite = _activePiece?.StartsWith("White") == true;
+            bool isWhite = activePiece.Name.StartsWith("White") == true;
 
             // Pick rook name based on side and castle direction.
             // By convention: Rook1 = queenside rook (col 0), Rook2 = kingside rook (col 7).
@@ -1185,13 +1186,44 @@ namespace Chess_Project
         }
 
         /// <summary>
+        /// Disables castling rights when a king or rook moves or is captured.
+        /// Once the relevant king/rook has moved (or that rook is captured),
+        /// its corresponding castling right is permanently cleared.
+        /// </summary>
+        /// <param name="activePiece">The piece that moved.</param>
+        /// <param name="capturedPiece">The piece that was captured (if any).</param>
+        /// <remarks>✅ Updated on 8/19/2025</remarks>
+        private void DisableCastlingRights(Image? activePiece, Image? capturedPiece)
+        {
+            if (activePiece == null) return;
+
+            // Local helper: map a piece name to its castling flag and set it.
+            void DisableByName(string name)
+            {
+                if (name.StartsWith("WhiteKing")) { _cWK = 1; return; }
+                if (name.StartsWith("BlackKing")) { _cBK = 1; return; }
+                if (name.StartsWith("WhiteRook1")) { _cWR1 = 1; return; }
+                if (name.StartsWith("WhiteRook2")) { _cWR2 = 1; return; }
+                if (name.StartsWith("BlackRook1")) { _cBR1 = 1; return; }
+                if (name.StartsWith("BlackRook2")) { _cBR2 = 1; return; }
+            }
+
+            // Disable because the moving piece is a king/rook.
+            DisableByName(activePiece.Name);
+
+            // Disable because a rook got captured.
+            if (capturedPiece is not null)
+                DisableByName(capturedPiece.Name);
+        }
+
+        /// <summary>
         /// Finalizes a move: flips the side-to-move, updates clocks/FEN, animates the move,
         /// and (if castling) animates the rook as well. Also clears en passant unless created this move
         /// and highlights the move with a callout.
         /// </summary>
         /// <param name="activePiece">The piece that completed the move.</param>
         /// <remarks>✅ Updated on 8/19/2025</remarks>
-        public async Task FinalizeMoveAsync(Image activePiece)
+        private async Task FinalizeMoveAsync(Image activePiece)
         {
             // Switch side to move
             _move = 1 - _move;
@@ -1209,7 +1241,7 @@ namespace Chess_Project
             _startFile = (char)('a' + _oldColumn);
             _startRank = (8 - _oldRow).ToString();
             _startPosition = $"{_startFile}{_startRank}";
-            FENCode();
+            CreateFenCode();
 
             // If the user isn't moving or the user isn't confirming moves, animate & callout now
             if (!_userTurn || !_moveConfirm)
@@ -1322,6 +1354,902 @@ namespace Chess_Project
             _promoted = false;
             _kingCastle = false;
             _queenCastle = false;
+        }
+
+        /// <summary>
+        /// Chooses and executes the engine's move using Stockfish, scaled by the configured ELO.
+        /// Temporarily disables user interaction, queries Stockfish, filters candidate moves by a
+        /// mistake window, optionally forces mating lines, then applies the selected move (including
+        /// promotions) to the board and routes it through the normal move managers.
+        /// </summary>
+        /// <remarks>
+        /// Pipeline:
+        /// <list type="number">
+        ///     <item><description>Lock UI and add a short human-like delay.</description></item>
+        ///     <item><description>Derive engine settings from ELO (depth, mistake threshold, Gaussian skew, critical-moment odds).</description></item>
+        ///     <item><description>Call Stockfish and parse principal/candidate moves with centipawn (CP) or mate scores.</description></item>
+        ///     <item><description>Build a candidate list restricted by a CP-loss window (tighter in the opening).</description></item>
+        ///     <item><description>Critical-moment logic may collapse the choice set to top moves.</description></item>
+        ///     <item><description>If a mating line exists for the side to move, optionally force the top engine move.</description></item>
+        ///     <item><description>Otherwise select a move via a Gaussian-biased pick towards stronger moves.</description></item>
+        ///     <item><description>Apply the move (including promotions) and hand off to <see cref="PawnMoveManagerAsync"/> or <see cref="MoveManagerAsync"/>.</description></item>
+        /// </list>
+        /// Notes:
+        /// <list type="bullet">
+        ///     <item><description>Handles both "a2a4" and "a7a8q" (promotion) formats.</description></item>
+        ///     <item><description>Does not block the UI thread; Stockfish work is awaited.</description></item>
+        ///     <item><description>Respects cached "clicked piece" fields to keep downstream logic unchanged.</description></item>
+        /// </list>
+        /// ✅ Updated on 8/19/2025
+        /// </remarks>
+        private async Task ComputerMoveAsync()
+        {
+            // Lock out user input while the engine is thinking
+            EnableImagesWithTag("WhitePiece", false);
+            EnableImagesWithTag("BlackPiece", false);
+
+            // Small human-ish delay
+            await Task.Delay(Random.Shared.Next(1000, 4501));
+
+            if (_endGame) return;
+
+            _moving = true;
+
+            // Resolve ELO / difficulty
+            int cpuElo =
+                _mode == 2
+                    ? int.Parse(_selectedElo.Content.ToString()!)
+                    : (_move == 1
+                        ? int.Parse(_selectedWhiteElo.Content.ToString()!)
+                        : int.Parse(_selectedBlackElo.Content.ToString()!));
+
+            var settings = EloSettings.GetSettings(cpuElo);
+            int searchDepth = settings.Depth;
+            int cpLossThreshold = settings.CpLossThreshold;
+            double bellCurvePercentile = settings.BellCurvePercentile;
+            int criticalMoveConversion = settings.CriticalMoveConversion;
+
+            // Query Stockfish
+            var (primary, reserve, lines) = await ParseStockfishOutputAsync(_fen, searchDepth, _stockfishPath!);
+
+            // Fallback if nothing parsed in primary
+            if (primary.Count == 0)
+            {
+                primary.AddRange(reserve);
+                reserve.Clear();
+            }
+            if (primary.Count == 0) return;  // Safety
+
+            // Sort "best to worst" by CP, with mate for/against at extremes
+            var sorted = primary.OrderByDescending(m =>
+            {
+                if (m.cp.StartsWith("mate"))
+                    return m.cpValue.StartsWith('-') ? int.MinValue : int.MaxValue;
+                return int.Parse(m.cpValue);
+            }).ToList();
+
+            var (cp, cpValue, possibleMove) = sorted[0];
+
+            // Build candidate list with mistake window
+            var moves = new List<(string cp, string cpValue, string possibleMove)>();
+
+            int maxCpValue = sorted
+                .Where(m => !m.cp.StartsWith("mate"))
+                .Select(m => int.Parse(m.cpValue))
+                .DefaultIfEmpty(0)
+                .First();
+
+            foreach (var m in sorted)
+            {
+                if (m.cp.StartsWith("mate"))
+                {
+                    // Include mates-for; include mates-against only if list is tiny
+                    if (!m.cpValue.StartsWith('-') || sorted.Count < 3)
+                        moves.Add(m);
+                    continue;
+                }
+
+                if (!int.TryParse(m.cpValue, out int cpVal)) continue;
+
+                int diff = Math.Abs(cpVal - maxCpValue);
+                int threshold = _fullmove < 6 ? cpLossThreshold / 8 : cpLossThreshold;
+
+                if (diff <= threshold)
+                    moves.Add(m);
+            }
+
+            //  Mating override (force top engine move sometimes)
+            if (moves.Count > 0 && moves[0].cp == "mate" && !_topEngineMove)
+            {
+                int mateIn = Math.Abs(int.Parse(moves[0].cpValue));
+                if (ShouldPlayMatingMove(cpuElo, mateIn))
+                    _topEngineMove = true;
+            }
+
+            // Determine selected SAN-like string from either forced top move or the Gaussian pick
+            string sel = SelectMoveString(moves, sorted, _topEngineMove, bellCurvePercentile, criticalMoveConversion);
+
+            // Parse “a2a4” or “a7a8q”
+            if (sel.Length == 4)
+            {
+                _startPosition = sel[..2];
+                _endPosition = sel[2..];
+            }
+            else if (sel.Length == 5)
+            {
+                _promotionPiece = sel[^1];
+                _startPosition = sel[..2];
+                _endPosition = sel[2..4];
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("Move string not recognized.");
+                return;
+            }
+
+            // Convert to grid coords
+            _oldRow = 8 - int.Parse(_startPosition[1].ToString());
+            _oldColumn = _startPosition[0] - 'a';
+            _newRow = 8 - int.Parse(_endPosition[1].ToString());
+            _newColumn = _endPosition[0] - 'a';
+
+            // Find the piece and “virtually” place it on destination
+            Image? selectedPiece = null;
+            foreach (var img in Chess_Board.Children.OfType<Image>())
+            {
+                if (Grid.GetRow(img) == _oldRow && Grid.GetColumn(img) == _oldColumn)
+                {
+                    selectedPiece = img;
+                    Grid.SetRow(selectedPiece, _newRow);
+                    Grid.SetColumn(selectedPiece, _newColumn);
+                    break;
+                }
+            }
+            if (selectedPiece is null) return;
+
+            // Route to pawn/non-pawn manager
+            if (selectedPiece.Name.Contains("Pawn"))
+            {
+                _clickedPawn = selectedPiece;
+                await PawnMoveManagerAsync(selectedPiece);
+            }
+            else
+            {
+                _clickedKnight = selectedPiece.Name.Contains("Knight") ? selectedPiece : null;
+                _clickedBishop = selectedPiece.Name.Contains("Bishop") ? selectedPiece : null;
+                _clickedRook = selectedPiece.Name.Contains("Rook") ? selectedPiece : null;
+                _clickedQueen = selectedPiece.Name.Contains("Queen") ? selectedPiece : null;
+                _clickedKing = selectedPiece.Name.Contains("King") ? selectedPiece : null;
+
+                await MoveManagerAsync(selectedPiece);
+            }
+        }
+
+        /// <summary>
+        /// Selects a move string from the engine's candidate moves.
+        /// <list type="bullet">
+        ///     <item><description>If there is only one move or <paramref name="topEngineMove"/> is true, always returns the best move.</description></item>
+        ///     <item><description>Otherwise, checks the top 2-3 moves for a "critical moment" (≥ 300 cp gap):</description></item>
+        ///     <item><description>If found, trims the move list based on <paramref name="criticalMoveConversion"/> (best only, best two, or fall to #3-end)</description></item>
+        ///     <item><description>If not found, keeps the full candidate set.</description></item>
+        ///     <item><description>The final move is chosen using a Gaussian distribution biased by <paramref name="bellCurvePercentile"/>, favoring stronger moves while still allowing weaker ones occasionally.</description></item>
+        /// </list>
+        /// </summary>
+        /// <param name="moves">Filtered candidate moves (best to worst) within a CP window).</param>
+        /// <param name="sorted">Primary move list sorted strictly best to worst; index 0 is the engine's top move.</param>
+        /// <param name="topEngineMove">Forces picking the engine's top move (e.g., in mating sequences).</param>
+        /// <param name="bellCurvePercentile">0-100: higher biases toward stronger (lower index) choices. 90 means "hug the top moves".</param>
+        /// <param name="criticalMoveConversion">0-100: chance to "convert" a critical moment and keep only the best; otherwise "miss" it and degrade to a worse move among the top few.</param>
+        /// <returns>UCI move string like "e2e4" ot "a7a8q".</returns>
+        /// <remarks>✅ Updated on 8/19/2025</remarks>
+        private static string SelectMoveString(
+            List<(string cp, string cpValue, string possibleMove)> moves,
+            List<(string cp, string cpValue, string possibleMove)> sorted,
+            bool topEngineMove,
+            double bellCurvePercentile,
+            int criticalMoveConversion)
+        {
+            // Safety checks
+            if (sorted.Count == 0) return string.Empty;
+            if (moves.Count == 0) return sorted[0].possibleMove.TrimEnd('\r');
+
+            // Forced top line or single option, pick best immediately
+            if (moves.Count == 1 || topEngineMove)
+                return sorted[0].possibleMove.TrimEnd('\r');
+
+            // “Critical moment” gating among top 2–3 moves
+            const int criticalCpThreshold = 300;
+            var top3 = moves.Take(3).ToList();
+
+            if (top3.Count >= 2 &&
+                int.TryParse(top3[0].cpValue, out int cp1) &&
+                int.TryParse(top3[1].cpValue, out int cp2))
+            {
+                int diff12 = Math.Abs(cp1 - cp2);
+                if (diff12 >= criticalCpThreshold)
+                {
+                    // Flip a coin against conversion chance
+                    if (Random.Shared.Next(101) > criticalMoveConversion)
+                    {
+                        // Missed the moment, drop the best (fall to #2+)
+                        if (moves.Count > 1) moves.RemoveAt(0);
+                    }
+                    else
+                    {
+                        // Converted the moment, keep only the best
+                        moves.RemoveRange(1, Math.Max(0, moves.Count - 1));
+                    }
+                }
+                else if (top3.Count == 3 && int.TryParse(top3[2].cpValue, out int cp3))
+                {
+                    int diff23 = Math.Abs(cp2 - cp3);
+                    if (diff23 >= criticalCpThreshold)
+                    {
+                        if (Random.Shared.Next(101) > criticalMoveConversion)
+                        {
+                            // Missed between #2 and #3, fall to #3+
+                            if (moves.Count > 2) moves.RemoveRange(0, 2);
+                        }
+                        else
+                        {
+                            // Converted the moment, keep only the two best moves
+                            moves.RemoveRange(2, Math.Max(0, moves.Count - 2));
+                        }
+                    }
+                }
+            }
+
+            // Gaussian pick biased by bellCurvePercentile (higher = more conservative)
+            int count = moves.Count;
+            if (count == 1)
+                return moves[0].possibleMove.TrimEnd('\r');
+
+            // Higher percentile, mean closer to the top (index 0)
+            double meanIndex = Math.Round((1 - (bellCurvePercentile / 100.0)) * (count - 1));
+            double stdDev = Math.Max(1.0, count / 4.0);
+
+            int idx;
+            do
+            {
+                // Box–Muller
+                double u1 = 1.0 - Random.Shared.NextDouble();
+                double u2 = 1.0 - Random.Shared.NextDouble();
+                double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+                double sample = meanIndex + stdDev * z;
+                idx = (int)Math.Round(sample);
+            } while (idx < 0 || idx >= count);
+
+            return moves[idx].possibleMove.TrimEnd('\r');
+        }
+
+        /// <summary>
+        /// Runs Stockfish with the given FEN and depth, parses its output, 
+        /// and extracts evaluated moves.
+        /// </summary>
+        /// <param name="fen">FEN string representing the current board state.</param>
+        /// <param name="depth">Search depth to request from Stockfish.</param>
+        /// <param name="stockfishPath">Filesystem path to the Stockfish engine executable.</param>
+        /// <returns>
+        /// A tuple containing:
+        /// <list type="bullet">
+        ///     <item><description>A list of evaluated moves at the requested depth (centipawn label, centipawn value, move string).</description></item>
+        ///     <item><description>A reserve list of fallback moves (typically at shallow depth = 1).</description></item>
+        ///     <item><description>All raw output lines from Stockfish (post-split).</description></item>
+        /// </list>
+        /// ✅ Updated on 8/19/2025
+        /// </returns>
+        private static async Task<(List<(string cp, string cpValue, string possibleMove)>, List<(string cp, string cpValue, string possibleMove)>, string[])> ParseStockfishOutputAsync(string fen, int depth, string stockfishPath)
+        {
+            string stockfishOut = await StockfishMovesAnalysisAsync(fen, depth, stockfishPath);
+
+            // Skip the initial two banner lines
+            string[] lines = [.. stockfishOut.Split('\n').Skip(2)];
+
+            var main = new List<(string cp, string cpValue, string possibleMove)>();
+            var reserve = new List<(string cp, string cpValue, string possibleMove)>();
+
+            foreach (string line in lines)
+            {
+                if (!line.TrimStart().StartsWith("info", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (TryParseInfoLine(line, out int parsedDepth, out string scoreLabel, out string scoreValue, out string pvMove))
+                {
+                    if (parsedDepth >= depth)
+                        main.Add((scoreLabel, scoreValue, pvMove));
+                    else if (parsedDepth == 1)
+                        reserve.Add((scoreLabel, scoreValue, pvMove));
+                }
+            }
+
+            // Fallback: if nothing reached the requested depth, keep whatever we got
+            return (main, reserve, lines);
+
+            // Local helper
+            static bool TryParseInfoLine(string line, out int parsedDepth, out string scoreLabel, out string scoreValue, out string pvMove)
+            {
+                parsedDepth = 0;
+                scoreLabel = "";
+                scoreValue = "";
+                pvMove = "";
+
+                // Tokenize by whitespace
+                var parts = line.Split((char[])null!, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 6) return false;
+
+                // Find "depth X"
+                int depthIdx = Array.IndexOf(parts, "depth");
+                if (depthIdx >= 0 && depthIdx + 1 < parts.Length && int.TryParse(parts[depthIdx + 1], out int d))
+                    parsedDepth = d;
+
+                // Find "score <cp|mate> <value>"
+                int scoreIdx = Array.IndexOf(parts, "score");
+                if (scoreIdx >= 0 && scoreIdx + 2 < parts.Length)
+                {
+                    string label = parts[scoreIdx + 1];
+                    string value = parts[scoreIdx + 2];
+
+                    if ((label == "cp" || label == "mate") && IsSignedNumber(value))
+                    {
+                        scoreLabel = label == "mate" ? "mate" : "cp";
+                        scoreValue = value;
+                    }
+                }
+
+                // Find "pv <firstmove> ..."
+                int pvIdx = Array.IndexOf(parts, "pv");
+                if (pvIdx >= 0 && pvIdx + 1 < parts.Length)
+                {
+                    // The first move in PV is enough
+                    pvMove = parts[pvIdx + 1];
+                }
+
+                // Valid only if we got a depth, a score, and a PV move
+                return parsedDepth > 0 && !string.IsNullOrEmpty(scoreLabel) && !string.IsNullOrEmpty(scoreValue) && !string.IsNullOrEmpty(pvMove);
+
+                static bool IsSignedNumber(string s)
+                {
+                    // Allows "123", "-45", "+7"
+                    if (string.IsNullOrEmpty(s)) return false;
+                    int start = (s[0] == '-' || s[0] == '+') ? 1 : 0;
+                    if (start >= s.Length) return false;
+                    for (int i = start; i < s.Length; i++)
+                        if (!char.IsDigit(s[i])) return false;
+                    return true;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns a probabilistic decision on whether the engine should force a mating
+        /// continuation (i.e., pick the top "mate in N" move) based on the current
+        /// strength setting (<paramref name="elo"/>) and the detected mate length
+        /// (<paramref name="mateIn"/>).
+        /// </summary>
+        /// <param name="elo">Engine strength used to pick a probability table (e.g., 1200, 2000, 3000).</param>
+        /// <param name="mateIn">Positive mate length (M1, M2, …). Values &lt;= 0 are clamped to 1.</param>
+        /// <returns>
+        /// <see langword="true"/> if a random draw falls under the configured probability for the
+        /// (<paramref name="elo"/>, <paramref name="mateIn"/>) pair; otherwise <see langword="false"/>.
+        /// </returns>
+        /// <remarks>
+        /// Uses a tiered table by ELO threshold and piecewise probabilities by mate length.
+        /// Randomness uses <see cref="Random.Shared"/> to avoid per-call allocations.
+        /// <para>✅ Updated on 8/19/2025</para>
+        /// </remarks>
+        private static bool ShouldPlayMatingMove(int elo, int mateIn)
+        {
+            Dictionary<int, double> mateChances = new()
+            {
+                { 3700, 1.00 },
+                { 3000, mateIn <= 7 ? 1.00 : (mateIn == 8 ? 0.9999 : (mateIn == 9 ? 0.9995 : (mateIn == 10 ? 0.999 : (mateIn == 11 ? 0.997 : (mateIn == 12 ? 0.995 : (mateIn == 13 ? 0.99 : (mateIn == 14 ? 0.97 : (mateIn == 15 ? 0.95 : 0.90)))))))) },
+                { 2800, mateIn == 1 ? 1.00 : (mateIn == 2 ? 1.00 : (mateIn == 3 ? 1.00 : (mateIn == 4 ? 1.00 : (mateIn == 5 ? 0.9999 : (mateIn == 6 ? 0.9995 : (mateIn == 7 ? 0.999 : (mateIn == 8 ? 0.995 : (mateIn == 9 ? 0.98 : (mateIn == 10 ? 0.95 : (mateIn == 11 ? 0.92 : (mateIn == 12 ? 0.88 : 0.80))))))))))) },
+                { 2600, mateIn == 1 ? 1.00 : (mateIn == 2 ? 0.9999 : (mateIn == 3 ? 0.9998 : (mateIn == 4 ? 0.9995 : (mateIn == 5 ? 0.999 : (mateIn == 6 ? 0.995 : (mateIn == 7 ? 0.98 : (mateIn == 8 ? 0.95 : (mateIn == 9 ? 0.92 : (mateIn == 10 ? 0.88 : (mateIn == 11 ? 0.80 : (mateIn == 12 ? 0.72 : 0.65))))))))))) },
+                { 2400, mateIn == 1 ? 0.9999 : (mateIn == 2 ? 0.9995 : (mateIn == 3 ? 0.999 : (mateIn == 4 ? 0.995 : (mateIn == 5 ? 0.98 : (mateIn == 6 ? 0.96 : (mateIn == 7 ? 0.92 : (mateIn == 8 ? 0.85 : (mateIn == 9 ? 0.75 : 0.65)))))))) },
+                { 2200, mateIn == 1 ? 0.999 : (mateIn == 2 ? 0.998 : (mateIn == 3 ? 0.995 : (mateIn == 4 ? 0.985 : (mateIn == 5 ? 0.96 : (mateIn == 6 ? 0.92 : (mateIn == 7 ? 0.85 : 0.75)))))) },
+                { 2000, mateIn == 1 ? 0.998 : (mateIn == 2 ? 0.995 : (mateIn == 3 ? 0.98 : (mateIn == 4 ? 0.95 : (mateIn == 5 ? 0.90 : 0.75)))) },
+                { 1800, mateIn == 1 ? 0.995 : (mateIn == 2 ? 0.98 : (mateIn == 3 ? 0.95 : (mateIn == 4 ? 0.90 : (mateIn == 5 ? 0.80 : 0.60)))) },
+                { 1600, mateIn == 1 ? 0.99 : (mateIn == 2 ? 0.95 : (mateIn == 3 ? 0.90 : (mateIn == 4 ? 0.80 : (mateIn == 5 ? 0.70 : 0.50)))) },
+                { 1400, mateIn == 1 ? 0.97 : (mateIn == 2 ? 0.90 : (mateIn == 3 ? 0.80 : (mateIn == 4 ? 0.65 : (mateIn == 5 ? 0.50 : 0.30)))) },
+                { 1200, mateIn == 1 ? 0.90 : (mateIn == 2 ? 0.80 : (mateIn == 3 ? 0.65 : (mateIn == 4 ? 0.50 : 0.25))) },
+                { 1000, mateIn == 1 ? 0.80 : (mateIn == 2 ? 0.65 : (mateIn == 3 ? 0.50 : (mateIn == 4 ? 0.35 : 0.15))) },
+                { 900, mateIn == 1 ? 0.72 : (mateIn == 2 ? 0.52 : (mateIn == 3 ? 0.42 : (mateIn == 4 ? 0.28 : 0.10))) },
+                { 800, mateIn == 1 ? 0.58 : (mateIn == 2 ? 0.43 : (mateIn == 3 ? 0.32 : (mateIn == 4 ? 0.18 : 0.06))) },
+                { 700, mateIn == 1 ? 0.38 : (mateIn == 2 ? 0.17 : (mateIn == 3 ? 0.06 : 0.00)) },
+            };
+
+            foreach (var (eloThreshold, probability) in mateChances.OrderByDescending(x => x.Key))
+            {
+                if (elo >= eloThreshold)
+                {
+                    return new Random().NextDouble() < probability;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Rebuilds the FEN string (<see cref="_fen"/>) for the current UI board state and updates
+        /// material counts. The method:
+        /// <list type="bullet">
+        ///     <item><description>Scans all pieces (<see cref="Image"/>s) once to build an 8x8 map.</description></item>
+        ///     <item><description>Compresses empty runs per rank to produce the piece-placement field.</description></item>
+        ///     <item><description>Appends side-to-move from <see cref="_move"/> (<c>w</c> when <see cref="_move"/> == 1, else <c>b</c>).</description></item>
+        ///     <item><description>Derives castling rights from <see cref="_cWK"/>, <see cref="_cWR1"/>, <see cref="_cWR2"/>, <see cref="_cBK"/>, <see cref="_cBR1"/>, and <see cref="_cBR2"/> order KQkq; <c>-</c> if none).</description></item>
+        ///     <item><description>Emits the en passant target square from <see cref="EnPassantSquare"/> (or <c>-</c>).</description></item>
+        ///     <item><description>Appends the halfmove clock <see cref="_halfmove"/> and fullmove number <see cref="_fullmove"/>.</description></item>
+        /// </list>
+        /// </summary>
+        /// <remarks>
+        /// Also sets <see cref="_previousFen"/> (old value) and recomputes <see cref="_whiteMaterial"/>/<see cref="_blackMaterial"/>.
+        /// <para>✅ Updated on 8/20/2025</para>
+        /// </remarks>
+        private void CreateFenCode()
+        {
+            _previousFen = _fen;
+            _whiteMaterial = 0;
+            _blackMaterial = 0;
+
+            // Build a quick lookup of what occupies each grid cell
+            int rows = Chess_Board.RowDefinitions.Count;
+            int cols = Chess_Board.ColumnDefinitions.Count;
+            var board = new char[rows, cols];
+
+            foreach (var img in Chess_Board.Children.OfType<Image>())
+            {
+                int r = Grid.GetRow(img);
+                int c = Grid.GetColumn(img);
+
+                // Map image name to FEN char, and accumulate material
+                char ch = MapNameToFenAndAccumulate(img.Name);
+                if (ch != '\0') board[r, c] = ch;
+            }
+
+            // Piece placement (rank 8 to 1 corresponds to grid rows 0..7 in the layout)
+            var sb = new StringBuilder(64);
+            for (int r = 0; r < rows; r++)
+            {
+                int empty = 0;
+                for (int c = 0; c < cols; c++)
+                {
+                    char ch = board[r, c];
+                    if (ch == '\0')
+                    {
+                        empty++;
+                    }
+                    else
+                    {
+                        if (empty > 0) { sb.Append(empty); empty = 0; }
+                        sb.Append(ch);
+                    }
+                }
+                if (empty > 0) sb.Append(empty);
+                if (r != rows - 1) sb.Append('/');
+            }
+
+            // Side to move
+            sb.Append(_move == 1 ? " w " : " b ");
+
+            // Castling rights (KQkq order; '-' if none)
+            int startLen = sb.Length;
+            if (_cWK == 0)
+            {
+                if (_cWR2 == 0) sb.Append('K');
+                if (_cWR1 == 0) sb.Append('Q');
+            }
+            if (_cBK == 0)
+            {
+                if (_cBR2 == 0) sb.Append('k');
+                if (_cBR1 == 0) sb.Append('q');
+            }
+            if (sb.Length == startLen) sb.Append('-');
+
+            // En passant target
+            if (EnPassantSquare.Count == 1)
+            {
+                sb.Append(' ');
+                sb.Append((char)('a' + _newColumn));
+                sb.Append(_move == 1 ? (_newRow + 3).ToString() : (_newRow - 1).ToString());
+            }
+            else
+            {
+                sb.Append(" -");
+            }
+
+            // Halfmove and fullmove
+            sb.Append(' ').Append(_halfmove).Append(' ').Append(_fullmove);
+
+            _fen = sb.ToString();
+            System.Diagnostics.Debug.WriteLine($"\n\nFEN: {_fen}");
+
+            // Local helper
+            char MapNameToFenAndAccumulate(string name)
+            {
+                // Expect names like "WhitePawn1", "BlackQueen2", etc.
+                if (name.StartsWith("White"))
+                {
+                    if (name.Contains("Pawn")) { _whiteMaterial += 1; return 'P'; }
+                    if (name.Contains("Knight")) { _whiteMaterial += 3; return 'N'; }
+                    if (name.Contains("Bishop")) { _whiteMaterial += 3; return 'B'; }
+                    if (name.Contains("Rook")) { _whiteMaterial += 5; return 'R'; }
+                    if (name.Contains("Queen")) { _whiteMaterial += 9; return 'Q'; }
+                    if (name.Contains("King")) { return 'K'; }
+                }
+                else if (name.StartsWith("Black"))
+                {
+                    if (name.Contains("Pawn")) { _blackMaterial += 1; return 'p'; }
+                    if (name.Contains("Knight")) { _blackMaterial += 3; return 'n'; }
+                    if (name.Contains("Bishop")) { _blackMaterial += 3; return 'b'; }
+                    if (name.Contains("Rook")) { _blackMaterial += 5; return 'r'; }
+                    if (name.Contains("Queen")) { _blackMaterial += 9; return 'q'; }
+                    if (name.Contains("King")) { return 'k'; }
+                }
+                return '\0';
+            }
+        }
+
+        /// <summary>
+        /// Runs a single UCI analysis with Stockfish and returns the engine's full stdout.
+        /// Sends:
+        /// <list type="bullet">
+        ///     <item><description>setoption name MultiPV value <paramref name="multiPV"/>;</description></item>
+        ///     <item><description>position fen <paramref name="fen"/>;</description></item>
+        ///     <item><description>go depth <paramref name="depth"/>;</description></item>
+        /// </list>
+        /// This method streams output until it encounters "bestmove", then sends "quit",
+        /// awaits process exit, and returns everything printed by the engine.
+        /// </summary>
+        /// <param name="fen">The current position in FEN format.</param>
+        /// <param name="depth">Search depth to use for "go depth".</param>
+        /// <param name="stockfishPath">Absolute path to the Stockfish executable.</param>
+        /// <param name="multiPV">Number of principal variations to request (default 40).</param>
+        /// <param name="cancellationToken">Optional token to cancel the run.</param>
+        /// <returns>The complete stdout captured from Stockfish for this query.</returns>
+        /// <remarks>✅ Updated on 8/20/2025</remarks>
+        private static async Task<string> StockfishMovesAnalysisAsync(string fen, int depth, string stockfishPath, int multiPV = 40, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(stockfishPath) || !File.Exists(stockfishPath))
+                return "Stockfish executable not found.";
+
+            if (string.IsNullOrWhiteSpace(fen))
+                return "FEN was empty.";
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = stockfishPath,
+                UseShellExecute = false,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            var output = new StringBuilder(4096);  // generous headroom
+            var bestMoveSeen = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            using var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
+
+            // Stream stdout
+            process.OutputDataReceived += (_, e) =>
+            {
+                if (string.IsNullOrEmpty(e.Data)) return;
+
+                output.AppendLine(e.Data);
+
+                // Once bestmove appears, we can ask the engine to quit.
+                if (e.Data.StartsWith("bestmove", StringComparison.Ordinal))
+                {
+                    try
+                    {
+                        // Sending quit twice is harmless; we guard with TrySetResult below
+                        process.StandardInput.WriteLine("quit");
+                        process.StandardInput.Flush();
+                    }
+                    catch { /* process may already be exiting */ }
+
+                    bestMoveSeen.TrySetResult(true);
+                }
+            };
+
+            // (Optional) capture stderr as well
+            process.ErrorDataReceived += (_, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.Data))
+                    output.AppendLine(e.Data);
+            };
+
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            using var registration = cancellationToken.Register(() =>
+            {
+                try { if (!process.HasExited) process.Kill(); } catch { /* ignore */ }
+            });
+
+            // Send UCI commands
+            if (!process.StandardInput.BaseStream.CanWrite)
+                return "Unable to write to stockfish.";
+
+            await process.StandardInput.WriteLineAsync($"setoption name MultiPV value {multiPV}");
+            await process.StandardInput.WriteLineAsync($"position fen {fen}");
+            await process.StandardInput.WriteLineAsync($"go depth {depth}");
+            await process.StandardInput.FlushAsync();
+
+            // Wait until we either see bestmove or the process exits (or it's cancelled)
+            var exitTask = process.WaitForExitAsync(cancellationToken);
+            await Task.WhenAny(bestMoveSeen.Task, exitTask);
+
+            // In case bestmove never arrived but the engine is still running, ask it to quit politely
+            if (!process.HasExited)
+            {
+                try
+                {
+                    process.StandardInput.WriteLine("quit");
+                    process.StandardInput.Flush();
+                }
+                catch { /* ignore */ }
+                await exitTask;
+            }
+
+            return output.ToString();
+        }
+
+        /// <summary>
+        /// Asks Stockfish whether the given FEN position is check or checkmate,
+        /// returning a SAN-ready marker:
+        /// <list type="bullet">
+        ///     <item><description><c>"#"</c> for checkmate</description></item>
+        ///     <item><description><c>"+"</c> for check</description></item>
+        ///     <item><description><c>""</c> for neither</description></item>
+        /// </list>
+        /// This spawns the Stockfish process, sends "position", "d" (to get "Checkers:"), and
+        /// a shallow "go depth 1" (to see if "bestmove (none)" appears), then parses the output.
+        /// </summary>
+        /// <param name="fen">The position in FEN format.</param>
+        /// <param name="stockfishPath">Absolute path to the Stockfish executable.</param>
+        /// <returns><c>"#"</c>, <c>"+"</c>, or <c>""</c> depending on the state.</returns>
+        /// <remarks>✅ Updated on 8/20/2025</remarks>
+        private static async Task<string> StockfishCheckAnalysisAsync(string fen, string stockfishPath)
+        {
+            if (string.IsNullOrWhiteSpace(stockfishPath) || !File.Exists(stockfishPath))
+                return "Stockfish executable not found.";
+
+            if (string.IsNullOrWhiteSpace(fen))
+                return "FEN was empty.";
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = stockfishPath,
+                UseShellExecute = false,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            bool isCheckmate = false;
+            bool isCheck = false;
+            var outputBuilder = new StringBuilder();
+
+            using var process = new Process { StartInfo = startInfo };
+
+            // Parse lines as they arrive (no 'async' here to avoid async-void pitfalls)
+            process.OutputDataReceived += (_, e) =>
+            {
+                var line = e.Data;
+                if (string.IsNullOrEmpty(line)) return;
+
+                outputBuilder.AppendLine(line);
+
+                // If Stockfish reports no legal move, it's mate/stalemate; we disambiguate using "Checkers:"
+                if (line.StartsWith("bestmove (none)", StringComparison.OrdinalIgnoreCase))
+                {
+                    // We'll still rely on the "Checkers:" line to tell check vs stalemate,
+                    // but if there's no checkers and no bestmove, it's stalemate (no marker).
+                    // We'll set isCheckmate=true here and let "Checkers:" flip isCheck if needed.
+                    isCheckmate = true;
+                }
+                else if (line.StartsWith("Checkers:", StringComparison.OrdinalIgnoreCase))
+                {
+                    // "Checkers:" is followed by coordinates if in check; blank means not in check.
+                    // Example: "Checkers: e4"  => in check.
+                    // Example: "Checkers:"      => not in check.
+                    string data = line.Length > 9 ? line[9..].Trim() : string.Empty;
+                    if (!string.IsNullOrEmpty(data))
+                    {
+                        isCheck = true;
+                    }
+                }
+            };
+
+            process.ErrorDataReceived += (_, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.Data))
+                    outputBuilder.AppendLine("[stderr] " + e.Data);
+            };
+
+            try
+            {
+                process.Start();
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+
+                using var writer = process.StandardInput;
+
+                if (!writer.BaseStream.CanWrite)
+                    return "Unable to write to Stockfish.";
+
+                // Minimal sequence for check/checkmate detection:
+                // 1) Load position
+                // 2) Print details (to get "Checkers:")
+                // 3) Search shallowly to see if bestmove exists
+                await writer.WriteLineAsync($"position fen {fen}");
+                await writer.WriteLineAsync("d");             // prints "Checkers:" line
+                await writer.WriteLineAsync("go depth 1");    // emits "bestmove ..." (or "(none)")
+                await writer.WriteLineAsync("quit");
+                await writer.FlushAsync();
+
+                await process.WaitForExitAsync();
+            }
+            catch (Exception ex)
+            {
+                return $"Stockfish error: {ex.Message}";
+            }
+
+            // Disambiguation:
+            // - If no bestmove and we are in check => checkmate ("#")
+            // - If bestmove exists and we are in check => check ("+")
+            // - If no bestmove and NOT in check => stalemate (return "")
+            // - Else => neither (return "")
+            if (isCheckmate && isCheck) return "#";
+            if (!isCheckmate && isCheck) return "+";
+            return "";
+        }
+
+        /// <summary>
+        /// Central post-move orchestrator:
+        /// <list type="bullet">
+        ///     <item><description>Sends accumulated robot commands (white/black) in the correct order.</description></item>
+        ///     <item><description>Updates command history buffers and clears current buffers.</description></item>
+        ///     <item><description>Hides the "move in progress" UI when robot comms are active.</description></item>
+        ///     <item><description>Advances play depending on mode, pause state, and whose turn it is.</description></item>
+        ///     <item><description>Enables/disables the correct set of pieces for the next actor.</description></item>
+        ///     <item><description>Handles resume UI after a paused move and performs end-game cleanup (board clear + robot disconnects).</description></item>
+        /// </list>
+        /// </summary>
+        /// <remarks>✅ Updated on 8/20/2025</remarks>
+        private async Task CentralMoveHub()
+        {
+            _moving = false;
+
+            // Local helper
+            async Task SendRobotBitsAsync(bool whiteJustMoved)
+            {
+                // When white just moved: prefer sending Black bits first if present, then White.
+                // When black just moved: mirror behavior.
+                if (whiteJustMoved)
+                {
+                    if (!string.IsNullOrEmpty(_rcBlackBits))
+                        await _blackRobot.SendDataAsync(_rcBlackBits);
+
+                    await _whiteRobot.SendDataAsync(_rcWhiteBits);
+                }
+                else
+                {
+                    if (!string.IsNullOrEmpty(_rcWhiteBits))
+                        await _whiteRobot.SendDataAsync(_rcWhiteBits);
+
+                    await _blackRobot.SendDataAsync(_rcBlackBits);
+                }
+            }
+
+            // Local helper
+            static void AppendToHistory(ref string history, string bits)
+            {
+                if (string.IsNullOrEmpty(bits)) return;
+                if (string.IsNullOrEmpty(history)) history = bits;
+                else history += "\n" + bits;
+            }
+
+            // Local helper
+            void HideMoveInProgressPopup()
+            {
+                InfoSymbol.Visibility = Visibility.Collapsed;
+                InProgressText.Visibility = Visibility.Collapsed;
+                MoveInProgRect.Visibility = Visibility.Collapsed;
+            }
+
+            if (_robotComm)
+            {
+                // Convention in code: _move == 0 means White just moved; _move == 1 means Black just moved
+                await SendRobotBitsAsync(whiteJustMoved: _move == 0);
+                HideMoveInProgressPopup();
+            }
+
+            // Accumulate bit history and clear current buffers
+            AppendToHistory(ref _rcPastWhiteBits, _rcWhiteBits);
+            AppendToHistory(ref _rcPastBlackBits, _rcBlackBits);
+            _rcWhiteBits = string.Empty;
+            _rcBlackBits = string.Empty;
+
+            // Next action / turn routing
+            if (!_isPaused && !_endGame)
+            {
+                PauseButton.IsEnabled = true;
+
+                switch (_mode)
+                {
+                    // Com vs Com
+                    case 1:
+                        _moving = true;
+                        _userTurn = false;
+                        await ComputerMoveAsync();
+                        break;
+
+                    // User vs Com
+                    case 2:
+                        string? userColor = _selectedColor?.Content?.ToString();
+                        bool userIsWhite = string.Equals(userColor, "White", StringComparison.OrdinalIgnoreCase);
+
+                        // If it's the computer's turn, we move the CPU
+                        bool cpuToMove = (userIsWhite && _move == 0) || (!userIsWhite && _move == 1);
+
+                        if (cpuToMove)
+                        {
+                            _moving = true;
+                            _userTurn = false;
+                            await ComputerMoveAsync();
+                        }
+                        else
+                        {
+                            _userTurn = false;
+                            Chess_Board.IsHitTestVisible = true;
+
+                            // Enable only the user's color pieces
+                            EnableImagesWithTag("WhitePiece", userIsWhite);
+                            EnableImagesWithTag("BlackPiece", !userIsWhite);
+                        }
+                        break;
+
+                    // User vs User
+                    default:
+                        _userTurn = true;
+                        Chess_Board.IsHitTestVisible = true;
+
+                        bool whiteToMove = (_move == 1);
+                        EnableImagesWithTag("WhitePiece", whiteToMove);
+                        EnableImagesWithTag("BlackPiece", !whiteToMove);
+                        break;
+                }
+                return;
+            }
+
+            // Paused or End-game paths
+            if (_isPaused && _holdResume)
+            {
+                _inactivityTimer.Start();
+
+                _holdResume = false;
+                Play_Type.IsEnabled = true;
+                ResumeButton.IsEnabled = true;
+                EpsonRCConnection.IsEnabled = true;
+                HideMoveInProgressPopup();
+
+                string? playType = _selectedPlayType?.Content?.ToString();
+                if (string.Equals(playType, "Com Vs. Com", StringComparison.OrdinalIgnoreCase))
+                    CvC.IsEnabled = true;
+                else
+                    UvCorUvU.IsEnabled = true;
+            }
+
+            if (_endGame && _robotComm)
+            {
+                await ClearBoard();
+                _whiteRobot.Disconnect();
+                _blackRobot.Disconnect();
+            }
         }
 
         #endregion
@@ -3107,7 +4035,7 @@ namespace Chess_Project
                 //SetEloValues(selectedWhiteElo.Content.ToString(), true);
                 //SetEloValues(selectedBlackElo.Content.ToString(), false);
 
-                ComputerMove();
+                ComputerMoveAsync();
             }
             else if (_selectedPlayType.Content.ToString() == "User Vs. Com")
             {
@@ -3119,7 +4047,7 @@ namespace Chess_Project
                     (_flip == 1 && _selectedColor.Content.ToString() == "White"))
                 {
                     FlipBoard();
-                    FENCode();
+                    CreateFenCode();
                     UpdateEvalBar();
                 }
 
@@ -3130,7 +4058,7 @@ namespace Chess_Project
                     _moving = true;
                     _userTurn = false;
                     Chess_Board.IsHitTestVisible = false;
-                    ComputerMove();
+                    ComputerMoveAsync();
                 }
                 else
                 {
@@ -3233,32 +4161,7 @@ namespace Chess_Project
             BlackAdvantage.Margin = new Thickness(0, -EvalBar.Height, InternalVerticalMargin, 0);
         }
 
-        /// <summary>
-        /// Disables castling rights when a king or rook moves or is captured.
-        /// Ensures that future castling is not allowed once a relevant piece moves.
-        /// </summary>
-        /// <param name="activePiece">The piece that is actively moving.</param>
-        /// <param name="capturedPiece">The piece that is being captured (if applicable).</param>
-        public void DisableCastlingRights(Image? activePiece, Image? capturedPiece)
-        {
-            if (activePiece == null) return;
-
-            if (capturedPiece != null)
-            {
-                if (capturedPiece.Name.StartsWith("WhiteRook1")) _cWR1 = 1;
-                else if (capturedPiece.Name.StartsWith("WhiteRook2")) _cWR2 = 1;
-                else if (capturedPiece.Name.StartsWith("BlackRook1")) _cBR1 = 1;
-                else if (capturedPiece.Name.StartsWith("BlackRook2")) _cBR2 = 1;
-            }
-
-            if (activePiece.Name.StartsWith("WhiteRook1")) _cWR1 = 1;
-            else if (activePiece.Name.StartsWith("WhiteRook2")) _cWR2 = 1;
-            else if (activePiece.Name.StartsWith("BlackRook1")) _cBR1 = 1;
-            else if (activePiece.Name.StartsWith("BlackRook2")) _cBR2 = 1;
-
-            if (activePiece.Name.StartsWith("WhiteKing")) _cWK = 1;
-            else if (activePiece.Name.StartsWith("BlackKing")) _cBK = 1;
-        }
+        
 
         /// <summary>
         /// Handles pawn promotion for user or CPU, updating the piece image, name, handlers, and counters.
@@ -3839,936 +4742,10 @@ namespace Chess_Project
         }
 
 
-
-        // White CPU engine
-        public async void ComputerMove()
-        {
-            EnableImagesWithTag("WhitePiece", false);   // Disables user from interacting with pieces
-            EnableImagesWithTag("BlackPiece", false);
-
-            List<(string cp, string cpValue, string possibleMove)> moveCatalog = new();
-            List<(string cp, string cpValue, string possibleMove)> moveCatalogReserve = new();
-            string[] lines;
-            int cpuElo;
-            Image? selectedPiece = null;
-
-            // Randomize wait times for CPU moves
-            Random delayMultiplier = new();
-            int delay = delayMultiplier.Next(1000, 4501);
-            await Task.Delay(delay);
-
-            if (!_endGame)
-            {
-                _moving = true;
-
-                if (_mode == 2)
-                {
-                    cpuElo = int.Parse(_selectedElo.Content.ToString()); // Parse CPU's elo as an integer
-                }
-                else
-                {
-                    if (_move == 1)
-                    {
-                        cpuElo = int.Parse(_selectedWhiteElo.Content.ToString()); // Parse CPU's elo as an integer
-                    }
-                    else
-                    {
-                        cpuElo = int.Parse(_selectedBlackElo.Content.ToString()); // Parse CPU's elo as an integer
-                    }
-                    
-                }
-
-                var settings = EloSettings.GetSettings(cpuElo);
-
-                // Apply settings
-                int searchDepth = settings.Depth;
-                int cpLossThreshold = settings.CpLossThreshold;
-                double bellCurvePercentile = settings.BellCurvePercentile;
-                int criticalMoveConversion = settings.CriticalMoveConversion;
-
-                // Call Stockfish and get moves
-                (moveCatalog, moveCatalogReserve, lines) = await ParseStockfishOutput(_fen, searchDepth, _stockfishPath!);
-
-                if (moveCatalog.Count == 0)
-                {
-                    moveCatalog.AddRange(moveCatalogReserve);
-                    moveCatalogReserve.Clear();
-                }
-
-                var sortedMoveCatalog = moveCatalog.OrderByDescending(move =>   // Moves are listed in best to worst centipawn value
-                {
-                    if (move.cp.StartsWith("mate"))
-                    {
-                        if (!move.cpValue.StartsWith("-"))   // If mate is for moving color
-                        {
-                            return int.MaxValue;
-                        }
-                        else   // If mate is against moving color
-                        {
-                            return int.MinValue;
-                        }
-                    }
-
-                    else
-                    {
-                        return int.Parse(move.cpValue);
-                    }
-                });
-
-                var topMove = sortedMoveCatalog.FirstOrDefault();   // Best available move in the position
-                var moves = new List<(string cp, string cpValue, string possibleMove)>();   // List of moves
-                int maxCpValue = sortedMoveCatalog
-                    .Where(move => !move.cp.StartsWith("mate"))
-                    .Select(move => int.Parse(move.cpValue))
-                    .FirstOrDefault();
-
-                //System.Diagnostics.Debug.WriteLine("\n\nPossible Moves:");
-
-                foreach (var entry in sortedMoveCatalog)
-                {
-                    if (entry.cp.StartsWith("mate"))
-                    {
-                        if (!entry.cpValue.StartsWith("-"))
-                        {
-                            moves.Add(entry);
-                        }
-                        else
-                        {
-                            if (sortedMoveCatalog.Count() < 3)
-                            {
-                                moves.Add(entry);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        if (!int.TryParse(entry.cpValue, out int entryCpValue))
-                            continue; // Skip if invalid
-
-                        int difference = Math.Abs(entryCpValue - maxCpValue);
-
-                        if (_fullmove < 6)
-                        {
-                            if (difference > (cpLossThreshold / 8))
-                                continue; // Skip moves that exceed the allowed mistake threshold
-                        }
-                        else
-                        {
-                            if (difference > cpLossThreshold)
-                                continue; // Skip moves that exceed the allowed mistake threshold
-                        }
-
-                        moves.Add(entry);            
-                    }
-
-                    //System.Diagnostics.Debug.WriteLine($"{entry.cp} {entry.cpValue} {entry.possibleMove}");
-                }
-
-                string bestMoveLine = lines.FirstOrDefault(line => line.TrimStart().StartsWith("bestmove"))!;   // Line stating the best move
-                string[] bestParts = bestMoveLine.Split(' ');   // Splits best move line into parts
-
-                if (moves.Count > 0 && moves[0].cp == "mate" && !_topEngineMove)   // Finding mating sequences
-                {
-                    int mateIn = Math.Abs(int.Parse(moves[0].cpValue));
-
-                    if (ShouldPlayMatingMove(cpuElo, mateIn))
-                    {
-                        _topEngineMove = true;
-                    }
-                }
-
-                if (moves.Count == 1 || _topEngineMove)   // Top engine move
-                {
-                    if (topMove.possibleMove.TrimEnd('\r').Length == 4)
-                    {
-                        string selMove = topMove.possibleMove.TrimEnd('\r');
-                        _startPosition = selMove[..2];
-                        _endPosition = selMove[2..];
-                    }
-
-                    else if (topMove.possibleMove.TrimEnd('\r').Length == 5)
-                    {
-                        string selMove = topMove.possibleMove.TrimEnd('\r');
-                        _promotionPiece = selMove[^1];
-                        _startPosition = selMove[..2];
-                        _endPosition = selMove[2..4];
-                    }
-
-                    else
-                    {
-                        System.Diagnostics.Debug.WriteLine("Best Move Line was not found");
-                    }
-                }
-                else
-                {
-                    // Check for a critical moment by evaluating cp differences between top moves
-                    Random random = new();
-                    const int criticalCpThreshold = 300; // Define the threshold for a critical moment
-                    var topMoves = moves.Take(3).ToList();
-
-                    if (topMoves.Count >= 2)
-                    {
-                        // Parse centipawn values for the top moves
-                        bool isTopMoveCpParsed = int.TryParse(topMoves[0].cpValue, out int topMoveCp);
-                        bool isSecondMoveCpParsed = int.TryParse(topMoves[1].cpValue, out int secondMoveCp);
-
-                        if (isTopMoveCpParsed && isSecondMoveCpParsed)
-                        {
-                            int differenceBetween1and2 = Math.Abs(topMoveCp - secondMoveCp);
-
-                            if (differenceBetween1and2 >= criticalCpThreshold)
-                            {
-                                // Generate a random integer between 0 and 100
-                                int randomValue = random.Next(101);
-
-                                if (randomValue > criticalMoveConversion)
-                                {
-                                    // Random value is greater than criticalMoveConversion
-                                    // Remove the second move (index 1) from sortedMoveCatalog
-                                    if (moves.Count() > 1)
-                                    {
-                                        moves.RemoveAt(0);
-                                    }
-
-                                    System.Diagnostics.Debug.WriteLine("\n\nFailed critical moment between moves 1 and 2!\n");
-                                }
-                                else
-                                {
-                                    moves.RemoveRange(1, moves.Count - 1);
-
-                                    System.Diagnostics.Debug.WriteLine("\n\nConverted critical moment between moves 1 and 2!\n");
-                                }
-                            }
-                            else if (topMoves.Count >= 3)
-                            {
-                                bool isThirdMoveCpParsed = int.TryParse(topMoves[2].cpValue, out int thirdMoveCp);
-
-                                if (isThirdMoveCpParsed)
-                                {
-                                    int differenceBetween2and3 = Math.Abs(secondMoveCp - thirdMoveCp);
-
-                                    if (differenceBetween2and3 >= criticalCpThreshold)
-                                    {
-                                        // Generate a random integer between 0 and 100
-                                        int randomValue = random.Next(101);
-
-                                        if (randomValue > criticalMoveConversion)
-                                        {
-                                            // Random value is greater than criticalMoveConversion
-                                            if (moves.Count() > 2)
-                                            {
-                                                moves.RemoveRange(0, 2);
-                                            }
-
-                                            System.Diagnostics.Debug.WriteLine("\n\nFailed critical moment between moves 2 and 3!\n");
-                                        }
-                                        else
-                                        {
-                                            moves.RemoveRange(2, moves.Count - 2);
-
-                                            System.Diagnostics.Debug.WriteLine("\n\nConverted critical moment between moves 1 and 2!\n");
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    System.Diagnostics.Debug.WriteLine("\n\nPossible moves:");
-                    foreach (var m in moves)
-                    {
-                        System.Diagnostics.Debug.WriteLine(m);
-                    }
-
-                    // Calculate the mean index based on the bellCurvePercentile
-                    double percentile = bellCurvePercentile / 100.0;
-                    int meanIndex = (int)Math.Round((1 - percentile) * (moves.Count - 1));
-
-                    // Standard deviation: Adjust as needed
-                    double standardDeviation = moves.Count / 4.0; // Example: covers ~95% within the list
-
-                    // Initialize the random number generator
-                    Random outcome = new();
-
-                    // Function to generate a normally distributed random number
-                    double GenerateNormalRandom(double mean, double stddev)
-                    {
-                        // Use Box-Muller transform
-                        double u1 = 1.0 - outcome.NextDouble(); // Uniform(0,1] random doubles
-                        double u2 = 1.0 - outcome.NextDouble();
-                        double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) *
-                                               Math.Sin(2.0 * Math.PI * u2); // Random normal(0,1)
-                        double randNormal = mean + stddev * randStdNormal; // Random normal(mean,stdDev)
-                        return randNormal;
-                    }
-
-                    // Generate a valid index based on the normal distribution
-                    int selectedIndex;
-                    do
-                    {
-                        double randIndex = GenerateNormalRandom(meanIndex, standardDeviation);
-                        selectedIndex = (int)Math.Round(randIndex);
-                    } while (selectedIndex < 0 || selectedIndex >= moves.Count);
-
-                    // Select the move based on the generated index
-                    string selMove = moves[selectedIndex].possibleMove.TrimEnd('\r');
-
-                    if (selMove.Length == 4)
-                    {
-                        _startPosition = selMove[..2];
-                        _endPosition = selMove[2..];
-                    }
-
-                    else if (selMove.Length == 5)
-                    {
-                        _promotionPiece = selMove[^1];
-                        _startPosition = selMove[..2];
-                        _endPosition = selMove[2..4];
-                    }
-
-                    else
-                    {
-                        System.Diagnostics.Debug.WriteLine("Move Line was not found");
-                    }
-                }
-
-                _oldRow = 8 - Convert.ToInt32(_startPosition[1].ToString());
-                _oldColumn = _startPosition[0] - 'a';
-                _newRow = 8 - Convert.ToInt32(_endPosition[1].ToString());
-                _newColumn = _endPosition[0] - 'a';
-
-                foreach (Image image in Chess_Board.Children.OfType<Image>())
-                {
-                    if ((Grid.GetRow(image) == _oldRow) && Grid.GetColumn(image) == _oldColumn)
-                    {
-                        selectedPiece = image;
-
-                        Grid.SetRow(selectedPiece, _newRow);
-                        Grid.SetColumn(selectedPiece, _newColumn);
-                        continue;
-                    }
-                }
-
-                // Determine which move handler to use
-                if (selectedPiece.Name.Contains("Pawn"))
-                {
-                    _clickedPawn = selectedPiece;
-                    await PawnMoveManagerAsync(selectedPiece);
-                }
-                else
-                {
-                    if (selectedPiece.Name.Contains("Knight"))
-                    {
-                        _clickedKnight = selectedPiece;
-                    }
-                    else if (selectedPiece.Name.Contains("Bishop"))
-                    {
-                        _clickedBishop = selectedPiece;
-                    }
-                    else if (selectedPiece.Name.Contains("Rook"))
-                    {
-                        _clickedRook = selectedPiece;
-                    }
-                    else if (selectedPiece.Name.Contains("Queen"))
-                    {
-                        _clickedQueen = selectedPiece;
-                    }
-                    else if (selectedPiece.Name.Contains("King"))
-                    {
-                        _clickedKing = selectedPiece;
-                    }
-                        
-                    await MoveManagerAsync(selectedPiece);
-                }
-            }
-        }
-
-
-
-        /// <summary>
-        /// Calls Stockfish, retrieves output, and extracts valid move data.
-        /// </summary>
-        /// <param name="fen">Current board FEN string.</param>
-        /// <param name="depth">Stockfish depth setting.</param>
-        /// <param name="stockfishPath">Path to Stockfish engine.</param>
-        /// <returns>Two lists of valid moves - main and reserve (fallback) moves.</returns>
-        private async Task<(List<(string cp, string cpValue, string possibleMove)>, List<(string cp, string cpValue, string possibleMove)>, string[])>
-        ParseStockfishOutput(string fen, int depth, string stockfishPath)
-        {
-            string stockfishFEN = await RunStockfish(fen, depth, stockfishPath);
-
-            File.WriteAllText("StockfishOutput.txt", string.Empty);
-
-            using (StreamWriter writer = new("StockfishOutput.txt", true))
-            {
-                writer.WriteLine(stockfishFEN);
-            }
-
-            string[] lines = stockfishFEN.Split('\n').Skip(2).ToArray();
-            var infoLines = lines.Where(line => line.TrimStart().StartsWith($"info depth {depth}"));
-
-            List<(string cp, string cpValue, string possibleMove)> moveCatalog = new();
-            List<(string cp, string cpValue, string possibleMove)> moveCatalogReserve = new();
-
-            foreach (var line in infoLines)
-            {
-                string[] parts = line.Split(' ');
-
-                if (parts.Length >= 22)
-                {
-                    string depthVal = parts[2];   // Depth value
-
-                    if (int.TryParse(depthVal, out int parsedDepth) && parsedDepth >= depth)
-                    {
-                        string cp = parts[8];   // Centipawn label
-                        string cpValue = parts[9];   // Evaluated centipawn value
-                        string possibleMove = parts[21];   // Possible move
-
-                        moveCatalog.Add((cp, cpValue, possibleMove));
-                    }
-                    else if (int.TryParse(depthVal, out int parsedDepthCatch) && parsedDepthCatch == 1)
-                    {
-                        string cp = parts[8];
-                        string cpValue = parts[9];
-                        string possibleMove = parts[21];
-
-                        moveCatalogReserve.Add((cp, cpValue, possibleMove));
-                    }
-                }
-            }
-
-            return (moveCatalog, moveCatalogReserve, lines);  // Return lines along with move lists
-        }
-
-
-
-        private bool ShouldPlayMatingMove(int elo, int mateIn)
-        {
-            Dictionary<int, double> mateChances = new()
-            {
-                { 3700, 1.00 },
-                { 3000, mateIn <= 7 ? 1.00 : (mateIn == 8 ? 0.9999 : (mateIn == 9 ? 0.9995 : (mateIn == 10 ? 0.999 : (mateIn == 11 ? 0.997 : (mateIn == 12 ? 0.995 : (mateIn == 13 ? 0.99 : (mateIn == 14 ? 0.97 : (mateIn == 15 ? 0.95 : 0.90)))))))) },
-                { 2800, mateIn == 1 ? 1.00 : (mateIn == 2 ? 1.00 : (mateIn == 3 ? 1.00 : (mateIn == 4 ? 1.00 : (mateIn == 5 ? 0.9999 : (mateIn == 6 ? 0.9995 : (mateIn == 7 ? 0.999 : (mateIn == 8 ? 0.995 : (mateIn == 9 ? 0.98 : (mateIn == 10 ? 0.95 : (mateIn == 11 ? 0.92 : (mateIn == 12 ? 0.88 : 0.80))))))))))) },
-                { 2600, mateIn == 1 ? 1.00 : (mateIn == 2 ? 0.9999 : (mateIn == 3 ? 0.9998 : (mateIn == 4 ? 0.9995 : (mateIn == 5 ? 0.999 : (mateIn == 6 ? 0.995 : (mateIn == 7 ? 0.98 : (mateIn == 8 ? 0.95 : (mateIn == 9 ? 0.92 : (mateIn == 10 ? 0.88 : (mateIn == 11 ? 0.80 : (mateIn == 12 ? 0.72 : 0.65))))))))))) },
-                { 2400, mateIn == 1 ? 0.9999 : (mateIn == 2 ? 0.9995 : (mateIn == 3 ? 0.999 : (mateIn == 4 ? 0.995 : (mateIn == 5 ? 0.98 : (mateIn == 6 ? 0.96 : (mateIn == 7 ? 0.92 : (mateIn == 8 ? 0.85 : (mateIn == 9 ? 0.75 : 0.65)))))))) },
-                { 2200, mateIn == 1 ? 0.999 : (mateIn == 2 ? 0.998 : (mateIn == 3 ? 0.995 : (mateIn == 4 ? 0.985 : (mateIn == 5 ? 0.96 : (mateIn == 6 ? 0.92 : (mateIn == 7 ? 0.85 : 0.75)))))) },
-                { 2000, mateIn == 1 ? 0.998 : (mateIn == 2 ? 0.995 : (mateIn == 3 ? 0.98 : (mateIn == 4 ? 0.95 : (mateIn == 5 ? 0.90 : 0.75)))) },
-                { 1800, mateIn == 1 ? 0.995 : (mateIn == 2 ? 0.98 : (mateIn == 3 ? 0.95 : (mateIn == 4 ? 0.90 : (mateIn == 5 ? 0.80 : 0.60)))) },
-                { 1600, mateIn == 1 ? 0.99 : (mateIn == 2 ? 0.95 : (mateIn == 3 ? 0.90 : (mateIn == 4 ? 0.80 : (mateIn == 5 ? 0.70 : 0.50)))) },
-                { 1400, mateIn == 1 ? 0.97 : (mateIn == 2 ? 0.90 : (mateIn == 3 ? 0.80 : (mateIn == 4 ? 0.65 : (mateIn == 5 ? 0.50 : 0.30)))) },
-                { 1200, mateIn == 1 ? 0.90 : (mateIn == 2 ? 0.80 : (mateIn == 3 ? 0.65 : (mateIn == 4 ? 0.50 : 0.25))) },
-                { 1000, mateIn == 1 ? 0.80 : (mateIn == 2 ? 0.65 : (mateIn == 3 ? 0.50 : (mateIn == 4 ? 0.35 : 0.15))) },
-                { 900, mateIn == 1 ? 0.72 : (mateIn == 2 ? 0.52 : (mateIn == 3 ? 0.42 : (mateIn == 4 ? 0.28 : 0.10))) },
-                { 800, mateIn == 1 ? 0.58 : (mateIn == 2 ? 0.43 : (mateIn == 3 ? 0.32 : (mateIn == 4 ? 0.18 : 0.06))) },
-                { 700, mateIn == 1 ? 0.38 : (mateIn == 2 ? 0.17 : (mateIn == 3 ? 0.06 : 0.00)) },
-            };
-
-            foreach (var (eloThreshold, probability) in mateChances.OrderByDescending(x => x.Key))
-            {
-                if (elo >= eloThreshold)
-                {
-                    return new Random().NextDouble() < probability;
-                }
-            }
-
-            return false;
-        }
-
-
-
-        // Where script is sent after executing a move
-        public async Task CentralMoveHub()
-        {
-            _moving = false;
-
-            if (_robotComm)
-            {
-                if (_move == 0)   // White just moved
-                {
-                    if (!string.IsNullOrEmpty(_rcBlackBits))   // Black needs to move a piece
-                    {
-                        await _blackRobot.SendDataAsync(_rcBlackBits);
-                        await _whiteRobot.SendDataAsync(_rcWhiteBits);
-                    }
-
-                    else
-                    {
-                        await _whiteRobot.SendDataAsync(_rcWhiteBits);
-                    }
-                }
-
-                else
-                {
-                    if (!string.IsNullOrEmpty(_rcWhiteBits))
-                    {
-                        await _whiteRobot.SendDataAsync(_rcWhiteBits);
-                        await _blackRobot.SendDataAsync(_rcBlackBits);
-                    }
-
-                    else
-                    {
-                        await _blackRobot.SendDataAsync(_rcBlackBits);
-                    }                  
-                }
-                
-                InfoSymbol.Visibility = Visibility.Collapsed;   // Hide "Move in progress" popup
-                InProgressText.Visibility = Visibility.Collapsed;
-                MoveInProgRect.Visibility = Visibility.Collapsed;
-            }
-
-            if (string.IsNullOrEmpty(_rcPastWhiteBits) && !string.IsNullOrEmpty(_rcWhiteBits))
-            {
-                _rcPastWhiteBits = _rcWhiteBits;
-            }
-
-            else if (!string.IsNullOrEmpty(_rcPastWhiteBits) && !string.IsNullOrEmpty(_rcWhiteBits))
-            {
-                _rcPastWhiteBits += $"\n{_rcWhiteBits}";
-            }
-
-            if (string.IsNullOrEmpty(_rcPastBlackBits) && !string.IsNullOrEmpty(_rcBlackBits))
-            {
-                _rcPastBlackBits = _rcBlackBits;
-            }
-
-            else if (!string.IsNullOrEmpty(_rcPastBlackBits) && !string.IsNullOrEmpty(_rcBlackBits))
-            {
-                _rcPastBlackBits += $"\n{_rcBlackBits}";
-            }
-
-            _rcWhiteBits = "";
-            _rcBlackBits = "";
-
-            if (!_isPaused && !_endGame)
-            {
-                PauseButton.IsEnabled = true;     
-
-                if (_mode == 1)
-                {
-                    _moving = true;
-                    _userTurn = false;
-
-                    ComputerMove();
-                }
-
-                else if (_mode == 2)
-                {
-                    if ((_selectedColor.Content.ToString() == "White" && _move == 0) || (_selectedColor.Content.ToString() == "Black" && _move == 1))
-                    {
-                        _moving = true;
-                        _userTurn = false;
-                        ComputerMove();
-                    }
-
-                    else
-                    {
-                        _userTurn = true;
-                        Chess_Board.IsHitTestVisible = true;
-
-                        if (_selectedColor.Content.ToString() == "White")
-                        {
-                            EnableImagesWithTag("WhitePiece", true);
-                            EnableImagesWithTag("BlackPiece", false);
-                        }
-
-                        else
-                        {
-                            EnableImagesWithTag("WhitePiece", false);
-                            EnableImagesWithTag("BlackPiece", true);
-                        }
-                    }
-                }
-
-                else
-                {
-                    _userTurn = true;
-                    Chess_Board.IsHitTestVisible = true;
-
-                    if (_move == 1)
-                    {
-                        EnableImagesWithTag("WhitePiece", true);
-                        EnableImagesWithTag("BlackPiece", false);
-                    }
-                    else
-                    {
-                        EnableImagesWithTag("WhitePiece", false);
-                        EnableImagesWithTag("BlackPiece", true);
-                    }
-                    
-                }
-            }
-
-            else
-            {
-                if (_isPaused && _holdResume)
-                {
-                    _inactivityTimer.Start();
-
-                    _holdResume = false;
-                    Play_Type.IsEnabled = true;
-                    ResumeButton.IsEnabled = true;
-                    EpsonRCConnection.IsEnabled = true;
-
-                    InfoSymbol.Visibility = Visibility.Collapsed;   // Hide "Move in progress" popup
-                    InProgressText.Visibility = Visibility.Collapsed;
-                    MoveInProgRect.Visibility = Visibility.Collapsed;
-
-                    if (_selectedPlayType.Content.ToString() == "Com Vs. Com")
-                    {
-                        CvC.IsEnabled = true;
-                    }
-
-                    else
-                    {
-                        UvCorUvU.IsEnabled = true;
-                    }
-                }
-
-                if (_endGame && _robotComm)
-                {
-                    await ClearBoard();
-                    _whiteRobot.Disconnect();
-                    _blackRobot.Disconnect();
-                }
-            }
-        }
-
-
-
-        // Calculates FEN code for current position
-        public void FENCode()
-        {
-            _previousFen = _fen;
-            _fen = string.Empty;
-            int emptyCount = 0;
-            int PieceFound = 0;
-            int castle = 0;
-            _whiteMaterial = 0;
-            _blackMaterial = 0;
-
-            for (int fRow = 0; fRow < Chess_Board.RowDefinitions.Count; fRow++)   // Iterates through each row on board
-            {
-                for (int fColumn = 0; fColumn < Chess_Board.ColumnDefinitions.Count; fColumn++)   // Iterates through each column on board
-                {
-                    foreach (Image image in Chess_Board.Children.OfType<Image>())
-                    {
-                        int fPieceRow = Grid.GetRow(image);
-                        int fPieceColumn = Grid.GetColumn(image);
-
-                        if (fRow == fPieceRow && fColumn == fPieceColumn)   // If coordinates of image match tested square
-                        {
-                            PieceFound = 1;
-
-                            if (emptyCount != 0)
-                            {
-                                _fen += $"{emptyCount}";
-                                emptyCount = 0;
-                            }
-
-                            if (image.Name.StartsWith("WhitePawn"))
-                            {
-                                _fen += "P";
-                                _whiteMaterial++;
-                                break;
-                            }
-
-                            if (image.Name.StartsWith("WhiteRook"))
-                            {
-                                _fen += "R";
-                                _whiteMaterial += 5;
-                                break;
-                            }
-
-                            if (image.Name.StartsWith("WhiteKnight"))
-                            {
-                                _fen += "N";
-                                _whiteMaterial += 3;
-                                break;
-                            }
-
-                            if (image.Name.StartsWith("WhiteBishop"))
-                            {
-                                _fen += "B";
-                                _whiteMaterial += 3;
-                                break;
-                            }
-
-                            if (image.Name.StartsWith("WhiteQueen"))
-                            {
-                                _fen += "Q";
-                                _whiteMaterial += 9;
-                                break;
-                            }
-
-                            if (image.Name.StartsWith("WhiteKing"))
-                            {
-                                _fen += "K";
-                                break;
-                            }
-
-                            if (image.Name.StartsWith("BlackPawn"))
-                            {
-                                _fen += "p";
-                                _blackMaterial++;
-                                break;
-                            }
-
-                            if (image.Name.StartsWith("BlackRook"))
-                            {
-                                _fen += "r";
-                                _blackMaterial += 5;
-                                break;
-                            }
-
-                            if (image.Name.StartsWith("BlackKnight"))
-                            {
-                                _fen += "n";
-                                _blackMaterial += 3;
-                                break;
-                            }
-
-                            if (image.Name.StartsWith("BlackBishop"))
-                            {
-                                _fen += "b";
-                                _blackMaterial += 3;
-                                break;
-                            }
-
-                            if (image.Name.StartsWith("BlackQueen"))
-                            {
-                                _fen += "q";
-                                _blackMaterial += 9;
-                                break;
-                            }
-
-                            if (image.Name.StartsWith("BlackKing"))
-                            {
-                                _fen += "k";
-                                break;
-                            }
-                        }
-                    }
-
-                    if (PieceFound == 0)
-                    {
-                        emptyCount++;
-                    }
-
-                    PieceFound = 0;
-                }
-
-                if (emptyCount != 0)
-                {
-                    _fen += $"{emptyCount}";
-                    emptyCount = 0;
-                }
-
-                if (fRow != 7)
-                {
-                    _fen += "/";
-                }
-            }
-
-            if (_move == 1)   // Color to move
-            {
-                _fen += " w ";
-            }
-
-            else
-            {
-                _fen += " b ";
-            }
-
-            if (_cWK == 0)   // Castling rights
-            {
-                if (_cWR1 == 0 && _cWR2 == 0)
-                {
-                    _fen += "KQ";
-                    castle = 1;
-                }
-
-                if (_cWR1 == 0 && _cWR2 != 0)
-                {
-                    _fen += "Q";
-                    castle = 1;
-                }
-
-                if (_cWR1 != 0 && _cWR2 == 0)
-                {
-                    _fen += "K";
-                    castle = 1;
-                }
-            }
-
-            if (_cBK == 0)
-            {
-                if (_cBR1 == 0 && _cBR2 == 0)
-                {
-                    _fen += "kq";
-                    castle = 1;
-                }
-
-                if (_cBR1 == 0 && _cBR2 != 0)
-                {
-                    _fen += "q";
-                    castle = 1;
-                }
-
-                if (_cBR1 != 0 && _cBR2 == 0)
-                {
-                    _fen += "k";
-                    castle = 1;
-                }
-            }
-
-            if (castle == 0)
-            {
-                _fen += "-";
-            }
-
-            if (EnPassantSquare.Count == 1)   // En Passant square
-            {
-                if (_move == 1)
-                {
-                    _fen += $" {(char)('a' + _newColumn)}";
-                    _fen += $"{_newRow + 3}";
-                }
-
-                if (_move == 0)
-                {
-                    _fen += $" {(char)('a' + _newColumn)}";
-                    _fen += $"{_newRow - 1}";
-                }
-            }
-
-            else
-            {
-                _fen += " -";
-            }
-
-            _fen += $" {_halfmove}";   // Halfmove number
-            _fen += $" {_fullmove}";   // Fullmove number
-
-            System.Diagnostics.Debug.WriteLine($"{_fen}");
-        }
-
-
-
-        // Prompts Stockfish to evaluate current position
-        static async Task<string> RunStockfish(string fen, int depth, string stockfishPath)
-        {
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = stockfishPath,
-                UseShellExecute = false,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                CreateNoWindow = true
-            };
-
-            var process = new Process { StartInfo = startInfo };
-            var outputBuilder = new StringBuilder();
-
-            process.OutputDataReceived += (sender, e) =>
-            {
-                if (!string.IsNullOrEmpty(e.Data))
-                {
-                    outputBuilder.AppendLine(e.Data);
-
-                    if (e.Data.StartsWith("bestmove"))
-                    {
-                        process.StandardInput.WriteLine("quit");
-                        process.StandardInput.Flush();
-                    }
-                }
-            };
-
-            process.Start();
-            process.BeginOutputReadLine();
-
-            var writer = process.StandardInput;
-            if (!writer.BaseStream.CanWrite)
-                return "Unable to write to Stockfish.";
-
-            await writer.WriteLineAsync($"setoption name MultiPV value 40");
-            await writer.WriteLineAsync($"position fen {fen}");
-            await writer.WriteLineAsync($"go depth {depth}");
-
-            await process.WaitForExitAsync();
-            return outputBuilder.ToString();
-        }
-
-
-
-        // Calculates if the position is check or checkmate for notation
-        static async Task<string> CheckCalculator(string fen, string stockfishPath)
-        {
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = stockfishPath,
-                UseShellExecute = false,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                CreateNoWindow = true
-            };
-
-            var process = new Process { StartInfo = startInfo };
-            var outputBuilder = new StringBuilder();
-            bool isCheckmate = false;
-            bool isCheck = false;
-
-            process.OutputDataReceived += async (sender, e) =>
-            {
-                if (!string.IsNullOrEmpty(e.Data))
-                {
-                    outputBuilder.AppendLine(e.Data);
-
-                    if (e.Data.StartsWith("bestmove (none)"))
-                    {
-                        isCheckmate = true;     
-                    }
-
-                    else if (e.Data.StartsWith("Checkers:"))
-                    {
-                        string checkersData = e.Data.Substring(9).Trim();
-
-                        if (!string.IsNullOrEmpty(checkersData) && !isCheckmate)
-                        {
-                            isCheck = true;
-                        }                      
-                    }
-                }
-            };
-
-            process.Start();
-            process.BeginOutputReadLine();
-
-            var writer = process.StandardInput;
-            if (!writer.BaseStream.CanWrite)
-                return "Unable to write to Stockfish.";
-
-            await writer.WriteLineAsync($"position fen {fen}");
-            await writer.WriteLineAsync($"go depth 1");
-            await writer.WriteLineAsync("d");
-            await writer.WriteLineAsync("quit");
-            await writer.FlushAsync();
-            await process.WaitForExitAsync();
-
-            if (isCheckmate)
-            {
-                return "#";
-            }
-
-            else
-            {
-                return isCheck ? "+" : "";
-            }              
-        }
-
-
+        
 
         // Writes FEN code to Fen_codes.txt game log
-        public async Task WriteFENCode()
+        public async Task WriteFenCodeAsync()
         {
             using StreamWriter writer = new(_fenFilePath, true);
 
@@ -4790,8 +4767,6 @@ namespace Chess_Project
 
                 if (_capture || _enPassant)   // If a piece was captured
                 {
-                    //startPosition = $"{startPosition}x";   // Add 'x' to notation. Ex: b4xc5
-
                     if (_takenPiece.Contains("Pawn"))
                     {
                         char pawnNo = _takenPiece[9];
@@ -5024,7 +4999,7 @@ namespace Chess_Project
                 System.Diagnostics.Debug.Write($"rcWhiteBits: {_rcWhiteBits}\n");
                 System.Diagnostics.Debug.Write($"rcBlackBits: {_rcBlackBits}\n");
 
-                string checkModifier = await CheckCalculator(_fen, _stockfishPath!);
+                string checkModifier = await StockfishCheckAnalysisAsync(_fen, _stockfishPath!);
 
                 _pgnMove = UCItoPGNConverter.Convert(_previousFen, _executedMove, _kingCastle, _queenCastle, _enPassant, _promoted, _promotedTo, checkModifier);
                 System.Diagnostics.Debug.Write("PGN Move: " + _pgnMove);
@@ -5146,8 +5121,6 @@ namespace Chess_Project
                 File.AppendAllText(_pgnFilePath, $"{_pgnMove} ");
             }
         }
-
-
 
         // Sets up pieces for game
         public async Task SetupBoard()
