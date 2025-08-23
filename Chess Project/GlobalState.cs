@@ -8,8 +8,10 @@ namespace Chess_Project
 {
     public static class GlobalState
     {
-        public static bool WhiteConnected { get; set; }
-        public static bool BlackConnected { get; set; }
+        public static bool WhiteEpsonConnected { get; set; } = false;
+        public static bool WhiteCognexConnected { get; set; } = false;
+        public static bool BlackEpsonConnected { get; set; } = false;
+        public static bool BlackCognexConnected { get; set; } = false;
         public static RobotState WhiteState { get; set; } = RobotState.Disconnected;
         public static RobotState BlackState { get; set; } = RobotState.Disconnected;
     }

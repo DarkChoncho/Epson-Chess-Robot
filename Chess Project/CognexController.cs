@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Numerics;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Chess_Project
@@ -21,7 +23,6 @@ namespace Chess_Project
         private NetworkStream? _stream;
         private StreamReader? _reader;
         private StreamWriter? _writer;
-        private TcpListener? _listener;
 
         #endregion
 
@@ -93,52 +94,57 @@ namespace Chess_Project
             throw new TimeoutException($"Timeout waiting for '{keyword}'.");
         }
 
-        public async Task<(double deltaX, double deltaY)> GetDeltasAsync(DeltaType deltaType, int listenPort)
+        public async Task<(double deltaX, double deltaY)> GetDeltasAsync(int listenPort)
         {
             TcpListener listener = new(IPAddress.Any, listenPort);
             listener.Start();
 
-            await _writer.WriteAsync("SW8\r\n");
-            await ReadUntilAsync("1");
-
-            using TcpClient resultClient = await listener.AcceptTcpClientAsync();
-            using NetworkStream resultStream = resultClient.GetStream();
-            using StreamReader resultReader = new(resultStream, Encoding.ASCII);
-
-            string? line;
-            while ((line = await resultReader.ReadLineAsync()) != null)
+            try
             {
-                if (line.StartsWith("Deltas:"))
+                // Arm/trigger the camera
+                await _writer.WriteAsync("SW8\r\n");
+                await ReadUntilAsync("1");
+
+                using TcpClient client = await listener.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(5));
+                client.NoDelay = true;
+
+                using NetworkStream networkStream = client.GetStream();
+                using StreamReader reader = new(networkStream, Encoding.ASCII);
+
+                string? line;
+                while ((line = await reader.ReadLineAsync()) != null)
                 {
-                    string[] parts = line.Replace("Deltas:", "").Trim().Split(',');
+                    // Expect: "Deltas: 57.200,67.000"
+                    if (!line.StartsWith("Deltas:", StringComparison.OrdinalIgnoreCase))
+                        continue;
 
-                    switch (deltaType)
+                    // Pull the payload after "Deltas:"
+                    string payload = line["Deltas: ".Length..].Trim();
+
+                    // Split into two numbers
+                    var parts = payload.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length != 2)
+                        throw new FormatException($"Expected 2 deltas. Received: \"{line}\".");
+
+                    if (!double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out double dx) ||
+                        !double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double dy))
                     {
-                        case DeltaType.Piece:
-                            if (parts.Length <= 4 &&
-                                double.TryParse(parts[0], out double pieceDeltaX) &&
-                                double.TryParse(parts[1], out double pieceDeltaY))
-                            {
-                                return (pieceDeltaX, pieceDeltaY);
-                            }
-
-                            throw new FormatException($"Deltas format is invalid. Response: {line}.");
-
-                        case DeltaType.Square:
-                            if (parts.Length <= 4 &&
-                                double.TryParse(parts[2], out double squareDeltaX) &&
-                                double.TryParse(parts[3], out double squareDeltaY))
-                            {
-                                return (squareDeltaX, squareDeltaY);
-                            }
-
-                            throw new FormatException($"Deltas format is invalid. Response: {line}.");
+                        throw new FormatException($"Could not parse deltas. Received: \"{line}\".");
                     }
-                    
-                }
-            }
 
-            throw new Exception("No 'Deltas:' string received.");
+                    return (dx, dy);
+                }
+
+                throw new InvalidOperationException("No 'Deltas:' line received.");
+            }
+            catch
+            {
+                return (0, 0);
+            }
+            finally
+            {
+                listener.Stop();
+            }
         }
 
         #endregion

@@ -3,6 +3,7 @@ using System.IO;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml;
 
 namespace Chess_Project
 {
@@ -28,7 +29,7 @@ namespace Chess_Project
     /// </para>
     /// <para>✅ Class updated on 6/10/2025</para>
     /// </remarks>
-    public class EpsonController(string robotIp, int robotPort, RobotColor robotColor, string cognexIp, int cognexPort)
+    public class EpsonController(string robotIp, int robotPort, double[] baseDeltas, double deltaScalar, RobotColor robotColor, string cognexIp, int cognexTcpPort, int cognexListenPort)
     {
         #region Fields and Constants
 
@@ -42,7 +43,7 @@ namespace Chess_Project
 
         private CognexController _cognex;
         private readonly string _cognexIp = cognexIp;
-        private readonly int _cognexPort = cognexPort;
+        private readonly int _cognexPort = cognexTcpPort;
 
         private const string ReadyStatus = "#getstatus,00100000001";
         private double _xAdjust;
@@ -63,35 +64,81 @@ namespace Chess_Project
         /// If any step fails, the controller is marked as disconnected, the TCP connection is disposed,
         /// and a failure result is returned. All validation and cleanup behavior is handled internally,
         /// and any exceptions encountered during the connection process are caught and logged.
-        /// <para>✅ Updated on 6/10/2025</para>
+        /// <para>✅ Updated on 8/22/2025</para>
         /// </remarks>
-        public async Task<bool> ConnectAsync()
+        public async Task ConnectAsync()
         {
             try
             {
-                _tcpClient = new();
-                await _tcpClient.ConnectAsync(_robotIp, _robotPort);
-                _networkStream = _tcpClient.GetStream();
-                if (_networkStream == null)
-                    throw new InvalidOperationException($"Epson RC700A {_robotIp} network stream was not initialized.");
-                _reader = new(_networkStream, Encoding.UTF8);
+                if ((_robotColor == RobotColor.White && !GlobalState.WhiteEpsonConnected) || (_robotColor == RobotColor.Black && !GlobalState.BlackEpsonConnected))
+                {
+                    _tcpClient = new();
+                    await _tcpClient.ConnectAsync(_robotIp, _robotPort);
+                    _networkStream = _tcpClient.GetStream();
+                    if (_networkStream == null)
+                        throw new InvalidOperationException($"Epson RC700A {_robotIp} network stream was not initialized.");
+                    _reader = new(_networkStream, Encoding.UTF8);
 
-                if (!IsValid("$login", await SendCommandAsync("$login"), "#", true)) return false;
-                if (!IsValid("$start,0", await SendCommandAsync("$start,0"), "#", true)) return false;
-                if (!IsValid("$getstatus", await WaitForReadyAsync(), ReadyStatus, true)) return false;
+                    SetEpsonConnected(_robotColor, true);
 
-                _cognex = new CognexController(_cognexIp, _cognexPort);
-                if (!await _cognex.ConnectAsync()) return false;
+                    if (!IsValid("$login", await SendCommandAsync("$login"), "#", true))
+                    {
+                        SetEpsonConnected(_robotColor, false);
+                        goto EndInit;
+                    }
+                    await Task.Delay(500);
 
-                return true;
+                    if (!IsValid("$reset", await SendCommandAsync("$reset"), "#", true))
+                    {
+                        SetEpsonConnected(_robotColor, false);
+                        goto EndInit;
+                    }
+                    await Task.Delay(500);
+
+                    if (!IsValid("$start,0", await SendCommandAsync("$start,0"), "#", true))
+                    {
+                        SetEpsonConnected(_robotColor, false);
+                        goto EndInit;
+                    }
+                    await Task.Delay(500);
+
+                    if (!IsValid("$getstatus", await WaitForReadyAsync(ReadyStatus), ReadyStatus, true))
+                    {
+                        SetEpsonConnected(_robotColor, false);
+                        goto EndInit;
+                    }
+                }
+
+            EndInit:
+
+                if ((_robotColor == RobotColor.White && !GlobalState.WhiteCognexConnected) || (_robotColor == RobotColor.Black && !GlobalState.BlackCognexConnected))
+                {
+                    _cognex = new CognexController(_cognexIp, _cognexPort);
+                    SetCognexConnected(_robotColor, await _cognex.ConnectAsync());
+                }
             }
             catch (Exception ex)
             {
                 ChessLog.LogFatal($"Epson RC700A {_robotIp} encountered an unexpected error during connection", ex);
                 ChangeRobotState(RobotState.Disconnected);
                 Disconnect();
-                return false;
             }
+        }
+
+        private static void SetEpsonConnected(RobotColor color, bool value)
+        {
+            if (color == RobotColor.White)
+                GlobalState.WhiteEpsonConnected = value;
+            else
+                GlobalState.BlackEpsonConnected = value;
+        }
+
+        private static void SetCognexConnected(RobotColor color, bool value)
+        {
+            if (color == RobotColor.White)
+                GlobalState.WhiteCognexConnected = value;
+            else
+                GlobalState.BlackCognexConnected = value;
         }
 
         /// <summary>
@@ -99,7 +146,7 @@ namespace Chess_Project
         /// disposing of the TCP client, and marking the robot as disconnected in the global state.
         /// </summary>
         /// <remarks>
-        /// The method updates <see cref="GlobalState.WhiteConnected"/> or <see cref="GlobalState.BlackConnected"/>
+        /// The method updates <see cref="GlobalState.WhiteEpsonConnected"/> or <see cref="GlobalState.BlackEpsonConnected"/>
         /// depending on the controller's assigned color. Any exceptions encountered during cleanup
         /// caught and logged as warnings. If disposal is successful, an informational log entry is recorded.
         /// Internal references to the stream and client are nullified to prevent accidental reuse.
@@ -109,10 +156,7 @@ namespace Chess_Project
         {
             try
             {
-                if (_robotColor == RobotColor.White)
-                    GlobalState.WhiteConnected = false;
-                else
-                    GlobalState.BlackConnected = false;
+                SetEpsonConnected(_robotColor, false);
 
                 _networkStream?.Close();
                 _tcpClient?.Dispose();
@@ -141,11 +185,11 @@ namespace Chess_Project
         /// Any exceptions during disconnection are handled within the <c>Disconnect</c> method.
         /// <para>✅ Written on 6/10/2025</para>
         /// </remarks>
-        private async Task<bool> AttemptReconnectAsync()
+        private async Task AttemptReconnectAsync()
         {
             Disconnect();
             await Task.Delay(1000);
-            return await ConnectAsync();
+            await ConnectAsync();
         }
 
         #endregion
@@ -230,14 +274,14 @@ namespace Chess_Project
         /// The ready response string if successful; otherwise, the last received response (which may not indicate ready state).
         /// </returns>
         /// <remarks>✅ Written on 6/10/2025</remarks>
-        private async Task<string?> WaitForReadyAsync(int maxAttempts = 10, int delayMs = 1000)
+        private async Task<string?> WaitForReadyAsync(string searchTerm, int maxAttempts = 80, int delayMs = 250)
         {
             string? response = null;
 
             for (int attempt = 0; attempt < maxAttempts; attempt++)
             {
                 response = await SendCommandAsync("$getstatus");
-                if (!string.IsNullOrEmpty(response) && response.StartsWith(ReadyStatus))
+                if (!string.IsNullOrEmpty(response) && response.StartsWith(searchTerm))
                     return response;
 
                 ChessLog.LogDebug($"Attempt {attempt + 1} of {maxAttempts}: {response}.");
@@ -277,6 +321,8 @@ namespace Chess_Project
         /// </remarks>
         public async Task<bool> SendDataAsync(string rcBits)
         {
+            System.Diagnostics.Debug.WriteLine($"rcBits: {rcBits}");
+
             try
             {
                 string? readyResponse = null;
@@ -309,7 +355,7 @@ namespace Chess_Project
                         ChessLog.LogInformation("Move successful after retry.");
                     }
 
-                    readyResponse = await WaitForReadyAsync();
+                    readyResponse = await WaitForReadyAsync(ReadyStatus);
                     if (!IsValid("$getstatus", readyResponse, ReadyStatus, false))
                     {
                         await AttemptRecoveryAsync();
@@ -322,7 +368,7 @@ namespace Chess_Project
                         if (!IsValid(stageCommand, stageResponse, "#", false))
                             throw new EpsonException(stageCommand, stageResponse, _robotIp);
 
-                        readyResponse = await WaitForReadyAsync();
+                        readyResponse = await WaitForReadyAsync(ReadyStatus);
                         if (!IsValid("$getstatus", readyResponse, ReadyStatus, false))
                             throw new EpsonException("$getstatus", readyResponse, _robotIp);
 
@@ -330,27 +376,53 @@ namespace Chess_Project
                     }
 
                     int bitNumber = int.Parse(bit);
+                    double deltaX = baseDeltas[0];
+                    double deltaY = baseDeltas[1];
                     if (bitNumber < 64 || (bitNumber > 127 && bitNumber < 160))  // Picking a piece
                     {
-                        (double pieceDeltaX, double pieceDeltaY) = await _cognex.GetDeltasAsync(DeltaType.Piece, 3000);
+                        (double cognexDeltaX, double cognexDeltaY) = await _cognex.GetDeltasAsync(cognexListenPort);
 
-                        if (!IsValid($"$setvariable,pieceDeltaX,{pieceDeltaX}", await SendCommandAsync($"$setvariable,pieceDeltaX,{pieceDeltaX}"), "#", true)) return false;
-                        if (!IsValid($"$setvariable,pieceDeltaY,{pieceDeltaY}", await SendCommandAsync($"$setvariable,pieceDeltaY,{pieceDeltaY}"), "#", true)) return false;
+                        double pickDeltaX = deltaX + (cognexDeltaX * deltaScalar);
+                        double pickDeltaY = deltaY + (cognexDeltaY * deltaScalar);
+
+                        if (!IsValid($"$setvariable,deltaX,{pickDeltaX}", await SendCommandAsync($"$setvariable,deltaX,{pickDeltaX}"), "#", true)) return false;
+                        if (!IsValid($"$setvariable,deltaY,{pickDeltaY}", await SendCommandAsync($"$setvariable,deltaY,{pickDeltaY}"), "#", true)) return false;
                     }
                     else  // Placing a piece
                     {
-                        (double squareDeltaX, double squareDeltaY) = await _cognex.GetDeltasAsync(DeltaType.Square, 3000);
-
-                        if (!IsValid($"$setvariable,squareDeltaX,{squareDeltaX}", await SendCommandAsync($"$setvariable,squareDeltaX,{squareDeltaX}"), "#", true)) return false;
-                        if (!IsValid($"$setvariable,squareDeltaY,{squareDeltaY}", await SendCommandAsync($"$setvariable,squareDeltaY,{squareDeltaY}"), "#", true)) return false;
+                        if (!IsValid($"$setvariable,deltaX,{deltaX}", await SendCommandAsync($"$setvariable,deltaX,{deltaX}"), "#", true)) return false;
+                        if (!IsValid($"$setvariable,deltaY,{deltaY}", await SendCommandAsync($"$setvariable,deltaY,{deltaY}"), "#", true)) return false;
                     }
 
-                    if (!IsValid($"$setvariable,deltasFound,0", await SendCommandAsync($"$setvariable,deltasFound,0"), "#", true)) return false;
-
-                    string? completionResponse = await WaitForReadyAsync();
-                    if (IsValid("$getstatus", completionResponse, ReadyStatus, false))
+                    memOnResponse = await SendCommandAsync(memOnCommand);
+                    if (!IsValid(memOnCommand, memOnResponse, "#", false))
                     {
-                        if (!IsValid($"$setvariable,deltasFound,-1", await SendCommandAsync($"$setvariable,deltasFound,-1"), "#", true)) return false;
+                        await AttemptRecoveryAsync();
+
+                        memOnResponse = await SendCommandAsync(memOnCommand);
+                        if (!IsValid(memOnCommand, memOnResponse, "#", false))
+                            throw new EpsonException(memOnCommand, memOnResponse, _robotIp);
+
+                        ChessLog.LogInformation("MemOn successful after retry.");
+                    }
+
+                    string moveCommand = "$start,3";
+                    string moveResponse = await SendCommandAsync(moveCommand);
+                    if (!IsValid(moveCommand, moveResponse, "#", false))
+                    {
+                        await AttemptRecoveryAsync();
+
+                        moveResponse = await SendCommandAsync(moveCommand);
+                        if (!IsValid(moveCommand, moveResponse, "#", false))
+                            throw new EpsonException(moveCommand, moveResponse, _robotIp);
+
+                        ChessLog.LogInformation("Move successful after retry.");
+                    }
+
+                    string? completionResponse = await WaitForReadyAsync(ReadyStatus);
+                    if (!IsValid("$getstatus", completionResponse, ReadyStatus, false))
+                    {
+                        return false;
                     }
                 }
 
@@ -362,7 +434,7 @@ namespace Chess_Project
                     ChessLog.LogInformation("Move to home successful after retry.");
                 }
 
-                readyResponse = await WaitForReadyAsync();
+                readyResponse = await WaitForReadyAsync(ReadyStatus);
                 if (!IsValid("$getstatus", readyResponse, ReadyStatus, false))
                 {
                     await AttemptRecoveryAsync();
@@ -420,11 +492,23 @@ namespace Chess_Project
             if (!homeResponse.StartsWith('#'))
                 throw new EpsonException(homeCommand, homeResponse, _robotIp);
 
-            string? readyResponse = await WaitForReadyAsync();
+            string? readyResponse = await WaitForReadyAsync(ReadyStatus);
             if (string.IsNullOrEmpty(readyResponse) || !readyResponse.StartsWith("#getstatus,00100000001"))
                 throw new EpsonException("$getstatus", readyResponse, _robotIp);
 
             ChessLog.LogInformation($"Epson RC700A {_robotIp} successfully recovered. Retrying move.");
+        }
+
+        public async Task<bool> LowSpeedAsync()
+        {
+            if (!IsValid("$start,5", await SendCommandAsync("$start,5"), "#", true)) return false;
+            return true;
+        }
+
+        public async Task<bool> HighSpeedAsync()
+        {
+            if (!IsValid("$start,4", await SendCommandAsync("$start,4"), "#", true)) return false;
+            return true;
         }
 
         #endregion

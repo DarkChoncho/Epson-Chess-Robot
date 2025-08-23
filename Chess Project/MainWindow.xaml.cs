@@ -40,11 +40,17 @@ namespace Chess_Project
         private readonly string _blackRobotIp = "192.168.0.3";
         private readonly int _whiteRobotPort = 5000;
         private readonly int _blackRobotPort = 5000;
+        private readonly double[] _whiteRobotBaseDeltas = [-1.218, -67.697];
+        private readonly double[] _blackRobotBaseDeltas = [0.616, -80.406];
+        private readonly double _whiteRobotDeltaScalar = 0.095952;
+        private readonly double _blackRobotDeltaScalar = 0.0895833;
 
         private readonly string _whiteCognexIp = "192.168.0.12";
         private readonly string _blackCognexIp = "192.168.0.13";
-        private readonly int _whiteCognexPort = 23;
-        private readonly int _blackCognexPort = 23;
+        private readonly int _whiteCognexTcpPort = 23;
+        private readonly int _blackCognexTcpPort = 23;
+        private readonly int _whiteCognexListenPort = 3000;
+        private readonly int _blackCognexListenPort = 3001;
 
         private readonly Dictionary<string, SoundPlayer> _soundPlayer = [];
         public List<Tuple<int, int>> ImageCoordinates = [];
@@ -197,7 +203,7 @@ namespace Chess_Project
         private bool _wasResumable = false;
         private bool _isPaused = false;
         private bool _boardSet = false;
-        private int _timeoutDuration = 120;
+        private readonly int _timeoutDuration = 90;
 
         #endregion
 
@@ -340,13 +346,13 @@ namespace Chess_Project
         /// <remarks>✅ Updated on 8/1/2025</remarks>
         private void InitializeRobots()
         {
-            _whiteRobot = new EpsonController(_whiteRobotIp, _whiteRobotPort, RobotColor.White, _whiteCognexIp, _whiteCognexPort);
-            _blackRobot = new EpsonController(_blackRobotIp, _blackRobotPort, RobotColor.Black, _blackCognexIp, _blackCognexPort);
+            _whiteRobot = new EpsonController(_whiteRobotIp, _whiteRobotPort, _whiteRobotBaseDeltas, _whiteRobotDeltaScalar, RobotColor.White, _whiteCognexIp, _whiteCognexTcpPort, _whiteCognexListenPort);
+            _blackRobot = new EpsonController(_blackRobotIp, _blackRobotPort, _blackRobotBaseDeltas, _blackRobotDeltaScalar, RobotColor.Black, _blackCognexIp, _blackCognexTcpPort, _blackCognexListenPort);
             HandleEpsonConnectionAsync();
         }
 
         /// <summary>
-        /// Handles Epson RC+ robot connection toggling. Attempts to connect ot disconnect both robots
+        /// Handles Epson RC+ robot connection toggling. Attempts to connect or disconnect both robots
         /// and updates the application state and preferences accordingly.
         /// </summary>
         /// <remarks>✅ Updated on 6/11/2025</remarks>
@@ -354,17 +360,30 @@ namespace Chess_Project
         {
             if (EpsonRCConnection.IsChecked == true)
             {
+                SetStatusLights(Brushes.Yellow, Brushes.Yellow);
+                DisableUI();
+
+                // Begin animated feedback
+                EpsonRCRect.Height = 45;
+                AttemptingConnection.Visibility = Visibility.Visible;
+                UpdateRectangleClip();
+
                 // Attempt to connect to both robots
-                GlobalState.WhiteConnected = await _whiteRobot.ConnectAsync();
-                GlobalState.BlackConnected = await _blackRobot.ConnectAsync();
-                _robotComm = GlobalState.WhiteConnected && GlobalState.BlackConnected;
+                if (!GlobalState.WhiteEpsonConnected || !GlobalState.WhiteCognexConnected) { await _whiteRobot.ConnectAsync(); }
+                if (!GlobalState.BlackEpsonConnected || !GlobalState.BlackCognexConnected) { await _blackRobot.ConnectAsync(); }
+                _robotComm = GlobalState.WhiteEpsonConnected && GlobalState.BlackEpsonConnected && GlobalState.WhiteCognexConnected && GlobalState.BlackCognexConnected;
 
                 // Update UI
                 EpsonRCConnection.IsChecked = _robotComm;
                 SetStatusLights(
-                    GlobalState.WhiteConnected ? Brushes.Green : Brushes.Red,
-                    GlobalState.BlackConnected ? Brushes.Green : Brushes.Red
+                    GlobalState.WhiteEpsonConnected && GlobalState.WhiteCognexConnected ? Brushes.Green : Brushes.Red,
+                    GlobalState.BlackEpsonConnected && GlobalState.BlackCognexConnected ? Brushes.Green : Brushes.Red
                 );
+
+
+                EnableUI();
+                EpsonRCRect.Height = 30;
+                AttemptingConnection.Visibility = Visibility.Collapsed;
 
                 // Update preference and save
                 _preferences.EpsonRC = _robotComm;
@@ -373,11 +392,11 @@ namespace Chess_Project
             else
             {
                 // Disconnect all robots and update UI
-                if (GlobalState.WhiteConnected) _whiteRobot.Disconnect();
-                if (GlobalState.BlackConnected) _blackRobot.Disconnect();
+                if (GlobalState.WhiteEpsonConnected) _whiteRobot.Disconnect();
+                if (GlobalState.BlackEpsonConnected) _blackRobot.Disconnect();
 
-                GlobalState.WhiteConnected = false;
-                GlobalState.BlackConnected = false;
+                GlobalState.WhiteEpsonConnected = false;
+                GlobalState.BlackEpsonConnected = false;
                 _robotComm = false;
                 SetStatusLights(Brushes.Red, Brushes.Red);
 
@@ -833,7 +852,7 @@ namespace Chess_Project
                     break;
             }
 
-            await WriteFenCodeAsync();
+            await DocumentMoveAsync();
             WritePGNFile();
         }
 
@@ -915,7 +934,7 @@ namespace Chess_Project
                 {
                     MoveCallout(_oldRow, _oldColumn, _newRow, _newColumn);
                     await FinalizeMoveAsync(activePawn);
-                    await WriteFenCodeAsync();
+                    await DocumentMoveAsync();
                     await CheckmateVerifierAsync();
                     DeselectPieces();
                 }
@@ -928,7 +947,7 @@ namespace Chess_Project
 
             // Immediate finalize path
             await FinalizeMoveAsync(activePawn);
-            await WriteFenCodeAsync();
+            await DocumentMoveAsync();
             await CheckmateVerifierAsync();
             DeselectPieces();
         }
@@ -983,7 +1002,7 @@ namespace Chess_Project
                 {
                     MoveCallout(_oldRow, _oldColumn, _kingCastle ? _oldRow : _queenCastle ? _oldRow : _newRow, _kingCastle ? 7 : _queenCastle ? 0 : _newColumn);
                     await FinalizeMoveAsync(activePiece);
-                    await WriteFenCodeAsync();
+                    await DocumentMoveAsync();
                     await CheckmateVerifierAsync();
                     DeselectPieces();
                 }
@@ -996,7 +1015,7 @@ namespace Chess_Project
 
             // Immediate finalize path
             await FinalizeMoveAsync(activePiece);
-            await WriteFenCodeAsync();
+            await DocumentMoveAsync();
             await CheckmateVerifierAsync();
             DeselectPieces();
         }
@@ -2559,34 +2578,44 @@ namespace Chess_Project
         /// <remarks>
         /// This method is triggered when the inactivity timer elapses.
         /// It prepares the game for autonomous play and ensures the UI reflects the new state.
-        /// <para>✅ Verified on 6/11/2025</para>
+        /// <para>✅ Verified on 8/22/2025</para>
         /// </remarks>
         private void InactivityTimer_Tick(object? sender, EventArgs e)
         {
             _inactivityTimer.Stop();
 
-            // Randomize difficulty and set mode
-            AssignRandomElo();
-            Play_Type.SelectedIndex = (int)GameMode.ComVsCom;
-
-            // Reset UI state
-            ToggleUIState(false);
-            PlayButton.IsEnabled = true;
-            ResumeButton.IsEnabled = false;
-            Elo.SelectedItem = null;
-            Color.SelectedItem = null;
+            // Attempt to connect to robots if not already
+            if (!GlobalState.WhiteEpsonConnected || !GlobalState.WhiteCognexConnected || !GlobalState.BlackEpsonConnected || !GlobalState.BlackCognexConnected) { EpsonRcAsync(EpsonRCConnection, EventArgs.Empty); }
 
             // Start or resume the game
-            if (!_isPaused)
+            if (GlobalState.WhiteEpsonConnected && GlobalState.BlackEpsonConnected && GlobalState.WhiteCognexConnected && GlobalState.BlackCognexConnected)
             {
-                ChessLog.LogInformation("Inactivity timeout reached. Starting new game.");
-                SimulateStartClick(PlayButton);
+                // Randomize difficulty and set mode
+                AssignRandomElo();
+                Play_Type.SelectedIndex = (int)GameMode.ComVsCom;
+
+                // Reset UI state
+                ToggleUIState(false);
+                PlayButton.IsEnabled = true;
+                ResumeButton.IsEnabled = false;
+                Elo.SelectedItem = null;
+                Color.SelectedItem = null;
+
+                if (!_isPaused)
+                {
+                    ChessLog.LogInformation("Inactivity timeout reached. Starting new game.");
+                    SimulateStartClick(PlayButton);
+                }
+                else
+                {
+                    ChessLog.LogInformation("Inactivity timout reached. Resuming game.");
+                    ResumeButton.IsEnabled = true;
+                    SimulateStartClick(ResumeButton);
+                }
             }
             else
             {
-                ChessLog.LogInformation("Inactivity timout reached. Resuming game.");
-                ResumeButton.IsEnabled = true;
-                SimulateStartClick(ResumeButton);
+                _inactivityTimer.Start();
             }
         }
 
@@ -3069,6 +3098,7 @@ namespace Chess_Project
         private void EnableUI()
         {
             Play_Type.IsEnabled = true;
+            EpsonRCConnection.IsEnabled = true;
 
             RestorePlayState();
             TogglePlayTypeUI(true);
@@ -3579,6 +3609,7 @@ namespace Chess_Project
         /// </summary>
         /// <param name="comboBox">The ComboBox to update.</param>
         /// <param name="selectedTheme">The theme to select.</param>
+        /// <remarks>✅ Updated on 6/11/2025</remarks>
         private static void SetComboBoxSelection(ComboBox comboBox, string? selectedTheme)
         {
             if (string.IsNullOrEmpty(selectedTheme)) return;  // Avoid unnecessary iterations
@@ -3806,6 +3837,343 @@ namespace Chess_Project
             }
         }
 
+        /// <summary>
+        /// Commits the just-played move to all "documentation" channels:
+        /// <list type="bullet">
+        ///     <item><description>Computes Epson bit codes for pick/place (incl. captures, en passant, promotions, and castling) and </description></item>
+        ///     <item><description>Builds the executed UCI move string and queries Stockfish for a check/checkmate modifier.</description></item>
+        ///     <item><description>Converts the move to PGN, plays the appropriate sound, and appends to FEN/PGN logs.</description></item>
+        ///     <item><description>Updates the in-app move table UI and tracks threefold repetition state.</description></item>
+        /// </list>
+        /// Resets transient flags at the end (capture/promotion/castling/en passant).
+        /// </summary>
+        /// <remarks>✅ Updated on 8/20/2025</remarks>
+        private async Task DocumentMoveAsync()
+        {
+            using StreamWriter writer = new(_fenFilePath, append: true);
+
+            // Local helpers
+            static int ParseDigitAt(string s, int index) => int.Parse(s[index].ToString());
+            int SquareToBitIndex(int file1to8, int rank1to8) => (file1to8 - 1) + ((rank1to8 - 1) * 8);
+
+            if (string.IsNullOrEmpty(_startPosition))
+                goto finalize_and_log;
+
+            // Files/ranks are 1-based in bit mapping
+            int file1 = _oldColumn + 1;
+            int file2 = _newColumn + 1;
+            int rank1 = 8 - _oldRow;
+            int rank2 = 8 - _newRow;
+
+            _pickBit1 = SquareToBitIndex(file1, rank1);
+            _pickBit2 = SquareToBitIndex(file2, rank2);
+            _placeBit1 = SquareToBitIndex(file2, rank2) + 64;
+
+            // Captures / En Passant
+            if (_capture || _enPassant)
+            {
+                // Map taken piece to its off-board place bit
+                if (_takenPiece.Contains("Pawn"))
+                {
+                    int pawnNumber = ParseDigitAt(_takenPiece, 9) - 1;
+                    _placeBit2 = _pawnPlace[pawnNumber];
+                }
+                else if (_takenPiece.Contains("Knight"))
+                {
+                    int knightNumber = ParseDigitAt(_takenPiece, 11) - 1;
+                    _placeBit2 = _knightPlace[knightNumber];
+                }
+                else if (_takenPiece.Contains("Bishop"))
+                {
+                    int bishopNumber = ParseDigitAt(_takenPiece, 11) - 1;
+                    _placeBit2 = _bishopPlace[bishopNumber];
+                }
+                else if (_takenPiece.Contains("Rook"))
+                {
+                    int rookNumber = ParseDigitAt(_takenPiece, 9) - 1;
+                    _placeBit2 = _rookPlace[rookNumber];
+                }
+                else if (_takenPiece.Contains("Queen"))
+                {
+                    int queenNumber = ParseDigitAt(_takenPiece, 10) - 1;
+                    _placeBit2 = _queenPlace[queenNumber];
+                }
+
+                if (_move == 0)  // White just moved
+                {
+                    _rcWhiteBits = $"{_pickBit1}, {_placeBit1}";
+                    _rcBlackBits = $"{_pickBit2}, {_placeBit2}";
+                }
+                else  // Black just moved
+                {
+                    _rcWhiteBits = $"{_pickBit2}, {_placeBit2}";
+                    _rcBlackBits = $"{_pickBit1}, {_placeBit1}";
+                }
+
+                // En Passant adjustment
+                if (_enPassant)
+                {
+                    if (_move == 0)  // White just moved
+                    {
+                        _rcWhiteBits = $"{_pickBit1}, {_placeBit1}";
+                        _rcBlackBits = $"{_pickBit2 - 8}, {_placeBit2}";
+                    }
+
+                    else  // Black just moved
+                    {
+                        _rcWhiteBits = $"{_pickBit2 + 8}, {_placeBit2}";
+                        _rcBlackBits = $"{_pickBit1}, {_placeBit1}";
+                    }
+                }
+            }
+            else
+            {
+                // Non-capture move
+                if (_move == 0)
+                    _rcWhiteBits = $"{_pickBit1}, {_placeBit1}";
+                else
+                    _rcBlackBits = $"{_pickBit1}, {_placeBit1}";
+            }
+
+            // Promotion
+            if (_promoted)
+            {
+                _endPosition = $"{_endPosition}{_promotionPiece}";
+
+                // Off-board place bit for the pawn that left the board
+                {
+                    int pawnNumber = ParseDigitAt(_promotedPawn, 9) - 1;
+                    _placeBit2 = _pawnPlace[pawnNumber];
+                }
+
+                // Pick bit for the promoted piece type (from off-board location)
+                if (_promotionPiece == 'k')
+                {
+                    int knightNumber = ParseDigitAt(_activePiece, 11) - 1;
+                    _promotedTo = "Q";
+                    _pickBit3 = _knightPick[knightNumber];
+                }
+                else if (_promotionPiece == 'b')
+                {
+                    int bishopNumber = ParseDigitAt(_activePiece, 11) - 1;
+                    _promotedTo = "B";
+                    _pickBit3 = _bishopPick[bishopNumber];
+                }
+                else if (_promotionPiece == 'r')
+                {
+                    int rookNumber = ParseDigitAt(_activePiece, 9) - 1;
+                    _promotedTo = "R";
+                    _pickBit3 = _rookPick[rookNumber];
+                }
+                else if (_promotionPiece == 'q')
+                {
+                    int queenNumber = ParseDigitAt(_activePiece, 10) - 1;
+                    _promotedTo = "Q";
+                    _pickBit3 = _queenPick[queenNumber];
+                }
+
+                if (_capture)
+                {
+                    // Off-board place bit for the captured (non-pawn) piece
+                    if (_takenPiece.Contains("Knight"))
+                    {
+                        int knightNumber = ParseDigitAt(_takenPiece, 11) - 1;
+                        _placeBit3 = _knightPlace[knightNumber];
+                    }
+                    else if (_takenPiece.Contains("Bishop"))
+                    {
+                        int bishopNumber = ParseDigitAt(_takenPiece, 11) - 1;
+                        _placeBit3 = _bishopPlace[bishopNumber];
+                    }
+                    else if (_takenPiece.Contains("Rook"))
+                    {
+                        int rookNumber = ParseDigitAt(_takenPiece, 9) - 1;
+                        _placeBit3 = _rookPlace[rookNumber];
+                    }
+                    else if (_takenPiece.Contains("Queen"))
+                    {
+                        int queenNumber = ParseDigitAt(_takenPiece, 10) - 1;
+                        _placeBit3 = _queenPlace[queenNumber];
+                    }
+
+                    if (_move == 0)  // White just moved
+                    {
+                        _rcWhiteBits = $"{_pickBit1}, {_placeBit2}, {_pickBit3}, {_placeBit1}";
+                        _rcBlackBits = $"{_pickBit2}, {_placeBit3}";
+                    }
+                    else  // Black just moved
+                    {
+                        _rcWhiteBits = $"{_pickBit2}, {_placeBit3}";
+                        _rcBlackBits = $"{_pickBit1}, {_placeBit2}, {_pickBit3}, {_placeBit1}";
+                    }
+                }
+                else
+                {
+                    if (_move == 0)  // White just moved
+                        _rcWhiteBits = $"{_pickBit1}, {_placeBit2}, {_pickBit3}, {_placeBit1}";
+                    else  // Black just moved
+                        _rcBlackBits = $"{_pickBit1}, {_placeBit2}, {_pickBit3}, {_placeBit1}";
+                }
+            }
+
+            // Castling bit patterns
+            if (_kingCastle)
+            {
+                if (_move == 0) // White just moved
+                {
+                    _startPosition = "e1";
+                    _endPosition = "g1";
+                    _rcWhiteBits = "4, 70, 7, 69";
+                }
+                else            // Black just moved
+                {
+                    _startPosition = "e8";
+                    _endPosition = "g8";
+                    _rcBlackBits = "60, 126, 63, 125";
+                }
+            }
+            else if (_queenCastle)
+            {
+                if (_move == 0) // White just moved
+                {
+                    _startPosition = "e1";
+                    _endPosition = "c1";
+                    _rcWhiteBits = "4, 66, 0, 67";
+                }
+                else            // Black just moved
+                {
+                    _startPosition = "e8";
+                    _endPosition = "c8";
+                    _rcBlackBits = "60, 122, 56, 123";
+                }
+            }
+
+            // Compose move, PGN, sound
+            _executedMove = $"{_startPosition}{_endPosition}";
+            string checkModifier = await StockfishCheckAnalysisAsync(_fen, _stockfishPath!);
+            _pgnMove = UCItoPGNConverter.Convert(_previousFen, _executedMove, _kingCastle, _queenCastle, _enPassant, _promoted, _promotedTo, checkModifier);
+
+            if (_pieceSounds)
+            {
+                string sound =
+                    _pgnMove.Contains('#') ? "GameEnd" :
+                    _pgnMove.Contains('+') ? "PieceCheck" :
+                    _pgnMove.Contains('=') ? "PiecePromote" :
+                    _pgnMove.Contains('x') ? "PieceCapture" :
+                    _pgnMove.Contains('-') ? "PieceCastle" :
+                    (_mode == 1 || (_mode == 2 &&
+                        ((_selectedColor.Content.ToString() == "White" && _move == 0) ||
+                        (_selectedColor.Content.ToString() == "Black" && _move == 1))))
+                        ? "PieceOpponent"
+                        : "PieceMove";
+
+                PlaySound(sound);
+            }
+
+        finalize_and_log:
+
+            // Reset transient flags (exact same set/order)
+            _capture = false;
+            _capturedPiece = null;
+            _enPassantCreated = false;
+            _enPassant = false;
+            _promoted = false;
+            _kingCastle = false;
+            _queenCastle = false;
+
+            // Append line to FEN log file
+            writer.WriteLine($"\nMove Played: {_pgnMove}   Resulting Position: {_fen}");
+
+            // Track threefold repetition
+            string[] fenParts = _fen.Split(' ');
+            string currentFEN = $"{fenParts[0]} {fenParts[1]};";
+            _gameFens.Add(currentFEN);
+
+            var fenCounts = _gameFens
+                .Select(f => f[..f.LastIndexOf(';')])
+                .GroupBy(f => f)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            if (fenCounts.Any(p => p.Value >= 3))
+                _threefoldRepetition = true;
+
+            // Update the evaluation interface move table (unchanged)
+            Color borderColor = (Color)ColorConverter.ConvertFromString("#FFD0D0D0");
+            SolidColorBrush borderBrush = new(borderColor);
+            FontFamily fontFamily = new("Sans Serif Collection");
+            FontWeight fontWeight = FontWeights.Bold;
+
+            RowDefinition newRowDefinition = new() { Height = new GridLength(30) };
+
+            Border newBorder = new()
+            {
+                BorderThickness = new Thickness(0.5),
+                BorderBrush = borderBrush,
+            };
+
+            TextBlock newMoveNumber = new()
+            {
+                Text = $"{_fullmove}.",
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = borderBrush,
+                FontFamily = fontFamily,
+                FontSize = 14,
+            };
+
+            TextBlock newWhiteMove = new()
+            {
+                Text = _pgnMove,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
+                Foreground = borderBrush,
+                FontFamily = fontFamily,
+                FontSize = 14,
+                FontWeight = fontWeight,
+                Padding = new Thickness(10, 0, 0, 0),
+            };
+
+            TextBlock newBlackMove = new()
+            {
+                Text = _pgnMove,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
+                Foreground = borderBrush,
+                FontFamily = fontFamily,
+                FontSize = 14,
+                FontWeight = fontWeight,
+                Padding = new Thickness(10, 0, 0, 0),
+            };
+
+            if (_move == 0)
+            {
+                Grid.SetRow(newBorder, _fullmove);
+                Grid.SetColumnSpan(newBorder, 3);
+                Grid.SetRow(newMoveNumber, _fullmove);
+                Grid.SetColumn(newMoveNumber, 0);
+                Grid.SetRow(newWhiteMove, _fullmove);
+                Grid.SetColumn(newWhiteMove, 1);
+
+                Moves.RowDefinitions.Add(newRowDefinition);
+                Moves.Children.Add(newBorder);
+                Moves.Children.Add(newMoveNumber);
+                Moves.Children.Add(newWhiteMove);
+
+                File.AppendAllText(_pgnFilePath, $"{_fullmove}. {_pgnMove} ");
+            }
+            else
+            {
+                Grid.SetRow(newBlackMove, _fullmove - 1);
+                Grid.SetColumn(newBlackMove, 2);
+
+                Moves.Children.Add(newBlackMove);
+
+                File.AppendAllText(_pgnFilePath, $"{_pgnMove} ");
+            }
+        }
+
         #endregion
 
 
@@ -3826,10 +4194,10 @@ namespace Chess_Project
             if (checkBox.IsChecked.HasValue && _robotComm)  // If user is trying to connect to Epson robots
             {
                 // Attempt to connect
-                GlobalState.WhiteConnected = !GlobalState.WhiteConnected && await Task.Run(() => _whiteRobot.ConnectAsync());
-                GlobalState.BlackConnected = !GlobalState.BlackConnected && await Task.Run(() => _blackRobot.ConnectAsync());
+                if (!GlobalState.WhiteEpsonConnected || !GlobalState.WhiteCognexConnected) { await _whiteRobot.ConnectAsync(); }
+                if (!GlobalState.BlackEpsonConnected || !GlobalState.BlackCognexConnected) { await _blackRobot.ConnectAsync(); }
 
-                if (GlobalState.WhiteConnected && GlobalState.BlackConnected)  // Successfully connected to both Epson robots
+                if (GlobalState.WhiteEpsonConnected && GlobalState.BlackEpsonConnected && GlobalState.WhiteCognexConnected && GlobalState.BlackCognexConnected)  // Successfully connected to both Epson robots
                 {
                     _preferences.EpsonRC = true;
                     PreferencesManager.Save(_preferences);
@@ -3878,8 +4246,8 @@ namespace Chess_Project
 
                     checkBox.IsChecked = false;
                     SetStatusLights(
-                        GlobalState.WhiteConnected ? Brushes.Green : Brushes.Red,
-                        GlobalState.BlackConnected ? Brushes.Green : Brushes.Red
+                        GlobalState.WhiteEpsonConnected ? Brushes.Green : Brushes.Red,
+                        GlobalState.BlackEpsonConnected ? Brushes.Green : Brushes.Red
                     );
                 }
 
@@ -3895,8 +4263,8 @@ namespace Chess_Project
                 _preferences.EpsonRC = false;
                 PreferencesManager.Save(_preferences);
 
-                GlobalState.WhiteConnected = false;
-                GlobalState.BlackConnected = false;
+                GlobalState.WhiteEpsonConnected = false;
+                GlobalState.BlackEpsonConnected = false;
                 checkBox.IsChecked = false;
 
                 SetStatusLights(Brushes.Red, Brushes.Red);
@@ -4742,386 +5110,6 @@ namespace Chess_Project
         }
 
 
-        
-
-        // Writes FEN code to Fen_codes.txt game log
-        public async Task WriteFenCodeAsync()
-        {
-            using StreamWriter writer = new(_fenFilePath, true);
-
-            int File1;
-            int File2;
-            int Rank1;
-            int Rank2;
-
-            if (!String.IsNullOrEmpty(_startPosition))
-            {
-                File1 = _oldColumn + 1;
-                File2 = _newColumn + 1;
-                Rank1 = 8 - _oldRow;
-                Rank2 = 8 - _newRow;
-
-                _pickBit1 = File1 - 1 + ((Rank1 - 1) * 8);
-                _pickBit2 = File2 - 1 + ((Rank2 - 1) * 8);
-                _placeBit1 = File2 - 1 + ((Rank2 - 1) * 8) + 64;
-
-                if (_capture || _enPassant)   // If a piece was captured
-                {
-                    if (_takenPiece.Contains("Pawn"))
-                    {
-                        char pawnNo = _takenPiece[9];
-                        int pawnNumber = int.Parse(pawnNo.ToString()) - 1;
-
-                        _placeBit2 = _pawnPlace[pawnNumber];
-                    }
-
-                    else if (_takenPiece.Contains("Queen"))
-                    {
-                        char queenNo = _takenPiece[10];
-                        int queenNumber = int.Parse(queenNo.ToString()) - 1;
-
-                        _placeBit2 = _queenPlace[queenNumber];
-                    }
-
-                    else if (_takenPiece.Contains("Knight"))
-                    {
-                        char knightNo = _takenPiece[11];
-                        int knightNumber = int.Parse(knightNo.ToString()) - 1;
-
-                        _placeBit2 = _knightPlace[knightNumber];
-                    }
-
-                    else if (_takenPiece.Contains("Rook"))
-                    {
-                        char rookNo = _takenPiece[9];
-                        int rookNumber = int.Parse(rookNo.ToString()) - 1;
-
-                        _placeBit2 = _rookPlace[rookNumber];
-                    }
-
-                    else if (_takenPiece.Contains("Bishop"))
-                    {
-                        char bishopNo = _takenPiece[11];
-                        int bishopNumber = int.Parse(bishopNo.ToString()) - 1;
-
-                        _placeBit2 = _bishopPlace[bishopNumber];
-                    }
-
-                    if (_move == 0)   // White just moved
-                    {
-                        _rcWhiteBits = $"{_pickBit1}, {_placeBit1}";
-                        _rcBlackBits = $"{_pickBit2}, {_placeBit2}";
-                    }
-
-                    else   // Black just moved
-                    {
-                        _rcWhiteBits = $"{_pickBit2}, {_placeBit2}";
-                        _rcBlackBits = $"{_pickBit1}, {_placeBit1}";
-                    }
-
-                    if (_enPassant)   // If a piece was captured via En Passant
-                    {
-                        //endPosition = $"{endPosition} e.p.";   // Appends 'e.p.' to notation. Ex: b5xc6 e.p.
-
-                        if (_move == 0)   // White just moved
-                        {
-                            _rcWhiteBits = $"{_pickBit1}, {_placeBit1}";
-                            _rcBlackBits = $"{_pickBit2 - 8}, {_placeBit2}";
-                        }
-
-                        else   // Black just moved
-                        {
-                            _rcWhiteBits = $"{_pickBit2 + 8}, {_placeBit2}";
-                            _rcBlackBits = $"{_pickBit1}, {_placeBit1}";
-                        }
-                    }
-                }
-
-                else
-                {
-                    if (_move == 0)   // White just moved
-                    {
-                        _rcWhiteBits = $"{_pickBit1}, {_placeBit1}";
-                    }
-
-                    else   // Black just moved
-                    {
-                        _rcBlackBits = $"{_pickBit1}, {_placeBit1}";
-                    }
-                }
-
-                if (_promoted)   // If a pawn was promoted
-                {
-                    _endPosition = $"{_endPosition}{_promotionPiece}";   // Appends promotion letter to end of notation
-
-                    char pawnNo = _promotedPawn[9];
-                    int pawnNumber = int.Parse(pawnNo.ToString()) - 1;
-
-                    _placeBit2 = _pawnPlace[pawnNumber];
-
-                    if (_promotionPiece == 'q')
-                    {
-                        char queenNo = _activePiece[10];
-                        int queenNumber = int.Parse(queenNo.ToString()) - 1;
-                        
-                        _promotedTo = "Q";
-                        _pickBit3 = _queenPick[queenNumber];
-                    }
-
-                    else if (_promotionPiece == 'n')
-                    {
-                        char knightNo = _activePiece[11];
-                        int knightNumber = int.Parse(knightNo.ToString()) - 1;
-
-                        _promotedTo = "N";
-                        _pickBit3 = _knightPick[knightNumber];
-                    }
-
-                    else if (_promotionPiece == 'r')
-                    {
-                        char rookNo = _activePiece[9];
-                        int rookNumber = int.Parse(rookNo.ToString()) - 1;
-
-                        _promotedTo = "R";
-                        _pickBit3 = _rookPick[rookNumber];
-                    }
-
-                    else
-                    {
-                        char bishopNo = _activePiece[11];
-                        int bishopNumber = int.Parse(bishopNo.ToString()) - 1;
-
-                        _promotedTo = "B";
-                        _pickBit3 = _bishopPick[bishopNumber];
-                    }
-
-                    if (_capture)
-                    {
-                        if (_takenPiece.Contains("Queen"))
-                        {
-                            char queenNo = _takenPiece[10];
-                            int queenNumber = int.Parse(queenNo.ToString()) - 1;
-
-                            _placeBit3 = _queenPlace[queenNumber];
-                        }
-
-                        else if (_takenPiece.Contains("Knight"))
-                        {
-                            char knightNo = _takenPiece[11];
-                            int knightNumber = int.Parse(knightNo.ToString()) - 1;
-
-                            _placeBit3 = _knightPlace[knightNumber];
-                        }
-
-                        else if (_takenPiece.Contains("Rook"))
-                        {
-                            char rookNo = _takenPiece[9];
-                            int rookNumber = int.Parse(rookNo.ToString()) - 1;
-
-                            _placeBit3 = _rookPlace[rookNumber];
-                        }
-
-                        else
-                        {
-                            char bishopNo = _takenPiece[11];
-                            int bishopNumber = int.Parse(bishopNo.ToString()) - 1;
-
-                            _placeBit3 = _bishopPlace[bishopNumber];
-                        }
-
-                        if (_move == 0)   // White just moved
-                        {
-                            _rcWhiteBits = $"{_pickBit1}, {_placeBit2}, {_pickBit3}, {_placeBit1}";
-                            _rcBlackBits = $"{_pickBit2}, {_placeBit3}";
-                        }
-
-                        else   // Black just moved
-                        {
-                            _rcWhiteBits = $"{_pickBit2}, {_placeBit3}";
-                            _rcBlackBits = $"{_pickBit1}, {_placeBit2}, {_pickBit3}, {_placeBit1}";
-                        }
-                    }
-
-                    else
-                    {
-                        if (_move == 0)   // White just moved
-                        {
-                            _rcWhiteBits = $"{_pickBit1}, {_placeBit2}, {_pickBit3}, {_placeBit1}";
-                        }
-
-                        else   // Black just moved
-                        {
-                            _rcBlackBits = $"{_pickBit1}, {_placeBit2}, {_pickBit3}, {_placeBit1}";
-                        }
-                    }
-                }
-
-                if (_kingCastle)
-                {
-                    if (_move == 0)   // White just moved
-                    {
-                        _startPosition = "e1";
-                        _endPosition = "g1";
-
-                        _rcWhiteBits = "4, 70, 7, 69";
-                    }
-
-                    else   // Black just moved
-                    {
-                        _startPosition = "e8";
-                        _endPosition = "g8";
-
-                        _rcBlackBits = "60, 126, 63, 125";
-                    }
-                }
-
-                if (_queenCastle)
-                {
-                    if (_move == 0)   // White just moved
-                    {
-                        _startPosition = "e1";
-                        _endPosition = "c1";
-
-                        _rcWhiteBits = "4, 66, 0, 67";
-                    }
-
-                    else   // Black just moved
-                    {
-                        _startPosition = "e8";
-                        _endPosition = "c8";
-
-                        _rcBlackBits = "60, 122, 56, 123";
-                    }
-                }
-
-                _executedMove = $"{_startPosition}{_endPosition}";
-                System.Diagnostics.Debug.Write($"\nPlayed Move: {_executedMove}\n");
-                System.Diagnostics.Debug.Write($"rcWhiteBits: {_rcWhiteBits}\n");
-                System.Diagnostics.Debug.Write($"rcBlackBits: {_rcBlackBits}\n");
-
-                string checkModifier = await StockfishCheckAnalysisAsync(_fen, _stockfishPath!);
-
-                _pgnMove = UCItoPGNConverter.Convert(_previousFen, _executedMove, _kingCastle, _queenCastle, _enPassant, _promoted, _promotedTo, checkModifier);
-                System.Diagnostics.Debug.Write("PGN Move: " + _pgnMove);
-
-                if (_pieceSounds)
-                {
-                    string sound = _pgnMove.Contains('#') ? "GameEnd" :
-                                   _pgnMove.Contains('+') ? "PieceCheck" :
-                                   _pgnMove.Contains('=') ? "PiecePromote" :
-                                   _pgnMove.Contains('x') ? "PieceCapture" :
-                                   _pgnMove.Contains('-') ? "PieceCastle" :
-                                   (_mode == 1 || (_mode == 2 &&
-                                   ((_selectedColor.Content.ToString() == "White" && _move == 0) ||
-                                    (_selectedColor.Content.ToString() == "Black" && _move == 1))))
-                                       ? "PieceOpponent"
-                                       : "PieceMove";
-
-                    PlaySound(sound);
-                }
-            }
-
-            _capture = false;   // Reset all flags to false
-            _capturedPiece = null;
-            _enPassantCreated = false;
-            _enPassant = false;
-            _promoted = false;
-            _kingCastle = false;
-            _queenCastle = false;
-
-            writer.WriteLine($"\nMove Played: {_pgnMove}   Resulting Position: {_fen}");
-
-            string[] fenParts = _fen.Split(' ');
-            string currentFEN = $"{fenParts[0]} {fenParts[1]};";
-            _gameFens.Add(currentFEN);
-
-            Dictionary<string, int> fenCounts = _gameFens.Select(fen => fen[..fen.LastIndexOf(';')]).GroupBy(fen => fen).ToDictionary(group => group.Key, group => group.Count());
-
-            if (fenCounts.Any(pair => pair.Value >= 3))   // Checks for 3 of any instance for three-fold repetition
-            {
-                _threefoldRepetition = true;
-            }
-
-            Color borderColor = (Color)ColorConverter.ConvertFromString("#FFD0D0D0");   // Move table for evaluation interface
-            SolidColorBrush borderBrush = new(borderColor);
-            FontFamily fontFamily = new("Sans Serif Collection");
-            FontWeight fontWeight = FontWeights.Bold;
-
-            RowDefinition newRowDefinition = new()
-            {
-                Height = new GridLength(30)
-            };
-
-            Border newBorder = new()
-            {
-                BorderThickness = new Thickness(0.5),
-                BorderBrush = borderBrush,
-            };
-
-            TextBlock newMoveNumber = new()
-            {
-                Text = $"{_fullmove}.",
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                Foreground = borderBrush,
-                FontFamily = fontFamily,
-                FontSize = 14,
-            };
-
-            TextBlock newWhiteMove = new()
-            {
-                Text = $"{_pgnMove}",
-                HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Center,
-                TextAlignment = TextAlignment.Center,
-                Foreground = borderBrush,
-                FontFamily = fontFamily,
-                FontSize = 14,
-                FontWeight = fontWeight,
-                Padding = new Thickness(10, 0, 0, 0),
-            };
-
-            TextBlock newBlackMove = new()
-            {
-                Text = $"{_pgnMove}",
-                HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Center,
-                TextAlignment = TextAlignment.Center,
-                Foreground = borderBrush,
-                FontFamily = fontFamily,
-                FontSize = 14,
-                FontWeight = fontWeight,
-                Padding = new Thickness(10, 0, 0, 0),
-            };
-
-            if (_move == 0)
-            {
-                Grid.SetRow(newBorder, _fullmove);
-                Grid.SetColumnSpan(newBorder, 3);
-                Grid.SetRow(newMoveNumber, _fullmove);
-                Grid.SetColumn(newMoveNumber, 0);
-                Grid.SetRow(newWhiteMove, _fullmove);
-                Grid.SetColumn(newWhiteMove, 1);
-
-                Moves.RowDefinitions.Add(newRowDefinition);
-                Moves.Children.Add(newBorder);
-                Moves.Children.Add(newMoveNumber);
-                Moves.Children.Add(newWhiteMove);
-
-                File.AppendAllText(_pgnFilePath, $"{_fullmove}. {_pgnMove} ");
-            }
-
-            else
-            {
-                Grid.SetRow(newBlackMove, _fullmove - 1);
-                Grid.SetColumn(newBlackMove, 2);
-
-                Moves.Children.Add(newBlackMove);
-
-                File.AppendAllText(_pgnFilePath, $"{_pgnMove} ");
-            }
-        }
-
         // Sets up pieces for game
         public async Task SetupBoard()
         {
@@ -5295,9 +5283,20 @@ namespace Chess_Project
                 }
             }
 
-            await _whiteRobot.SendDataAsync(_rcWhiteBits);
-            await _blackRobot.SendDataAsync(_rcBlackBits);
+            await _whiteRobot.HighSpeedAsync();
+            await _blackRobot.HighSpeedAsync();
 
+            // Kick both off concurrently
+            var whiteTask = _whiteRobot.SendDataAsync(_rcWhiteBits);
+            var blackTask = _blackRobot.SendDataAsync(_rcBlackBits);
+
+            // Wait until BOTH complete (or throw)
+            await Task.WhenAll(whiteTask, blackTask);
+
+            await _whiteRobot.LowSpeedAsync();
+            await _blackRobot.LowSpeedAsync();
+
+            // Safe to clear/continue only after both finished
             _rcWhiteBits = "";
             _rcBlackBits = "";
 
@@ -5404,8 +5403,14 @@ namespace Chess_Project
                 }
             }
 
+            await _whiteRobot.HighSpeedAsync();
+            await _blackRobot.HighSpeedAsync();
+
             await _whiteRobot.SendDataAsync(_rcWhiteBits);
             await _blackRobot.SendDataAsync(_rcBlackBits);
+
+            await _whiteRobot.HighSpeedAsync();
+            await _blackRobot.HighSpeedAsync();
 
             _rcWhiteBits = "";
             _rcBlackBits = "";
