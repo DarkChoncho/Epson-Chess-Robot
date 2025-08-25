@@ -6,69 +6,72 @@ using System.Windows.Controls;
 namespace Chess_Project
 {
     /// <summary>
-    /// This class handles logic for bishop moves and ensures that the move is legal.
-    /// The method used to verify this is by virtually stepping the proposed piece over each square prior to its destination.
-    /// If any of those squares have a piece already on it, the move is rejected due to a collision.
-    /// 
-    /// In addition, a bishop's move must meet the following criteria:
-    /// - The amount of files traveled must be equivalent to the amount of ranks traveled
-    /// - A piece of the same color must not occupy the destination square
+    /// Move validation helpers for bishops.
+    /// Verifies that a proposed bishop move is along a diagonal and
+    /// that all intermediate squares are empty (i.e., no collisions).
+    /// <para>
+    /// This class does <c>not</c> check whether the destination square
+    /// holds a same-color piece. This is instead accomplished by
+    /// ensuring all same-color pieces are kept enabled, prohibiting
+    /// the user from selecting a grid square under their own pieces.
+    /// </para>
     /// </summary>
-
-    internal class BishopValidMove
+    /// <remarks>✅ Perfected on 8/23/2025. I love you all.</remarks>
+    internal sealed class BishopValidMove
     {
-        public class BishopValidation
+        /// <summary>
+        /// Validates bishop moves by virtually stepping square-by-square toward
+        /// the destination and rejecting the move if any intermediate square is occupied.
+        /// </summary>
+        /// <param name="chessBoard">The UI chess board grid.</param>
+        /// <param name="mainWindow">The MainWindow instance.</param>
+        /// <remarks>✅ Perfected on 8/23/2025</remarks>
+        public class BishopValidation(Grid chessBoard, MainWindow mainWindow)
         {
-            private readonly Grid Chess_Board;
-            private readonly MainWindow mainWindow;
-            private readonly List<Tuple<int, int>> motionCoordinates = new();
+            private readonly Grid _board = chessBoard;
+            private readonly MainWindow _main = mainWindow;
+            private readonly List<(int row, int col)> _path = [];
 
-            public BishopValidation(Grid Chess_Board, MainWindow mainWindow)
+            /// <summary>
+            /// Validates the proposed bishop move.
+            /// </summary>
+            /// <param name="startRow">The bishop's current row.</param>
+            /// <param name="startCol">The bishop's current column.</param>
+            /// <param name="endRow">The destination row.</param>
+            /// <param name="endCol">The destination column.</param>
+            /// <returns><see langword="true"/> if the move is diagonal and all intermediate squares are empty;
+            /// otherwise, <see langword="false"/>.</returns>
+            /// <remarks>✅ Perfected on 8/23/2025</remarks>
+            public bool ValidateMove(int startRow, int startCol, int endRow, int endCol)
             {
-                this.Chess_Board = Chess_Board;
-                this.mainWindow = mainWindow;
-            }
-
-            public bool ValidateMove(int oldRow, int oldColumn, int newRow, int newColumn)
-            {
-                int rowDiff = Math.Abs(newRow - oldRow);   // Calculates row difference for proposed move
-                int columnDiff = Math.Abs(newColumn - oldColumn);   // Calculates column difference for proposed move
-                int rowDirection = (newRow > oldRow) ? 1 : -1;   // Calculates which direction bishop is moving in with respect to its row
-                int columnDirection = (newColumn > oldColumn) ? 1 : -1;   // Calculates which direction bishop is moving in with respect to its column
-                int currentRow = oldRow + rowDirection;
-                int currentColumn = oldColumn + columnDirection;
-
-                mainWindow.PiecePositions();
-                List<Tuple<int, int>> coordinates = mainWindow.ImageCoordinates;
-                motionCoordinates.Clear();
-
-                if (rowDiff == columnDiff)   // If bishop is moving diagonally
-                {
-                    while ((currentRow != newRow) && (currentColumn != newColumn))   // While current position being tested is not new intended position
-                    {
-                        motionCoordinates.Add(Tuple.Create(currentRow, currentColumn));
-
-                        currentRow += rowDirection;
-                        currentColumn += columnDirection;
-                    }
-
-                    bool collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                    if (collision)   // If bishop passes through any pieces
-                    {
-                        return false;
-                    }
-
-                    else
-                    {
-                        return true;
-                    }
-                }
-
-                else   // If bishop is not moving diagonally
-                {
+                // Bishop must move diagonally (|Δrow| == |Δcol|) and must actually move
+                int dRow = Math.Abs(endRow - startRow);
+                int dCol = Math.Abs(endCol - startCol);
+                if (dRow == 0 || dRow != dCol)
                     return false;
+
+                // Step direction for row/column
+                int stepRow = (endRow > startRow) ? 1 : -1;
+                int stepCol = (endCol > startCol) ? 1 : -1;
+
+                // Refresh piece coordinates from the board
+                _main.PiecePositions();
+                var occupied = _main.ImageCoordinates;
+                _path.Clear();
+
+                // Walk squares between source and destination (exclusive)
+                int r = startRow + stepRow;
+                int c = startCol + stepCol;
+                while (r != endRow && c != endCol)
+                {
+                    _path.Add((r, c));
+                    r += stepRow;
+                    c += stepCol;
                 }
+
+                // Collision if any intermediate square is occupied
+                bool collision = _path.Any(p => occupied.Any(o => o.Item1 == p.row && o.Item2 == p.col));
+                return !collision;
             }
         }
     }

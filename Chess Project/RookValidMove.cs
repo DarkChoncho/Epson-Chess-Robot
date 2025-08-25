@@ -6,92 +6,72 @@ using System.Windows.Controls;
 namespace Chess_Project
 {
     /// <summary>
-    /// This class handles logic for rook moves and ensures that the move is legal.
-    /// The method used to verify this is by virtually stepping the proposed piece over each square prior to its destination.
-    /// If any of those squares have a piece already on it, the move is rejected due to a collision.
-    /// 
-    /// In addition, a rook's move must meet the following criteria:
-    /// - It must not change file if moving vertically
-    /// - It must not change rank if moving horizontally 
-    /// - A piece of the same color must not occupy the destination square
+    /// Move validation helpers for rooks.
+    /// Verifies that a proposed rook move is along an axis and
+    /// that all intermediate squares are empty (i.e., no collisions).
+    /// <para>
+    /// This class does <c>not</c> check whether the destination square
+    /// holds a same-color piece. This is instead accomplished by
+    /// ensuring all same-color pieces are kept enabled, prohibiting
+    /// the user from selecting a grid square under their own piece.
+    /// </para>
     /// </summary>
-
-    internal class RookValidMove
+    /// <remarks>✅ Perfected on 8/23/2025. I love you all.</remarks>
+    internal sealed class RookValidMove
     {
-        public class RookValidation
+        /// <summary>
+        /// Validates rook moves by virtually stepping square-by-square toward
+        /// the destination and rejecting the move if any intermediate square is occupied.
+        /// </summary>
+        /// <param name="chessBoard">The UI chess board grid.</param>
+        /// <param name="mainWindow">The MainWindow instance.</param>
+        /// <remarks>✅ Perfected on 8/23/2025</remarks>
+        public class RookValidation(Grid chessBoard, MainWindow mainWindow)
         {
-            private readonly Grid Chess_Board;
-            private readonly MainWindow mainWindow;
-            private readonly List<Tuple<int, int>> motionCoordinates = new();
+            private readonly Grid _board = chessBoard;
+            private readonly MainWindow _main = mainWindow;
+            private readonly List<(int row, int col)> _path = [];
 
-            public RookValidation(Grid Chess_Board, MainWindow mainWindow)
+            /// <summary>
+            /// Validates the proposed rook move.
+            /// </summary>
+            /// <param name="startRow">The rook's current row.</param>
+            /// <param name="startCol">The rook's current column.</param>
+            /// <param name="endRow">The destination row.</param>
+            /// <param name="endCol">The destination column.</param>
+            /// <returns><see langword="true"/> if the move is axial and all intermediate squares
+            /// are empty; otherwise, <see langword="false"/>.</returns>
+            /// <remarks>✅ Perfected on 8/23/2025</remarks>
+            public bool ValidateMove(int startRow, int startCol, int endRow, int endCol)
             {
-                this.Chess_Board = Chess_Board;
-                this.mainWindow = mainWindow;
-            }
-
-            public bool ValidateMove(int oldRow, int oldColumn, int newRow, int newColumn)
-            {
-                int rowDirection = (newRow > oldRow) ? 1 : -1;   // Calculates which direction rook is moving in with respect to its row
-                int columnDirection = (newColumn > oldColumn) ? 1 : -1;   // Calculates which direction rook is moving in with respect to its column
-                int currentRow = oldRow + rowDirection;
-                int currentColumn = oldColumn + columnDirection;
-
-                mainWindow.PiecePositions();
-                List<Tuple<int, int>> coordinates = mainWindow.ImageCoordinates;
-                motionCoordinates.Clear();
-
-                if ((oldRow == newRow) || (oldColumn == newColumn))   // If rook is moving horizontally or vertically
-                {
-                    if (oldRow == newRow)   // If rook is moving horizontally
-                    {
-                        while (currentColumn != newColumn)   // While current position being tested is not new intended position
-                        {
-                            motionCoordinates.Add(Tuple.Create(newRow, currentColumn));
-
-                            currentColumn += columnDirection;
-                        }
-
-                        bool collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                        if (collision)   // If rook passes through any pieces
-                        {
-                            return false;
-                        }
-
-                        else
-                        {
-                            return true;
-                        }
-                    }
-
-                    else   // If rook is moving vertically
-                    {
-                        while (currentRow != newRow)   // While current position being tested is not new intended position
-                        {
-                            motionCoordinates.Add(Tuple.Create(currentRow, newColumn));
-
-                            currentRow += rowDirection;
-                        }
-
-                        bool collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                        if (collision)   // If rook passes through any pieces
-                        {
-                            return false;
-                        }
-
-                        else
-                        {
-                            return true;
-                        }
-                    }
-                }
-
-                else   // If rook is not moving horizontally or vertically
-                {
+                // Rook must move along one axis and must actually move
+                int dRow = Math.Abs(endRow - startRow);
+                int dCol = Math.Abs(endCol - startCol);
+                if ((dRow == 0 && dCol == 0) || (dRow > 0 && dCol > 0))
                     return false;
+
+                // Step direction for row/column
+                int stepRow = dRow == 0 ? 0 : (endRow > startRow ? 1 : -1);
+                int stepCol = dCol == 0 ? 0 : (endCol > startCol ? 1 : -1);
+
+                // Refresh piece coordinates from the board
+                _main.PiecePositions();
+                var occupied = _main.ImageCoordinates;
+                _path.Clear();
+
+                // Walk squares between source and destination (exclusive)
+                int r = startRow + stepRow;
+                int c = startCol + stepCol;
+                while (r != endRow && c != endCol)
+                {
+                    _path.Add((r, c));
+                    r += stepRow;
+                    c += stepCol;
                 }
+
+                // Collision if any intermediate square is occupied
+                bool collision = _path.Any(p => occupied.Any(o => o.Item1 == p.row && o.Item2 == p.col));
+                return !collision;
             }
         }
     }

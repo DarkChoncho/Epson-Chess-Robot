@@ -2,196 +2,108 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Controls;
+using System.Xml;
 
 namespace Chess_Project
 {
     /// <summary>
-    /// This class handles logic for pawn moves and ensures that the move is legal.
-    /// 
-    /// A pawn's move must meet the following criteria:
-    /// - It cannot move backwards
-    /// - It cannot move more than two ranks on its first turn, and then only one rank on subsequent turns
-    /// - It cannot change files unless there is a capture
-    /// - A piece of the same color must not occupy the destination square
+    /// Move validation helpers for pawns.
+    /// Verifies that a proposed pawn move is either along a
+    /// file or is diagonally forward one square when capturing.
+    /// <para>
+    /// This class does <c>not</c> check whether the destination square
+    /// holds a same-color piece. This is instead accomplished by
+    /// ensuring all same-color pieces are kept enabled, prohibiting
+    /// the user from selecting a grid square under their own pieces.
+    /// </para>
     /// </summary>
-
-    internal class PawnValidMove
+    /// <remarks>✅ Perfected on 8/23/2025. I love you all.</remarks>
+    internal sealed class PawnValidMove
     {
-        public class PawnValidation
+        /// <summary>
+        /// Validates pawn moves by virtually stepping square-by-square toward
+        /// the destination square and rejecting the move if the intermediate square is occupied.
+        /// </summary>
+        /// <param name="chessBoard">The UI chess board grid.</param>
+        /// <param name="mainWindow">The MainWindow instance.</param>
+        /// <remarks>✅ Perfected on 8/23/2025</remarks>
+        public class PawnValidation(Grid chessBoard, MainWindow mainWindow)
         {
-            private readonly Grid Chess_Board;
-            private readonly MainWindow mainWindow;
-            private readonly List<Tuple<int, int>> motionCoordinates = new();
+            private readonly Grid _board = chessBoard;
+            private readonly MainWindow _main = mainWindow;
+            private readonly List<(int row, int col)> _path = [];
 
-            public PawnValidation(Grid Chess_Board, MainWindow mainWindow)
+            /// <summary>
+            /// Validates the proposed pawn move.
+            /// </summary>
+            /// <param name="startRow">The pawn's current row.</param>
+            /// <param name="startCol">The pawn's current column.</param>
+            /// <param name="endRow">The destination row.</param>
+            /// <param name="endCol">The destination column.</param>
+            /// <param name="move">The moving color. <c>1</c> for white, <c>0</c> for black.</param>
+            /// <returns><see langword="true"/> if the move is along a file or diagonally forward
+            /// one square when capturing and all intermediate squares are empty; otherwise <see langword="false"/>.</returns>
+            /// <remarks>✅ Perfected on 8/23/2025</remarks>
+            public bool ValidateMove(int startRow, int startCol, int endRow, int endCol, int move)
             {
-                this.Chess_Board = Chess_Board;
-                this.mainWindow = mainWindow;
-            }
+                // Pawn must move forward by no more than two squares or move diagonally forward one square and actually move
+                int dRow = Math.Abs(endRow - startRow);
+                int dCol = Math.Abs(endCol - startCol);
+                if ((dRow == 0) || (dRow == 2 && dCol != 0) || (dRow > 2) || (dCol > 1))
+                    return false;
 
-            public bool ValidateMove(int oldRow, int oldColumn, int newRow, int newColumn, int Move)
-            {
-                int rowDiff = newRow - oldRow;   // Calculates row difference for proposed move
-                int columnDiff = newColumn - oldColumn;   // Calculates column difference for proposed move
-                int rowDirection = (newRow > oldRow) ? 1 : -1;   // Calculates which direction pawn is moving in with respect to its row
-                int columnDirection = (newColumn > oldColumn) ? 1 : -1;   // Calculates which direction pawn is moving in with respect to its column
-                int currentRow = oldRow + rowDirection;
-                int currentColumn = oldColumn + columnDirection;
+                // Step direction for row/column
+                int stepRow = (endRow > startRow ? 1 : -1);
+                int stepCol = dCol == 0 ? 0 : (endCol > startCol ? 1 : -1);
 
-                mainWindow.PiecePositions();
-                List<Tuple<int, int>> coordinates = mainWindow.ImageCoordinates;
-                List<Tuple<int, int>> motionCoordinates = new();
-                List<Tuple<int, int>> EnPassant = mainWindow.EnPassantSquare;
-                motionCoordinates.Clear();
+                // Refresh piece coordinates from the board
+                _main.PiecePositions();
+                var occupied = _main.ImageCoordinates;
+                var enPassant = _main.EnPassantSquare;
+                _path.Clear();
 
-                if ((Move == 1 && rowDiff == -1) || (Move == 0 && rowDiff == 1) || (Move == 1 && rowDiff == -2 && oldRow == 6) || (Move == 0 && rowDiff == 2 && oldRow == 1))   // Legal pawn move combinations
+                // Walk squares between source and destination (exclusive)
+                int r = startRow + stepRow;
+                int c = startCol + stepCol;
+
+                if (dRow == 2)  // Pawn two-square advance
                 {
-                    if (Move == 0)   // If black is moving
+                    bool firstMove = move == 1 ? startRow == 6 : startRow == 1;
+                    if (!firstMove)
+                        return false;
+
+                    while (r != endRow && c != endCol)
                     {
-                        if (columnDiff == 0)   // If pawn is not moving horizontally
-                        {
-                            if (rowDiff == 1)   // If pawn is moving vertically one square
-                            {
-                                motionCoordinates.Add(Tuple.Create(newRow, oldColumn));
-
-                                bool collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                                if (collision)
-                                {
-                                    return false;
-                                }
-
-                                else
-                                {
-                                    return true;
-                                }
-                            }
-
-                            else if (rowDiff == 2)   // If pawn is moving vertically two squares on its first move
-                            {
-                                motionCoordinates.Add(Tuple.Create(currentRow, oldColumn));
-                                motionCoordinates.Add(Tuple.Create(newRow, oldColumn));
-
-                                bool collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                                if (collision)
-                                {
-                                    return false;
-                                }
-
-                                else
-                                {
-                                    return true;
-                                }
-                            }
-                        }
-
-                        if ((columnDiff == -1) || (columnDiff == 1))   // If pawn is capturing diagonally
-                        {
-                            if (rowDiff == 1)   // If pawn is moving vertically one square
-                            {
-                                motionCoordinates.Add(Tuple.Create(newRow, newColumn));
-
-                                bool collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-                                bool enPassant = motionCoordinates.Any(coord => EnPassant.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                                if (collision)
-                                {
-                                    return true;
-                                }
-
-                                if (enPassant)
-                                {
-                                    return true;
-                                }
-
-                                else
-                                {
-                                    return false;
-                                }
-                            }
-                        }
-
-                        else
-                        {
-                            return false;
-                        }
+                        _path.Add((r, c));
+                        r += stepRow;
+                        c += stepCol;
                     }
 
-                    else   // If white is moving
+                    // Collision if the intermediate square is occupied
+                    bool collision = _path.Any(p => occupied.Any(o => o.Item1 == p.row && o.Item2 == p.col));
+                    return !collision;
+                }
+                else
+                {
+                    bool forward = move == 1 ? (startRow - endRow == 1) : (startRow - endRow == -1);
+                    if (!forward)
+                        return false;
+
+                    _path.Add((r, c));
+
+                    if (dCol == 0)  // Pawn one-square advance
                     {
-                        if (columnDiff == 0)   // If pawn is not moving horizontally
-                        {
-                            if (rowDiff == -1)   // If pawn is moving vertically one square
-                            {
-                                motionCoordinates.Add(Tuple.Create(newRow, oldColumn));
-
-                                bool collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                                if (collision)
-                                {
-                                    return false;
-                                }
-
-                                else
-                                {
-                                    return true;
-                                }
-                            }
-
-                            else if (rowDiff == -2)   // If pawn is moving vertically two squares on its first move
-                            {
-                                motionCoordinates.Add(Tuple.Create(currentRow, oldColumn));
-                                motionCoordinates.Add(Tuple.Create(newRow, oldColumn));
-
-                                bool collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                                if (collision)
-                                {
-                                    return false;
-                                }
-
-                                else
-                                {
-                                    return true;
-                                }
-                            }
-                        }
-
-                        if ((columnDiff == -1) || (columnDiff == 1))   // If pawn is capturing diagonally
-                        {
-                            if (rowDiff == -1)   // If pawn is moving vertically one square
-                            {
-                                motionCoordinates.Add(Tuple.Create(newRow, newColumn));
-
-                                bool collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-                                bool enPassant = motionCoordinates.Any(coord => EnPassant.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                                if (collision)
-                                {
-                                    return true;
-                                }
-
-                                if (enPassant)
-                                {
-                                    return true;
-                                }
-
-                                else
-                                {
-                                    return false;
-                                }
-                            }
-                        }
-
-                        else
-                        {
-                            return false;
-                        }
+                        // Collision if the destination square is occupied
+                        bool collision = _path.Any(p => occupied.Any(o => o.Item1 == p.row && o.Item2 == p.col));
+                        return !collision;
+                    }
+                    else  // Capture
+                    {
+                        // Collision if the destination square is occupied
+                        bool collision = _path.Any(p => occupied.Any(o => o.Item1 == p.row && o.Item2 == p.col)) || _path.Any(p => enPassant.Any(o => o.Item1 == p.row && o.Item2 == p.col));
+                        return collision;
                     }
                 }
-
-                return false;
             }
         }
     }
