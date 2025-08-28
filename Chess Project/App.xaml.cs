@@ -19,7 +19,7 @@ namespace Chess_Project
                 .WriteTo.File(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Log Files",
                     $"{DateTime.Now.Year}-{DateTime.Now.Month}-{DateTime.Now.Day}", "Log.txt"),
                     rollingInterval: RollingInterval.Infinite,
-                    outputTemplate: "[{level:u3}] {Timestamp:HH:mm:ss MM:dd:yyy}\n{Message:1}{NewLine}{Exception}\n")
+                    outputTemplate: "[{Level:u3}] {Timestamp:HH:mm:ss MM/dd/yyy}\n{Message:lj}{NewLine}{Exception}\n")
                 .CreateLogger();
         }
     }

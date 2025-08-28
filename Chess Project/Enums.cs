@@ -1,17 +1,17 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Chess_Project
+﻿namespace Chess_Project
 {
-    public enum RobotColor
+    /// <summary>
+    /// Indicates which chess side (piece color) is in use.
+    /// </summary>
+    public enum Color
     {
         White,
         Black
     }
 
+    /// <summary>
+    /// Indicates current state of the Epson robot.
+    /// </summary>
     public enum RobotState
     {
         Boot,
@@ -21,35 +21,13 @@ namespace Chess_Project
         Disconnected
     }
 
+    /// <summary>
+    /// Indicates which game mode is currently active.
+    /// </summary>
     public enum GameMode
     {
         ComVsCom = 0,
         UserVsCom = 1,
         UserVsUser = 2
-    }
-
-    public enum DeltaType
-    {
-        Piece,
-        Square
-    }
-
-    public enum PromotionPiece
-    {
-        Rook,
-        Knight,
-        Bishop,
-        Queen
-    }
-
-    public enum GameOutcome
-    {
-        None,
-        CheckmateWhite,
-        CheckmateBlack,
-        Stalemate,
-        FiftyMoveDraw,
-        ThreefoldDraw,
-        InsufficientMaterialDraw
     }
 }

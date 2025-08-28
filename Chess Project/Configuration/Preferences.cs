@@ -14,5 +14,6 @@ namespace Chess_Project.Configuration
         public bool PieceSounds { get; set; } = false;
         public bool ConfirmMove { get; set; } = true;
         public bool EpsonRC { get; set; } = false;
+        public bool CognexVision { get; set; } = false;
     }
 }

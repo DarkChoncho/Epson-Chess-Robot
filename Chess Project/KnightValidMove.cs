@@ -12,14 +12,14 @@ namespace Chess_Project
     /// the user from selecting a grid square under their own pieces.
     /// </para>
     /// </summary>
-    /// <remarks>✅ Perfected on 8/23/2025. I love you all.</remarks>
+    /// <remarks>✅ Updated on 8/23/2025</remarks>
     internal sealed class KnightValidMove
     {
         /// <summary>
         /// Validates knight moves by calculating the proposed move's geometry
         /// and ensuring that it follows an L-shaped footprint (hoof lol).
         /// </summary>
-        /// <remarks>✅ Perfected on 8/23/2025</remarks>
+        /// <remarks>✅ Updated on 8/23/2025</remarks>
         public class KnightValidation
         {
             /// <summary>
@@ -31,7 +31,7 @@ namespace Chess_Project
             /// <param name="endCol">The destination column.</param>
             /// <returns><see langword="true"/> if the move is L-shaped and all intermediate squares
             /// are empty; otherwise, <see langword="false"/>.</returns>
-            /// <remarks>✅ Perfected on 8/23/2025</remarks>
+            /// <remarks>✅ Updated on 8/23/2025</remarks>
             public bool ValidateMove(int startRow, int startCol, int endRow, int endCol)
             {
                 // Knight must move L-shaped and must actually move

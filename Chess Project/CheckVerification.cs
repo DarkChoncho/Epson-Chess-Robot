@@ -2,949 +2,180 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Controls;
+using System.Windows;
+using Image = System.Windows.Controls.Image;
 
 namespace Chess_Project
 {
     /// <summary>
-    /// This class is for verifying that the position after the proposed move will not leave the active color's
-    /// king in check. This is done by assuming the proposed move is legal, and then stepping the king one square
-    /// at a time in each of the eight directions: N, NE, E, SE, S, SW, W, and NW.
-    /// 
-    /// When stepping through all eight directions, one of the following criteria must be met:
-    /// - The king collides with a piece of its same color
-    /// - The king collides with an opposing rook or king when moving diagonally
-    /// - The king collides with an opposing pawn anytime after its first step when moving diagonally
-    /// - The king collides with an opposing pawn that has already passed the king when moving diagonally
-    /// - The king collides with an opposing bishop or pawn when moving orthogonally
-    /// - The king reaches the edge of the board
-    /// 
-    /// In additon, some other things that must be satisfied are:
-    /// - The king must not be adjacent to the opposing king in any direction
-    /// - The king must not be in range of any opposing knights.
+    /// Verifies that, after a proposed move, the side-to-move’s king is not in check.
+    /// <para>
+    /// The check is performed by:
+    /// <list type="bullet">
+    ///    <item><description>Treating the destination square (<paramref name="newRow"/>, <paramref name="newCol"/>) as a blocker:
+    ///     if an enemy piece stands there it is considered captured and removed from attack calculations, and
+    ///     rays do not look “past” that square.</description></item>
+    ///     <item><description>Ray-scanning from the king in the 8 directions (N, NE, E, SE, S, SW, W, NW) to detect rook/queen,
+    ///     bishop/queen, adjacent king, and pawn attacks (only on the first diagonal step in the correct pawn
+    ///     direction).</description></item>
+    ///     <item><description>Checking the 8 knight jump squares for an enemy knight.</description></item>
+    /// </list>
+    /// </para>
     /// </summary>
-
-    internal class CheckVerification
+    /// <param name="chessBoard">The WPF Grid containing the piece Images.</param>
+    /// <param name="mainWindow">Host that exposes piece coordinates via <c>PiecePositions()</c>.</param>
+    /// <remarks>✅ Updated on 8/25/2025</remarks>
+    internal sealed class CheckVerification(Grid chessBoard, MainWindow mainWindow)
     {
-        public class Check
+        private readonly Grid _board = chessBoard;
+        private readonly MainWindow _main = mainWindow;
+
+        // N, NE, E, SE, S, SW, W, NW
+        private static readonly (int dr, int dc)[] Rays =
         {
-            private readonly Grid Chess_Board;
-            private readonly MainWindow mainWindow;
-            private readonly List<Tuple<int, int>> motionCoordinates = new();
-            private readonly List<Tuple<int, int>> knightCoordinates = new();
-            private bool collision;
+            (-1,0), (-1,1), (0,1), (1,1), (1,0), (1,-1), (0,-1), (-1,-1)
+        };
 
-            public Check(Grid Chess_Board, MainWindow mainWindow)
+        // Knight moves
+        private static readonly (int dr, int dc)[] KnightJumps =
+        {
+            (-2,-1), (-2,1), (-1,-2), (-1,2),
+            ( 1,-2), ( 1,2), ( 2,-1), ( 2,1)
+        };
+
+        /// <summary>
+        /// Returns <c>true</c> if the active side’s king is safe (not in check) after assuming a move to
+        /// (<paramref name="newRow"/>, <paramref name="newCol"/>). Treats an enemy on the destination as captured.
+        /// </summary>
+        /// <param name="wkRow">White king row.</param>
+        /// <param name="wkCol">White king column.</param>
+        /// <param name="bkRow">Black king row.</param>
+        /// <param name="bkCol">Black king column.</param>
+        /// <param name="newRow">Destination row of the proposed move.</param>
+        /// <param name="newCol">Destination column of the proposed move.</param>
+        /// <param name="move">1 = white to move; any other value = black to move.</param>
+        /// <remarks>✅ Updated on 8/25/2025</remarks>
+        public bool ValidatePosition(int wkRow, int wkCol, int bkRow, int bkCol, int newRow, int newCol, int move)
+        {
+            bool whiteMoving = (move == 1);
+            int kingRow = whiteMoving ? wkRow : bkRow;
+            int kingCol = whiteMoving ? wkCol : bkCol;
+
+            // Build square -> Image map, skipping an enemy on the destination (treated as captured)
+            var board = BuildBoardMapSkippingEnemyAtDest(newRow, newCol, whiteMoving);
+
+            // --- Knight checks (jumpers) ---
+            foreach (var (dr, dc) in KnightJumps)
             {
-                this.Chess_Board = Chess_Board;
-                this.mainWindow = mainWindow;
-            }
+                int r = kingRow + dr, c = kingCol + dc;
+                if (!InBounds(r, c)) continue;
+                if (r == newRow && c == newCol) continue; // our moved piece will sit here
 
-            public bool ValidatePosition(int Move, int wKingRow, int wKingColumn, int bKingRow, int bKingColumn, int newRow, int newColumn)
-            {
-                mainWindow.PiecePositions();
-                List<Tuple<int, int>> coordinates = mainWindow.ImageCoordinates;
-                motionCoordinates.Clear();
-                int Step = 0;
-
-                if (Move == 1)  // If white is moving
+                if (board.TryGetValue((r, c), out var img) &&
+                    (whiteMoving ? img.Name.StartsWith("Black", StringComparison.Ordinal)
+                                 : img.Name.StartsWith("White", StringComparison.Ordinal)) &&
+                    img.Name.Contains("Knight", StringComparison.Ordinal))
                 {
-                    int TestRow = wKingRow;
-                    int TestColumn = wKingColumn;
-
-                    if (wKingColumn != 0)  // If white king is not on the a-file, step toward it
-                    {
-                        while (TestColumn != 0)
-                        {
-                            TestColumn -= 1;
-                            Step += 1;
-
-                            if (wKingRow == newRow && TestColumn == newColumn)
-                            {
-                                TestColumn = 0; break;
-                            }
-
-                            motionCoordinates.Add(Tuple.Create(wKingRow, TestColumn));
-                            collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                            if (collision)
-                            {
-                                foreach (Image image in Chess_Board.Children.OfType<Image>())
-                                {
-                                    int checkRow = Grid.GetRow(image);
-                                    int checkCol = Grid.GetColumn(image);
-
-                                    if (checkRow == wKingRow && checkCol == TestColumn)
-                                    {
-                                        if (image.Name.StartsWith("BlackRook") || image.Name.StartsWith("BlackQueen"))   // If white king collides with black rook or queen
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("BlackKing") && Step == 1)   // If white king collides with black king on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else
-                                        {
-                                            TestColumn = 0; break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            motionCoordinates.Clear();
-                        }
-                    }
-
-                    TestColumn = wKingColumn;
-                    Step = 0;
-
-                    if (wKingColumn != 7)  // If white king is not on the h-file, step toward it
-                    {
-                        while (TestColumn != 7)
-                        {
-                            TestColumn += 1;
-                            Step += 1;
-
-                            if (wKingRow == newRow && TestColumn == newColumn)
-                            {
-                                TestColumn = 7; break;
-                            }
-
-                            motionCoordinates.Add(Tuple.Create(wKingRow, TestColumn));
-                            collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                            if (collision)
-                            {
-                                foreach (Image image in Chess_Board.Children.OfType<Image>())
-                                {
-                                    int checkRow = Grid.GetRow(image);
-                                    int checkCol = Grid.GetColumn(image);
-
-                                    if (checkRow == wKingRow && checkCol == TestColumn)
-                                    {
-                                        if (image.Name.StartsWith("BlackRook") || image.Name.StartsWith("BlackQueen"))   // If white king collides with black rook or queen
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("BlackKing") && Step == 1)   // If white king collides with black king on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else
-                                        {
-                                            TestColumn = 7; break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            motionCoordinates.Clear();
-                        }
-                    }
-
-                    TestColumn = wKingColumn;
-                    Step = 0;
-
-                    if (wKingRow != 0)  // If white king is not on the 8th rank, step toward it
-                    {
-                        while (TestRow != 0)
-                        {
-                            TestRow -= 1;
-                            Step += 1;
-
-                            if (TestRow == newRow && wKingColumn == newColumn)
-                            {
-                                TestRow = 0; break;
-                            }
-
-                            motionCoordinates.Add(Tuple.Create(TestRow, wKingColumn));
-                            collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                            if (collision)
-                            {
-                                foreach (Image image in Chess_Board.Children.OfType<Image>())
-                                {
-                                    int checkRow = Grid.GetRow(image);
-                                    int checkCol = Grid.GetColumn(image);
-
-                                    if (checkRow == TestRow && checkCol == wKingColumn)
-                                    {
-                                        if (image.Name.StartsWith("BlackRook") || image.Name.StartsWith("BlackQueen"))   // If white king collides with black rook or queen
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("BlackKing") && Step == 1)   // If white king collides with black king on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else
-                                        {
-                                            TestRow = 0; break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            motionCoordinates.Clear();
-                        }
-                    }
-
-                    TestRow = wKingRow;
-                    Step = 0;
-
-                    if (wKingRow != 7)  // If white king is not on the 1st rank, step toward it
-                    {
-                        while (TestRow != 7)
-                        {
-                            TestRow += 1;
-                            Step += 1;
-
-                            if (TestRow == newRow && wKingColumn == newColumn)
-                            {
-                                TestRow = 7; break;
-                            }
-
-                            motionCoordinates.Add(Tuple.Create(TestRow, wKingColumn));
-                            collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                            if (collision)
-                            {
-                                foreach (Image image in Chess_Board.Children.OfType<Image>())
-                                {
-                                    int checkRow = Grid.GetRow(image);
-                                    int checkCol = Grid.GetColumn(image);
-
-                                    if (checkRow == TestRow && checkCol == wKingColumn)
-                                    {
-                                        if (image.Name.StartsWith("BlackRook") || image.Name.StartsWith("BlackQueen"))   // If white king collides with black rook or queen
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("BlackKing") && Step == 1)   // If white king collides with black king on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else
-                                        {
-                                            TestRow = 7; break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            motionCoordinates.Clear();
-                        }
-                    }
-
-                    TestRow = wKingRow;
-                    Step = 0;
-
-                    if (wKingRow != 0 && wKingColumn != 0)  // If white king is not in either the 8th rank or the a-file, step toward it  
-                    {
-                        while (TestRow != 0 && TestColumn != 0)
-                        {
-                            TestRow -= 1;
-                            TestColumn -= 1;
-                            Step += 1;
-
-                            if (TestRow == newRow && TestColumn == newColumn)
-                            {
-                                TestRow = 0; break;
-                            }
-
-                            motionCoordinates.Add(Tuple.Create(TestRow, TestColumn));
-                            collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                            if (collision)
-                            {
-                                foreach (Image image in Chess_Board.Children.OfType<Image>())
-                                {
-                                    int checkRow = Grid.GetRow(image);
-                                    int checkCol = Grid.GetColumn(image);
-
-                                    if (checkRow == TestRow && checkCol == TestColumn)
-                                    {
-                                        if (image.Name.StartsWith("BlackBishop") || image.Name.StartsWith("BlackQueen"))   // If white king collides with black bishop or queen
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("BlackKing") && Step == 1)   // If white king collides with black king on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("BlackPawn") && Step == 1)   // If white king collides with black pawn on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else
-                                        {
-                                            TestRow = 0; break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            motionCoordinates.Clear();
-                        }
-                    }
-
-                    TestRow = wKingRow;
-                    TestColumn = wKingColumn;
-                    Step = 0;
-
-                    if (wKingRow != 0 && wKingColumn != 7)  // If white king is not in either the 8th rank or the h-file, step toward it  
-                    {
-                        while (TestRow != 0 && TestColumn != 7)
-                        {
-                            TestRow -= 1;
-                            TestColumn += 1;
-                            Step += 1;
-
-                            if (TestRow == newRow && TestColumn == newColumn)
-                            {
-                                TestRow = 0; break;
-                            }
-
-                            motionCoordinates.Add(Tuple.Create(TestRow, TestColumn));
-                            collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                            if (collision)
-                            {
-                                foreach (Image image in Chess_Board.Children.OfType<Image>())
-                                {
-                                    int checkRow = Grid.GetRow(image);
-                                    int checkCol = Grid.GetColumn(image);
-
-                                    if (checkRow == TestRow && checkCol == TestColumn)
-                                    {
-                                        if (image.Name.StartsWith("BlackBishop") || image.Name.StartsWith("BlackQueen"))   // If white king collides with black bishop or queen
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("BlackKing") && Step == 1)   // If white king collides with black king on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("BlackPawn") && Step == 1)   // If white king collides with black pawn on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else
-                                        {
-                                            TestRow = 0; break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            motionCoordinates.Clear();
-                        }
-                    }
-
-                    TestRow = wKingRow;
-                    TestColumn = wKingColumn;
-                    Step = 0;
-
-                    if (wKingRow != 7 && wKingColumn != 0)  // If white king is not in either the 1st rank or the a-file, step toward it  
-                    {
-                        while (TestRow != 7 && TestColumn != 0)
-                        {
-                            TestRow += 1;
-                            TestColumn -= 1;
-                            Step += 1;
-
-                            if (TestRow == newRow && TestColumn == newColumn)
-                            {
-                                TestRow = 7; break;
-                            }
-
-                            motionCoordinates.Add(Tuple.Create(TestRow, TestColumn));
-                            collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                            if (collision)
-                            {
-                                foreach (Image image in Chess_Board.Children.OfType<Image>())
-                                {
-                                    int checkRow = Grid.GetRow(image);
-                                    int checkCol = Grid.GetColumn(image);
-
-                                    if (checkRow == TestRow && checkCol == TestColumn)
-                                    {
-                                        if (image.Name.StartsWith("BlackBishop") || image.Name.StartsWith("BlackQueen"))   // If white king collides with black bishop or queen
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("BlackKing") && Step == 1)   // If white king collides with black king on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else
-                                        {
-                                            TestRow = 7; break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            motionCoordinates.Clear();
-                        }
-                    }
-
-                    TestRow = wKingRow;
-                    TestColumn = wKingColumn;
-                    Step = 0;
-
-                    if (wKingRow != 7 && wKingColumn != 7)  // If white king is not in either the 1st rank or the h-file, step toward it  
-                    {
-                        while (TestRow != 7 && TestColumn != 7)
-                        {
-                            TestRow += 1;
-                            TestColumn += 1;
-                            Step += 1;
-
-                            if (TestRow == newRow && TestColumn == newColumn)
-                            {
-                                TestRow = 7; break;
-                            }
-
-                            motionCoordinates.Add(Tuple.Create(TestRow, TestColumn));
-                            collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                            if (collision)
-                            {
-                                foreach (Image image in Chess_Board.Children.OfType<Image>())
-                                {
-                                    int checkRow = Grid.GetRow(image);
-                                    int checkCol = Grid.GetColumn(image);
-
-                                    if (checkRow == TestRow && checkCol == TestColumn)
-                                    {
-                                        if (image.Name.StartsWith("BlackBishop") || image.Name.StartsWith("BlackQueen"))   // If white king collides with black bishop or queen
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("BlackKing") && Step == 1)   // If white king collides with black king on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else
-                                        {
-                                            TestRow = 7; break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            motionCoordinates.Clear();
-                        }
-                    }
-
-                    foreach (Image image in Chess_Board.Children.OfType<Image>())
-                    {
-                        if (image.Name.StartsWith("BlackKnight"))   // Obtain locations of all black knights
-                        {
-                            int knightRow = Grid.GetRow(image);
-                            int knightCol = Grid.GetColumn(image);
-                            knightCoordinates.Add(Tuple.Create(knightRow, knightCol));
-                        }
-                    }
-
-                    foreach (Image image in Chess_Board.Children.OfType<Image>())
-                    {
-                        if (image.Name.StartsWith("White"))
-                        {
-                            int testTakeRow = Grid.GetRow(image);
-                            int testTakeCol = Grid.GetColumn(image);
-
-                            if (knightCoordinates.Any(coord => coord.Item1 == testTakeRow && coord.Item2 == testTakeCol))
-                            {
-                                knightCoordinates.RemoveAll(coord => coord.Item1 == testTakeRow && coord.Item2 == testTakeCol);
-                            }
-                        }
-                    }
-
-                    foreach (var knightCoordinate in knightCoordinates)
-                    {
-                        int knightRowDiff = Math.Abs(wKingRow - knightCoordinate.Item1);
-                        int knightColDiff = Math.Abs(wKingColumn - knightCoordinate.Item2);
-
-                        if ((knightRowDiff == 1 && knightColDiff == 2) || (knightRowDiff == 2 && knightColDiff == 1))   // If a black knight can attack the white king
-                        {
-                            return false;
-                        }
-                    }
-
-                    return true;
-                }
-
-                else  // If black is moving
-                {
-                    int TestRow = bKingRow;
-                    int TestColumn = bKingColumn;
-                    Step = 0;
-
-                    if (bKingColumn != 0)  // If black king is not on the a-file, step toward it
-                    {
-                        while (TestColumn != 0)
-                        {
-                            TestColumn -= 1;
-                            Step += 1;
-
-                            if (bKingRow == newRow && TestColumn == newColumn)
-                            {
-                                TestColumn = 0; break;
-                            }
-
-                            motionCoordinates.Add(Tuple.Create(bKingRow, TestColumn));
-                            collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                            if (collision)
-                            {
-                                foreach (Image image in Chess_Board.Children.OfType<Image>())
-                                {
-                                    int checkRow = Grid.GetRow(image);
-                                    int checkCol = Grid.GetColumn(image);
-
-                                    if (checkRow == bKingRow && checkCol == TestColumn)
-                                    {
-                                        if (image.Name.StartsWith("WhiteRook") || image.Name.StartsWith("WhiteQueen"))   // If black king collides with white rook or queen
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("WhiteKing") && Step == 1)   // If black king collides with white king on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else
-                                        {
-                                            TestColumn = 0; break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            motionCoordinates.Clear();
-                        }
-                    }
-
-                    TestColumn = bKingColumn;
-                    Step = 0;
-
-                    if (bKingColumn != 7)  // If black king is not on the h-file, step toward it
-                    {
-                        while (TestColumn != 7)
-                        {
-                            TestColumn += 1;
-                            Step += 1;
-
-                            if (bKingRow == newRow && TestColumn == newColumn)
-                            {
-                                TestColumn = 7; break;
-                            }
-
-                            motionCoordinates.Add(Tuple.Create(bKingRow, TestColumn));
-                            collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                            if (collision)
-                            {
-                                foreach (Image image in Chess_Board.Children.OfType<Image>())
-                                {
-                                    int checkRow = Grid.GetRow(image);
-                                    int checkCol = Grid.GetColumn(image);
-
-                                    if (checkRow == bKingRow && checkCol == TestColumn)
-                                    {
-                                        if (image.Name.StartsWith("WhiteRook") || image.Name.StartsWith("WhiteQueen"))   // If balck king collides with white rook or queen
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("WhiteKing") && Step == 1)   // If black king collides with white king on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else
-                                        {
-                                            TestColumn = 7; break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            motionCoordinates.Clear();
-                        }
-                    }
-
-                    TestColumn = bKingColumn;
-                    Step = 0;
-
-                    if (bKingRow != 0)  // If black king is not on the 8th rank, step toward it
-                    {
-                        while (TestRow != 0)
-                        {
-                            TestRow -= 1;
-                            Step += 1;
-
-                            if (TestRow == newRow && bKingColumn == newColumn)
-                            {
-                                TestRow = 0; break;
-                            }
-
-                            motionCoordinates.Add(Tuple.Create(TestRow, bKingColumn));
-                            collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                            if (collision)
-                            {
-                                foreach (Image image in Chess_Board.Children.OfType<Image>())
-                                {
-                                    int checkRow = Grid.GetRow(image);
-                                    int checkCol = Grid.GetColumn(image);
-
-                                    if (checkRow == TestRow && checkCol == bKingColumn)
-                                    {
-                                        if (image.Name.StartsWith("WhiteRook") || image.Name.StartsWith("WhiteQueen"))   // If black king collides with white rook or queen
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("WhiteKing") && Step == 1)   // If black king collides with white king on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else
-                                        {
-                                            TestRow = 0; break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            motionCoordinates.Clear();
-                        }
-                    }
-
-                    TestRow = bKingRow;
-                    Step = 0;
-
-                    if (bKingRow != 7)  // If black king is not on the 1st rank, step toward it
-                    {
-                        while (TestRow != 7)
-                        {
-                            TestRow += 1;
-                            Step += 1;
-
-                            if (TestRow == newRow && bKingColumn == newColumn)
-                            {
-                                TestRow = 7; break;
-                            }
-
-                            motionCoordinates.Add(Tuple.Create(TestRow, bKingColumn));
-                            collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                            if (collision)
-                            {
-                                foreach (Image image in Chess_Board.Children.OfType<Image>())
-                                {
-                                    int checkRow = Grid.GetRow(image);
-                                    int checkCol = Grid.GetColumn(image);
-
-                                    if (checkRow == TestRow && checkCol == bKingColumn)
-                                    {
-                                        if (image.Name.StartsWith("WhiteRook") || image.Name.StartsWith("WhiteQueen"))   // If black king collides with white rook or queen
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("WhiteKing") && Step == 1)   // If black king collides with white king on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else
-                                        {
-                                            TestRow = 7; break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            motionCoordinates.Clear();
-                        }
-                    }
-
-                    TestRow = bKingRow;
-                    Step = 0;
-
-                    if (bKingRow != 0 && bKingColumn != 0)  // If black king is not in either the 8th rank or the a-file, step toward it  
-                    {
-                        while (TestRow != 0 && TestColumn != 0)
-                        {
-                            TestRow -= 1;
-                            TestColumn -= 1;
-                            Step += 1;
-
-                            if (TestRow == newRow && TestColumn == newColumn)
-                            {
-                                TestRow = 0; break;
-                            }
-
-                            motionCoordinates.Add(Tuple.Create(TestRow, TestColumn));
-                            collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                            if (collision)
-                            {
-                                foreach (Image image in Chess_Board.Children.OfType<Image>())
-                                {
-                                    int checkRow = Grid.GetRow(image);
-                                    int checkCol = Grid.GetColumn(image);
-
-                                    if (checkRow == TestRow && checkCol == TestColumn)
-                                    {
-                                        if (image.Name.StartsWith("WhiteBishop") || image.Name.StartsWith("WhiteQueen"))   // If black king collides with white bishop or queen
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("WhiteKing") && Step == 1)   // If black king collides with white king on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else
-                                        {
-                                            TestRow = 0; break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            motionCoordinates.Clear();
-                        }
-                    }
-
-                    TestRow = bKingRow;
-                    TestColumn = bKingColumn;
-                    Step = 0;
-
-                    if (bKingRow != 0 && bKingColumn != 7)  // If black king is not in either the 8th rank or the h-file, step toward it  
-                    {
-                        while (TestRow != 0 && TestColumn != 7)
-                        {
-                            TestRow -= 1;
-                            TestColumn += 1;
-                            Step += 1;
-
-                            if (TestRow == newRow && TestColumn == newColumn)
-                            {
-                                TestRow = 0; break;
-                            }
-
-                            motionCoordinates.Add(Tuple.Create(TestRow, TestColumn));
-                            collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                            if (collision)
-                            {
-                                foreach (Image image in Chess_Board.Children.OfType<Image>())
-                                {
-                                    int checkRow = Grid.GetRow(image);
-                                    int checkCol = Grid.GetColumn(image);
-
-                                    if (checkRow == TestRow && checkCol == TestColumn)
-                                    {
-                                        if (image.Name.StartsWith("WhiteBishop") || image.Name.StartsWith("WhiteQueen"))   // If black king collides with white bishop or queen
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("WhiteKing") && Step == 1)   // If black king collides with white king on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else
-                                        {
-                                            TestRow = 0; break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            motionCoordinates.Clear();
-                        }
-                    }
-
-                    TestRow = bKingRow;
-                    TestColumn = bKingColumn;
-                    Step = 0;
-
-                    if (bKingRow != 7 && bKingColumn != 0)  // If black king is not in either the 1st rank or the a-file, step toward it  
-                    {
-                        while (TestRow != 7 && TestColumn != 0)
-                        {
-                            TestRow += 1;
-                            TestColumn -= 1;
-                            Step += 1;
-
-                            if (TestRow == newRow && TestColumn == newColumn)
-                            {
-                                TestRow = 7; break;
-                            }
-
-                            motionCoordinates.Add(Tuple.Create(TestRow, TestColumn));
-                            collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                            if (collision)
-                            {
-                                foreach (Image image in Chess_Board.Children.OfType<Image>())
-                                {
-                                    int checkRow = Grid.GetRow(image);
-                                    int checkCol = Grid.GetColumn(image);
-
-                                    if (checkRow == TestRow && checkCol == TestColumn)
-                                    {
-                                        if (image.Name.StartsWith("WhiteBishop") || image.Name.StartsWith("WhiteQueen"))   // If black king collides with white bishop or queen
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("WhiteKing") && Step == 1)   // If black king collides with white king on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("WhitePawn") && Step == 1)   // If black king collides with white pawn on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else
-                                        {
-                                            TestRow = 7; break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            motionCoordinates.Clear();
-                        }
-                    }
-
-                    TestRow = bKingRow;
-                    TestColumn = bKingColumn;
-                    Step = 0;
-
-                    if (bKingRow != 7 && bKingColumn != 7)  // If black king is not in either the 1st rank or the h-file, step toward it  
-                    {
-                        while (TestRow != 7 && TestColumn != 7)
-                        {
-                            TestRow += 1;
-                            TestColumn += 1;
-                            Step += 1;
-
-                            if (TestRow == newRow && TestColumn == newColumn)
-                            {
-                                TestRow = 7; break;
-                            }
-
-                            motionCoordinates.Add(Tuple.Create(TestRow, TestColumn));
-                            collision = motionCoordinates.Any(coord => coordinates.Any(c => c.Item1 == coord.Item1 && c.Item2 == coord.Item2));
-
-                            if (collision)
-                            {
-                                foreach (Image image in Chess_Board.Children.OfType<Image>())
-                                {
-                                    int checkRow = Grid.GetRow(image);
-                                    int checkCol = Grid.GetColumn(image);
-
-                                    if (checkRow == TestRow && checkCol == TestColumn)
-                                    {
-                                        if (image.Name.StartsWith("WhiteBishop") || image.Name.StartsWith("WhiteQueen"))   // If black king collides with white bishop or queen
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("WhiteKing") && Step == 1)   // If black king collides with white king on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else if (image.Name.StartsWith("WhitePawn") && Step == 1)   // If black king collides with white pawn on its first step
-                                        {
-                                            return false;
-                                        }
-
-                                        else
-                                        {
-                                            TestRow = 7; break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            motionCoordinates.Clear();
-                        }
-                    }
-
-                    foreach (Image image in Chess_Board.Children.OfType<Image>())
-                    {
-                        if (image.Name.StartsWith("WhiteKnight"))   // Obtain locations of all white knights
-                        {
-                            int knightRow = Grid.GetRow(image);
-                            int knightCol = Grid.GetColumn(image);
-                            knightCoordinates.Add(Tuple.Create(knightRow, knightCol));
-                        }
-                    }
-
-                    foreach (Image image in Chess_Board.Children.OfType<Image>())
-                    {
-                        if (image.Name.StartsWith("Black"))
-                        {
-                            int testTakeRow = Grid.GetRow(image);
-                            int testTakeCol = Grid.GetColumn(image);
-
-                            if (knightCoordinates.Any(coord => coord.Item1 == testTakeRow && coord.Item2 == testTakeCol))
-                            {
-                                knightCoordinates.RemoveAll(coord => coord.Item1 == testTakeRow && coord.Item2 == testTakeCol);
-                            }
-                        }
-                    }
-
-                    foreach (var knightCoordinate in knightCoordinates)
-                    {
-                        int knightRowDiff = Math.Abs(bKingRow - knightCoordinate.Item1);
-                        int knightColDiff = Math.Abs(bKingColumn - knightCoordinate.Item2);
-
-                        if ((knightRowDiff == 1 && knightColDiff == 2) || (knightRowDiff == 2 && knightColDiff == 1))   // If a white knight can attack the black king
-                        {
-                            return false;
-                        }
-                    }
-
-                    return true;
+                    return false;
                 }
             }
+
+            // Sliding / king / pawn threats along rays
+            for (int i = 0; i < Rays.Length; i++)
+            {
+                var (dr, dc) = Rays[i];
+                bool isOrth = (i % 2 == 0); // 0,2,4,6 are orthogonal
+                int r = kingRow + dr, c = kingCol + dc, step = 1;
+
+                while (InBounds(r, c))
+                {
+                    // Do not look past the destination square
+                    if (r == newRow && c == newCol) break;
+
+                    if (board.TryGetValue((r, c), out var img))
+                    {
+                        bool enemy = whiteMoving ? img.Name.StartsWith("Black", StringComparison.Ordinal)
+                                                 : img.Name.StartsWith("White", StringComparison.Ordinal);
+                        if (!enemy) break; // own piece blocks
+
+                        // Sliding pieces
+                        if (isOrth && (img.Name.Contains("Rook", StringComparison.Ordinal) ||
+                                       img.Name.Contains("Queen", StringComparison.Ordinal)))
+                            return false;
+
+                        if (!isOrth && (img.Name.Contains("Bishop", StringComparison.Ordinal) ||
+                                        img.Name.Contains("Queen", StringComparison.Ordinal)))
+                            return false;
+
+                        // Adjacent enemy king
+                        if (step == 1 && img.Name.Contains("King", StringComparison.Ordinal))
+                            return false;
+
+                        // Pawn on first diagonal step (attacker is opponent)
+                        if (step == 1 && img.Name.Contains("Pawn", StringComparison.Ordinal))
+                        {
+                            bool attackerIsWhite = !whiteMoving;
+                            bool pawnThreat =
+                                attackerIsWhite ? (dr == 1 && Math.Abs(dc) == 1)   // white pawn sits one down-left/right of king
+                                                : (dr == -1 && Math.Abs(dc) == 1); // black pawn sits one up-left/right of king
+                            if (pawnThreat) return false;
+                        }
+
+                        // Enemy but not a threat → ray blocked
+                        break;
+                    }
+
+                    r += dr; c += dc; step++;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Determines whether the given coordinates lie within an 8×8 chessboard (zero-based).
+        /// </summary>
+        /// <param name="r">Row index in the range 0–7 (0 = White’s back rank, 7 = Black’s back rank).</param>
+        /// <param name="c">Column index in the range 0–7 (0 = file ‘a’, 7 = file ‘h’).</param>
+        /// <returns>
+        /// <c>true</c> if <paramref name="r"/> and <paramref name="c"/> are both within [0, 7]; otherwise <c>false</c>.
+        /// </returns>
+        /// <remarks>
+        /// Checks bounds only; it does not test whether the square is occupied. Uses C# relational pattern matching.
+        /// <para>✅ Written on 8/25/2025</para>
+        /// </remarks>
+        private static bool InBounds(int r, int c) => r is >= 0 and < 8 && c is >= 0 and < 8;
+
+        /// <summary>
+        /// Creates a map of visible chess pieces on the grid, skipping an enemy on the destination square
+        /// so captures are reflected in threat calculation.
+        /// </summary>
+        /// <remarks>✅ Written on 8/25/2025</remarks>
+        private Dictionary<(int r, int c), Image> BuildBoardMapSkippingEnemyAtDest(int newRow, int newCol, bool whiteToMove)
+        {
+            var map = new Dictionary<(int, int), Image>(64);
+            foreach (var img in _board.Children.OfType<Image>())
+            {
+                if (img.Visibility != Visibility.Visible) continue; // ignore captured/hidden
+                var name = img.Name;
+                if (!(name.StartsWith("White", StringComparison.Ordinal) ||
+                      name.StartsWith("Black", StringComparison.Ordinal)))
+                    continue; // ignore overlays/markers
+
+                int r = Grid.GetRow(img), c = Grid.GetColumn(img);
+
+                // Skip enemy on destination (captured)
+                if (r == newRow && c == newCol)
+                {
+                    bool enemyAtDest = whiteToMove
+                        ? name.StartsWith("Black", StringComparison.Ordinal)
+                        : name.StartsWith("White", StringComparison.Ordinal);
+                    if (enemyAtDest) continue;
+                }
+
+                map[(r, c)] = img; // last one wins if duplicates
+            }
+            return map;
         }
     }
 }

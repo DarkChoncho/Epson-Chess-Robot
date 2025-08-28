@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Controls;
-using System.Xml;
 
 namespace Chess_Project
 {
@@ -17,7 +16,7 @@ namespace Chess_Project
     /// the user from selecting a grid square under their own pieces.
     /// </para>
     /// </summary>
-    /// <remarks>✅ Perfected on 8/23/2025. I love you all.</remarks>
+    /// <remarks>✅ Updated on 8/23/2025</remarks>
     internal sealed class PawnValidMove
     {
         /// <summary>
@@ -26,7 +25,7 @@ namespace Chess_Project
         /// </summary>
         /// <param name="chessBoard">The UI chess board grid.</param>
         /// <param name="mainWindow">The MainWindow instance.</param>
-        /// <remarks>✅ Perfected on 8/23/2025</remarks>
+        /// <remarks>✅ Updated on 8/23/2025</remarks>
         public class PawnValidation(Grid chessBoard, MainWindow mainWindow)
         {
             private readonly Grid _board = chessBoard;
@@ -43,7 +42,7 @@ namespace Chess_Project
             /// <param name="move">The moving color. <c>1</c> for white, <c>0</c> for black.</param>
             /// <returns><see langword="true"/> if the move is along a file or diagonally forward
             /// one square when capturing and all intermediate squares are empty; otherwise <see langword="false"/>.</returns>
-            /// <remarks>✅ Perfected on 8/23/2025</remarks>
+            /// <remarks>✅ Updated on 8/23/2025</remarks>
             public bool ValidateMove(int startRow, int startCol, int endRow, int endCol, int move)
             {
                 // Pawn must move forward by no more than two squares or move diagonally forward one square and actually move
@@ -72,7 +71,7 @@ namespace Chess_Project
                     if (!firstMove)
                         return false;
 
-                    while (r != endRow && c != endCol)
+                    while (r != endRow || c != endCol)
                     {
                         _path.Add((r, c));
                         r += stepRow;

@@ -16,7 +16,7 @@ namespace Chess_Project
     /// the user from selecting a grid square under their own pieces.
     /// </para>
     /// </summary>
-    /// <remarks>✅ Perfected on 8/23/2025. I love you all.</remarks>
+    /// <remarks>✅ Updated on 8/23/2025</remarks>
     internal sealed class QueenValidMove
     {
         /// <summary>
@@ -25,7 +25,7 @@ namespace Chess_Project
         /// </summary>
         /// <param name="chessBoard">The UI chess board grid.</param>
         /// <param name="mainWindow">The MainWindow instance.</param>
-        /// <remarks>✅ Perfected on 8/23/2025</remarks>
+        /// <remarks>✅ Updated on 8/23/2025</remarks>
         public class QueenValidation(Grid chessBoard, MainWindow mainWindow)
         {
             private readonly Grid _board = chessBoard;
@@ -41,7 +41,7 @@ namespace Chess_Project
             /// <param name="endCol">The destination column.</param>
             /// <returns><see langword="true"/> if the move is diagonal or axial and all intermediate
             /// squares are empty; otherwise, <see langword="false"/>.</returns>
-            /// <remarks>✅ Perfected on 8/23/2025</remarks>
+            /// <remarks>✅ Updated on 8/23/2025</remarks>
             public bool ValidateMove(int startRow, int startCol, int endRow, int endCol)
             {
                 // Queen must move diagonally (|Δrow| == |Δcol|) or move along one axis and must actually move
@@ -62,7 +62,7 @@ namespace Chess_Project
                 // Walk squares between source and destination (exclusive)
                 int r = startRow + stepRow;
                 int c = startCol + stepCol;
-                while (r != endRow && c != endCol)
+                while (r != endRow || c != endCol)
                 {
                     _path.Add((r, c));
                     r += stepRow;

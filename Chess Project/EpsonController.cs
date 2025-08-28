@@ -1,195 +1,206 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
-using System.Xml;
 
 namespace Chess_Project
 {
     /// <summary>
-    /// Provides high-level communication and control logic for an Epson RC700A robot controller over TCP/IP.
+    /// High-level TCP client for an Epson RC700A robot controller. Manages socket
+    /// connection lifecycle, ASCII command/response exchange, motion sequencing driven
+    /// by memory bits, and optional vision-based offset application via a connected
+    /// <see cref="CognexController"/>.
     /// </summary>
-    /// <param name="ip">The IP address of the Epson RC700A controller.</param>
-    /// <param name="port">The TCP port number used to establish the connection.</param>
-    /// <param name="robotColor">The identity of the robot (e.g., White or Black) used to distinguish controller state in global context.</param>
+    /// <param name="robotIp">IPv4 address of the RC700A controller.</param>
+    /// <param name="robotPort">TCP port for the controller session.</param>
+    /// <param name="baseDeltas">Base (ΔX, ΔY) offsets applied to motions in mm.</param>
+    /// <param name="deltaScalar">Scale factor applied to vision deltas before they are added to <paramref name="baseDeltas"/>.</param>
+    /// <param name="color">Which robot this controller instance represents (e.g., White or Black); used to update side-specific flags in <see cref="GlobalState"/>.</param>
+    /// <param name="cognex">A connected <see cref="CognexController"/> used to fetch per-pick vision deltas when available.</param>
+    /// <param name="cognexListenPort">Local TCP port on which this process listens for the camera's one-shot "Deltas: dx,dy" callback.</param>
     /// <remarks>
-    /// This class manages connection setup, command transmission, motion execution, error recovery,
-    /// and state tracking for a specific Epson robot (White or Black). It includes the following key features:
+    /// <para><b>Responsibilities</b></para>
     /// <list type="bullet">
-    ///   <item>Connection lifecycle management via <c>ConnectAsync</c>, <c>Disconnect</c>, and internal retry logic.</item>
-    ///   <item>Command execution and response validation for Epson ASCII-based control commands.</item>
-    ///   <item>Motion sequencing through bit-driven output signals and homing routines.</item>
-    ///   <item>Recovery routines using reset and home fallback strategies when errors occur.</item>
-    ///   <item>Global state updates based on robot color and operational outcomes.</item>
+    ///     <item><description>Establish and tear down TCP sessions.</description></item>
+    ///     <item><description>Serialize socket I/O with a per-connection <see cref="SemaphoreSlim"/> to avoid interleaved reads/writes.</description></item>
+    ///     <item><description>Validate controller replies (prefix checks) and poll readiness.</description></item>
+    ///     <item><description>Execute bit-driven motion sequences with optional Cognex deltas.</description></item>
+    ///     <item><description>Expose convenience routines for speed modes.</description></item>
+    ///     <item><description>Publish connection/state to <see cref="GlobalState"/> based on <paramref name="color"/>.</description></item>
     /// </list>
-    /// <para>
-    /// Exceptions thrown during robot operation are captured by the nested <see cref="EpsonException"/> class,
-    /// which provides diagnostic information about failed commands and controller responses.
-    /// </para>
-    /// <para>✅ Class updated on 6/10/2025</para>
+    /// 
+    /// <para><b>Thread-safety</b></para>
+    /// Instance methods may be called concurrently; all controller I/O is serialized internally.
+    /// Global state updates are simply property assignments and are not otherwise synchronized.
+    /// 
+    /// <para><b>Error Handling</b></para>
+    /// Expected validation/connect failures are logged and cause a <see langword="false"/> return from the
+    /// calling method. Protocol rejections produce an internal <see cref="EpsonException"/> that is caught
+    /// within public methods; exceptions are not propagated to callers unless explicitly documented.
+    /// 
+    /// <para>✅ Updated on 8/28/2025</para>
     /// </remarks>
-    public class EpsonController(string robotIp, int robotPort, double[] baseDeltas, double deltaScalar, RobotColor robotColor, string cognexIp, int cognexTcpPort, int cognexListenPort)
+    public class EpsonController(string robotIp, int robotPort, double[] baseDeltas, double deltaScalar, Color color, CognexController cognex, int cognexListenPort)
     {
-        #region Fields and Constants
+        #region Fields and Protocol
 
-        private TcpClient? _tcpClient;
-        private NetworkStream? _networkStream;
-        private StreamReader _reader;
+        // Protocol tokens (immutable; keep private)
+        private const string LoginCmd     = "$login";
+        private const string ResetCmd     = "$reset";
+        private const string GetStatusCmd = "$getstatus";
+        private const string ReadyStatus  = "#getstatus,00100000001";
+        private const string CRLF         = "\r\n";
 
+        // Protocol helpers (string builders)
+        private static string Start(int main)   => $"$start,{main}";
+        private static string MemOn(string bit) => $"$execute,\"memon {bit}\"";
+        private static string SetDouble(string variable, double value) => $"$setvariable,{variable},{value}";
+
+        // Synchronization (per-connection)
+        private readonly SemaphoreSlim _ioLock = new(1, 1);
+
+        // Configuration (ctor-initialized)
         private readonly string _robotIp = robotIp;
         private readonly int _robotPort = robotPort;
-        private readonly RobotColor _robotColor = robotColor;
+        private readonly Color _color = color;
+        private readonly int _listenPort = cognexListenPort;
 
-        private CognexController _cognex;
-        private readonly string _cognexIp = cognexIp;
-        private readonly int _cognexPort = cognexTcpPort;
-
-        private const string ReadyStatus = "#getstatus,00100000001";
-        private double _xAdjust;
-        private double _yAdjust;
-
+        // Runtime state (mutable)
+        private TcpClient? _tcpClient;
+        private NetworkStream? _stream;
+        private StreamReader? _reader;
+        private readonly CognexController _cognex = cognex;
+        
         #endregion
 
         #region Connection and Disconnection
 
         /// <summary>
-        /// Establishes a TCP connection to the Epson RC700A controller, performs login and boot commands,
-        /// and verifies that the controller is ready for operation.
+        /// Establishes a TCP connection to the Epson RC700A controller, performs login/reset/start,
+        /// and verifies readiness. On failure, marks the controller disconnected, disposes the TCP
+        /// connection, and logs the error.
         /// </summary>
-        /// <returns>
-        /// <c>true</c> if the connection, login, boot, and readiness check are all successful; otherwise, <c>false</c>.
-        /// </returns>
         /// <remarks>
-        /// If any step fails, the controller is marked as disconnected, the TCP connection is disposed,
-        /// and a failure result is returned. All validation and cleanup behavior is handled internally,
-        /// and any exceptions encountered during the connection process are caught and logged.
-        /// <para>✅ Updated on 8/22/2025</para>
+        /// This method does not throw on expected connection/validation failures; it logs and cleans up.
+        /// <para>✅ Updated on 8/28/2025</para>
         /// </remarks>
         public async Task ConnectAsync()
         {
             try
             {
-                if ((_robotColor == RobotColor.White && !GlobalState.WhiteEpsonConnected) || (_robotColor == RobotColor.Black && !GlobalState.BlackEpsonConnected))
+                if ((_color == Color.White && !GlobalState.WhiteEpsonConnected) || (_color == Color.Black && !GlobalState.BlackEpsonConnected))
                 {
+                    SetEpsonConnected(_color, true);
+
                     _tcpClient = new();
                     await _tcpClient.ConnectAsync(_robotIp, _robotPort);
-                    _networkStream = _tcpClient.GetStream();
-                    if (_networkStream == null)
-                        throw new InvalidOperationException($"Epson RC700A {_robotIp} network stream was not initialized.");
-                    _reader = new(_networkStream, Encoding.UTF8);
+                    _stream = _tcpClient.GetStream();
+                    _reader = new(_stream, Encoding.UTF8);
 
-                    SetEpsonConnected(_robotColor, true);
+                    string loginResponse = await SendCommandAsync(LoginCmd);
+                    if (!IsValid(LoginCmd, loginResponse, "#", true))
+                        throw new EpsonException(LoginCmd, loginResponse, _robotIp);
 
-                    if (!IsValid("$login", await SendCommandAsync("$login"), "#", true))
-                    {
-                        SetEpsonConnected(_robotColor, false);
-                        goto EndInit;
-                    }
                     await Task.Delay(500);
+                    string resetResponse = await SendCommandAsync(ResetCmd);
+                    if (!IsValid(ResetCmd, resetResponse, "#", true))
+                        throw new EpsonException(ResetCmd, resetResponse, _robotIp);
 
-                    if (!IsValid("$reset", await SendCommandAsync("$reset"), "#", true))
-                    {
-                        SetEpsonConnected(_robotColor, false);
-                        goto EndInit;
-                    }
                     await Task.Delay(500);
+                    string startResponse = await SendCommandAsync(Start(0));
+                    if (!IsValid(Start(0), startResponse, "#", true))
+                        throw new EpsonException(Start(0), startResponse, _robotIp);
 
-                    if (!IsValid("$start,0", await SendCommandAsync("$start,0"), "#", true))
-                    {
-                        SetEpsonConnected(_robotColor, false);
-                        goto EndInit;
-                    }
                     await Task.Delay(500);
-
-                    if (!IsValid("$getstatus", await WaitForReadyAsync(ReadyStatus), ReadyStatus, true))
-                    {
-                        SetEpsonConnected(_robotColor, false);
-                        goto EndInit;
-                    }
-                }
-
-            EndInit:
-
-                if ((_robotColor == RobotColor.White && !GlobalState.WhiteCognexConnected) || (_robotColor == RobotColor.Black && !GlobalState.BlackCognexConnected))
-                {
-                    _cognex = new CognexController(_cognexIp, _cognexPort);
-                    SetCognexConnected(_robotColor, await _cognex.ConnectAsync());
+                    string? getstatusResponse = await WaitForReadyAsync(ReadyStatus);
+                    if (!IsValid(GetStatusCmd, getstatusResponse, ReadyStatus, true))
+                        throw new EpsonException(GetStatusCmd, getstatusResponse, _robotIp);
                 }
             }
             catch (Exception ex)
             {
-                ChessLog.LogFatal($"Epson RC700A {_robotIp} encountered an unexpected error during connection", ex);
-                ChangeRobotState(RobotState.Disconnected);
+                ChessLog.LogError($"Failed to connect to Epson robot {_robotIp}:{_robotPort}.", ex);
                 Disconnect();
             }
         }
 
-        private static void SetEpsonConnected(RobotColor color, bool value)
-        {
-            if (color == RobotColor.White)
-                GlobalState.WhiteEpsonConnected = value;
-            else
-                GlobalState.BlackEpsonConnected = value;
-        }
-
-        private static void SetCognexConnected(RobotColor color, bool value)
-        {
-            if (color == RobotColor.White)
-                GlobalState.WhiteCognexConnected = value;
-            else
-                GlobalState.BlackCognexConnected = value;
-        }
-
         /// <summary>
-        /// Gracefully disconnects from the Epson RC700A controller by closing the network stream,
-        /// disposing of the TCP client, and marking the robot as disconnected in the global state.
+        /// Closes and disposes the TCP connection and all I/O wrappers (reader, stream, client).
+        /// Safe to call multiple times; any disposal errors are swallowed. In addition, marks
+        /// the robot as disconnected.
         /// </summary>
-        /// <remarks>
-        /// The method updates <see cref="GlobalState.WhiteEpsonConnected"/> or <see cref="GlobalState.BlackEpsonConnected"/>
-        /// depending on the controller's assigned color. Any exceptions encountered during cleanup
-        /// caught and logged as warnings. If disposal is successful, an informational log entry is recorded.
-        /// Internal references to the stream and client are nullified to prevent accidental reuse.
-        /// <para>✅ Updated on 6/10/2025</para>
-        /// </remarks>
+        /// <remarks>✅ Updated on 8/26/2025</remarks>
         public void Disconnect()
         {
-            try
+            // Best effort wrapper: ignore common disposal errors during teardown
+            static void Try(Action a)
             {
-                SetEpsonConnected(_robotColor, false);
+                try { a(); }
+                catch (ObjectDisposedException) { }
+                catch (IOException) { }
+                catch (SocketException) { }
+            }
 
-                _networkStream?.Close();
-                _tcpClient?.Dispose();
+            // Dispose reader
+            if (_reader is not null)
+            {
+                Try(() => _reader.Dispose());
+                _reader = null;
+            }
 
-                _networkStream = null;
+            // Close/Dispose the NetworkStream
+            if (_stream is not null)
+            {
+                Try(() => _stream.Close());
+                _stream = null;
+            }
+
+            // Shutdown and dispose the TcpClient/socket
+            if (_tcpClient is not null)
+            {
+                Try(() =>
+                {
+                    if (_tcpClient.Connected)
+                    {
+                        // Graceful FIN; ignore failures if already closed
+                        _tcpClient.Client.Shutdown(SocketShutdown.Both);
+                    }
+                });
+
+                Try(() => _tcpClient.Close());
+                Try(() => _tcpClient.Dispose());
                 _tcpClient = null;
+            }
 
-                ChessLog.LogInformation($"Disposed Epson RC700A {_robotIp} TCP client.");
-            }
-            catch (Exception ex)
-            {
-                ChessLog.LogWarning($"Failed to dispose Epson RC700A {_robotIp} TCP client cleanly.", ex);
-            }
+            SetEpsonConnected(_color, false);
         }
 
         /// <summary>
-        /// Attempts to gracefully reconnect to the Epson RC700A controller by first disconnecting
-        /// the current TCP connection, waiting briefly, and then establishing a new connection.
+        /// Sets the Epson connection status for the specified robot color by updating
+        /// the corresponding flag in <see cref="GlobalState"/>.
         /// </summary>
-        /// <returns>
-        /// <c>true</c> if the reconnection attempt is successful; otherwise <c>false</c>.
-        /// </returns>
-        /// <remarks>
-        /// This method calls <see cref="Disconnect"/> to release the current connection,
-        /// waits one second to allow the system or controller to reset, and then calls <see cref="ConnectAsync"/>.
-        /// Any exceptions during disconnection are handled within the <c>Disconnect</c> method.
-        /// <para>✅ Written on 6/10/2025</para>
-        /// </remarks>
-        private async Task AttemptReconnectAsync()
+        /// <param name="color">Which robot's status to set: <see cref="Color.White"/> or <see cref="Color.Black"/>.</param>
+        /// <param name="value"><see langword="true"/> if connected; otherwise, <see langword="false"/>.</param>
+        /// <exception>Thrown if <paramref name="color"/> is not a recognized value.</exception>
+        /// <remarks>✅ Updated on 8/26/2025</remarks>
+        private static void SetEpsonConnected(Color color, bool value)
         {
-            Disconnect();
-            await Task.Delay(1000);
-            await ConnectAsync();
+            switch (color)
+            {
+                case Color.White:
+                    GlobalState.WhiteEpsonConnected = value;
+                    break;
+
+                case Color.Black:
+                    GlobalState.BlackEpsonConnected = value;
+                    break;
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(color), color, "Unsupported robot color.");
+            }
         }
 
         #endregion
@@ -197,98 +208,159 @@ namespace Chess_Project
         #region Command Sending and Response Handling
 
         /// <summary>
-        /// Sends a command to the Epson RC700A controller over TCP and returns the response string.
+        /// Sends a command to the Epson RC700A over the established TCP connection and
+        /// returns the controller's single-line reply.
         /// </summary>
-        /// <param name="command">The ASCII command to send (e.g., "$getstatus").</param>
+        /// <param name="command">
+        /// The command text to send (without line ending), e.g., <c>"$getstatus"</c>. A CRLF
+        /// (<c>\r\n</c>) is appended automatically.
+        /// </param>
+        /// <param name="timeoutMs">
+        /// Maximum time, in milliseconds, to wait for a complete line of response before timing out.
+        /// Defaults to 5000 ms.
+        /// </param>
+        /// <param name="ct">
+        /// A cancellation token that can abort the send/receive. If cancellation or a timeout occurs,
+        /// the method logs the condition and returns <see cref="string.Empty"/>.
+        /// </param>
         /// <returns>
-        /// The response string from the controller, or an empty string if an error occurs during transmission or reception.
+        /// The response line (with any trailing <c>\r</c> trimmed); or <see cref="string.Empty"/> if an
+        /// error, timeout, or cancellation occurs.
         /// </returns>
         /// <remarks>
-        /// This method handles all exceptions internally and logs errors using <see cref="ChessLog.LogError"/>.
-        /// It never throws and always returns a string.
-        /// <para>✅ Written on 6/10/2025</para>
+        /// <list type="bullet">
+        ///     <item><description>
+        ///     Uses a per-connection semaphore to serialize socket I/O, so concurrent calls do not interleave.
+        ///     </description></item>
+        ///     <item><description>
+        ///     All exceptions are handled internally and logged; the method does not throw.
+        ///     </description></item>
+        ///     <item><description>
+        ///     Uses UTF-8 encoding and reads until a newline is received.
+        ///     </description></item>
+        /// </list>
+        /// ✅ Updated on 8/26/2025
         /// </remarks>
-        private async Task<string> SendCommandAsync(string command)
+        private async Task<string> SendCommandAsync(string command, int timeoutMs = 5000, CancellationToken ct = default)
         {
             try
             {
-                byte[] bytes = Encoding.UTF8.GetBytes(command + "\r\n");
-                await _networkStream.WriteAsync(bytes);
+                await _ioLock.WaitAsync(ct);
+                try
+                {
+                    if (_stream is null || _reader is null)
+                    {
+                        ChessLog.LogError("Method called before connection.");
+                        return string.Empty;
+                    }
 
-                char[] buffer = new char[1024];
-                int bytesRead = await _reader.ReadAsync(buffer, 0, buffer.Length);
-                return new string(buffer, 0, bytesRead);
+                    // Timeout tied to the caller's token
+                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    timeoutCts.CancelAfter(timeoutMs);
+
+                    // Write command + CRLF
+                    var payload = Encoding.UTF8.GetBytes(command + "\r\n");
+                    await _stream.WriteAsync(payload, timeoutCts.Token);
+
+                    // Read a full line (cancellable)
+                    string? line = await _reader.ReadLineAsync(timeoutCts.Token);
+
+                    return line?.TrimEnd('\r') ?? string.Empty;
+                }
+                finally
+                {
+                    _ioLock.Release();
+                }
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                ChessLog.LogError($"Timeout waiting for response to '{command}'.");
+                return string.Empty;
             }
             catch (Exception ex)
             {
-                ChessLog.LogError($"Failed while sending \"{command}\" to Epson RC700A {_robotIp}.", ex);
+                ChessLog.LogError($"Error sending command '{command}'.", ex);
                 return string.Empty;
             }
         }
 
         /// <summary>
-        /// Validates the response received from the Epson RC700A controller for a given command,
-        /// checking whether it begins with the expected search term.
+        /// Validates a controller reply for a given command by checking that the
+        /// response (after trimming CR/LF) begins with the expected prefix.
         /// </summary>
-        /// <param name="command">The command string that was sent to the controller (e.g., "$login").</param>
-        /// <param name="response">The response received from the controller to validate.</param>
-        /// <param name="searchTerm">
-        /// The expected prefix of a valid response (e.g., "#" or "#getstatus,00100000001").
-        /// </param>
-        /// <param name="disconnectOnFailure">
-        /// If <c>true</c>. the controller will be disconnected and marked as disconnected in global state upon failure.
-        /// </param>
+        /// <param name="command">The command that was sent (e.g., <c>"$login"</c>.</param>
+        /// <param name="response">The raw response line from the controller (may be <c>null</c>).</param>
+        /// <param name="expectedPrefix">The required prefix of a valid response (e.g., <c>"#"</c> or <c>"#getstatus,00100000001"</c>).</param>
+        /// <param name="disconnectOnFailure">When <see langword="true"/>, the TCP connection is closed on failure.</param>
         /// <returns>
-        /// <c>true</c> if the response is not null or empty and starts with the specified <paramref name="searchTerm"/>; otherwise, <c>false</c>.
+        /// <see langword="true"/> if <paramref name="response"/> is non-empty and starts with <paramref name="expectedPrefix"/>; otherwise, <see langword="false"/>.
         /// </returns>
         /// <remarks>
-        /// If validation fails, an error is logged and the robot's connection state is updated.
-        /// When <paramref name="disconnectOnFailure"/> is <c>true</c>, the TCP connection is also closed.
-        /// <para>✅ Written on 6/10/2025</para>
+        /// On failure, logs an error.
+        /// <para>✅ Updated on 8/26/2025</para>
         /// </remarks>
-        private bool IsValid(string command, string? response, string searchTerm, bool disconnectOnFailure)
+        private bool IsValid(string command, string? response, string expectedPrefix, bool disconnectOnFailure)
         {
-            if (string.IsNullOrEmpty(response) || !response.StartsWith(searchTerm))
-            {
-                string message = $"Epson RC700A {_robotIp} rejected command {command}: {response}.";
-                if (disconnectOnFailure)
-                    message += " Disposing of TCP client.";
+            // Normalize for comparison
+            var line = (response ?? string.Empty).TrimEnd('\r', '\n', ' ');
+            bool ok = line.StartsWith(expectedPrefix, StringComparison.Ordinal);
 
-                ChessLog.LogError(message);
-                ChangeRobotState(RobotState.Disconnected);
+            if (ok) return true;
 
-                if (disconnectOnFailure)
-                    Disconnect();
+            // Build a concise log message
+            const int maxPreview = 256;
+            var preview = line.Length <= maxPreview ? line : line.Substring(0, maxPreview) + "…";
+            var message =
+                $"Epson RC700A {_robotIp} rejected command '{command}': '{preview}' " +
+                $"(expected prefix '{expectedPrefix}').";
 
-                return false;
-            }
-            return true;
+            ChessLog.LogError(message);
+
+            if (disconnectOnFailure)
+                Disconnect();
+
+            return false;
         }
 
         /// <summary>
-        /// Polls the Epson controller for a ready state, retrying up to the specified number of attempts.
+        /// Polls the Epson controller for a ready state by issuing <c>$getstatus</c> and
+        /// checking whether the reply begins with the expected prefix.
         /// </summary>
-        /// <param name="maxAttempts">Maximum number of attempts before giving up.</param>
-        /// <param name="delayMs">Delay in milliseconds between attempts.</param>
+        /// <param name="expectedPrefix">The required prefix of a "ready" response (e.g., <c>#getstatus,00100000001</c>).</param>
+        /// <param name="maxAttempts">Maximum number of attempts before giving up. Default is 80.</param>
+        /// <param name="delayMs">Delay in milliseconds between attempts. Default is 250 ms.</param>
+        /// <param name="ct">Optional cancellation token to abort the wait early.</param>
         /// <returns>
-        /// The ready response string if successful; otherwise, the last received response (which may not indicate ready state).
+        /// The ready response line if observed; otherwise the last response received (which may not indicate ready).
+        /// Returns <see langword="null"/> if no response was read at all.
         /// </returns>
-        /// <remarks>✅ Written on 6/10/2025</remarks>
-        private async Task<string?> WaitForReadyAsync(string searchTerm, int maxAttempts = 80, int delayMs = 250)
+        /// <remarks>
+        /// Not-ready responses are expected during moves; they are logged at debug and do not disconnect.
+        /// <para>✅ Updated on 8/26/2025</para>
+        /// </remarks>
+        private async Task<string?> WaitForReadyAsync(string expectedPrefix, int maxAttempts = 80, int delayMs = 250, CancellationToken ct = default)
         {
-            string? response = null;
+            string? last = null;
 
-            for (int attempt = 0; attempt < maxAttempts; attempt++)
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                response = await SendCommandAsync("$getstatus");
-                if (!string.IsNullOrEmpty(response) && response.StartsWith(searchTerm))
-                    return response;
+                ct.ThrowIfCancellationRequested();
 
-                ChessLog.LogDebug($"Attempt {attempt + 1} of {maxAttempts}: {response}.");
-                await Task.Delay(delayMs);
+                last = await SendCommandAsync(GetStatusCmd, ct: ct);
+
+                var line = (last ?? string.Empty).TrimEnd('\r', 'n', ' ');
+                if (line.StartsWith(expectedPrefix, StringComparison.Ordinal))
+                    return line;
+
+                // Compact debug log
+                const int maxPreview = 160;
+                var preview = line.Length <= maxPreview ? line : line[..maxPreview] + "…";
+                ChessLog.LogDebug($"Ready check {attempt}/{maxAttempts}: '{preview}'");
+
+                await Task.Delay(delayMs, ct);
             }
 
-            return response;
+            return last;
         }
 
         #endregion
@@ -296,218 +368,167 @@ namespace Chess_Project
         #region Motion Execution and Recovery
 
         /// <summary>
-        /// Sends a sequence of digital output commands to the Epson RC700A controller using the specified bit values,
-        /// executes corresponding motion programs, and ensures the controller returns to a ready state after each operation.
+        /// Executes a batch "bit-run" on the Epson RC700A: for each requested output bit,
+        /// asserts teh digital output, runs motion programs, optionally applies vision
+        /// offsets, and verifies the controller returns to a ready state. Finishes by
+        /// sending the robot home and re-validating readiness.
         /// </summary>
-        /// <param name="rcBits">
-        /// A comma-separated string of bit values to activate via the <c>memon</c> command (e.g., "1000, 2000").
-        /// </param>
+        /// <param name="rcBits">Comma-separated list of output bit values to activate with <c>memon</c>, e.g., <c>"6, 38"</c>. Each entry is parsed as an integer after trimming.
+        /// Invalid entries are logged and cause the method to return <see langword="false"/>.</param>
+        /// <param name="ct">Optional cancellation token. Propagated to command sends, ready waits, and camera reads so the operation can be aborted cooperatively.</param>
         /// <returns>
-        /// <c>true</c> if all bit activations, motion executions, and readiness checks complete successfully; otherwise, <c>false</c>.
+        /// <see langword="true"/> if every per-bit sequence succeeds and the final home/ready
+        /// check completes; otherwise, <see langword="false"/> (errors are logged).
         /// </returns>
         /// <remarks>
-        /// For each bit value, this method:
-        /// <list type="number">
-        ///   <item>Sends a <c>memon</c> command to activate the output.</item>
-        ///   <item>Starts the motion program with <c>$start,1</c>.</item>
-        ///   <item>Waits for the controller to return a ready status.</item>
+        /// <para><b>Per-bit sequence:</b></para>
+        /// <list type="bullet">
+        ///     <item><description>Send <c>memon &lt;bit&gt;</c> to assert the output.</description></item>
+        ///     <item><description>Start the stage program with <c>$start,1</c>.</description></item>
+        ///     <item><description>Poll <c>$getstatus</c> until the ready banner (<c>#getstatus,00100000001</c>) appears.</description></item>
+        ///     <item><description>Compute motion offsets from <see cref="baseDeltas"/>; when the matching Cognex camera is connected and the bit denotes a "pick" region, retrieve vision deltas and apply <see cref="deltaScalar"/>.</description></item>
+        ///     <item><description>Write <c>deltaX</c> and <c>deltaY</c> to the controller.</description></item>
+        ///     <item><description>Re-assert <c>memon &lt;bit&gt;</c>, run <c>$start,3</c>, and wait ready again.</description></item>
         /// </list>
-        /// If any step fails, it attempts recovery by resetting and homing the controller, then retries the operation.  
-        /// If the retry also fails, an <see cref="EpsonException"/> is thrown.
-        /// After all bits are processed, the robot is commanded to return home using <c>$start,2</c>,
-        /// and its readiness is revalidated.
-        /// Any fatal error sets the robot to an error state and returns <c>false</c>.
-        /// <para>✅ Updating...</para>
+        /// 
+        /// <para><b>Completion</b></para>
+        /// Sends <c>$start,2</c> (home) and validates ready one final time.
+        /// 
+        /// <para><b>Error Handling</b></para>
+        /// Validation failures throw an internal <see cref="EpsonException"/> that is caught by this method;
+        /// the failure is logged (including the bit list and endpoint), the robot state is set to
+        /// <see cref="RobotState.Error"/>, and the method returns <see langword="false"/>. Bit-parsing errors
+        /// are also logged and cause an immediate <see langword="false"/> return.
+        /// This method does not rethrow to the caller.
+        /// 
+        /// <para>✅ Updated on 8/28/2025</para>
         /// </remarks>
-        public async Task<bool> SendDataAsync(string rcBits)
+        public async Task<bool> SendDataAsync(string rcBits, CancellationToken ct = default)
         {
-            System.Diagnostics.Debug.WriteLine($"rcBits: {rcBits}");
-
             try
             {
-                string? readyResponse = null;
-                string[] activeBits = rcBits.Split(", ");
-                foreach (var bit in activeBits)
+                var activeBits = rcBits.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).ToArray();
+
+                foreach (var bitStr in activeBits)
                 {
-                    string memOnCommand = $"$execute,\"memon {bit}\"";
-                    string memOnResponse = await SendCommandAsync(memOnCommand);
-                    if (!IsValid(memOnCommand, memOnResponse, "#", false))
+                    if (!int.TryParse(bitStr, out int bitNumber))
                     {
-                        await AttemptRecoveryAsync();
-
-                        memOnResponse = await SendCommandAsync(memOnCommand);
-                        if (!IsValid(memOnCommand, memOnResponse, "#", false))
-                            throw new EpsonException(memOnCommand, memOnResponse, _robotIp);
-
-                        ChessLog.LogInformation("Move successful after retry.");
-                    }
-
-                    string stageCommand = "$start,1";
-                    string stageResponse = await SendCommandAsync(stageCommand);
-                    if (!IsValid(stageCommand, stageResponse, "#", false))
-                    {
-                        await AttemptRecoveryAsync();
-
-                        stageResponse = await SendCommandAsync(stageCommand);
-                        if (!IsValid(stageCommand, stageResponse, "#", false))
-                            throw new EpsonException(stageCommand, stageResponse, _robotIp);
-
-                        ChessLog.LogInformation("Move successful after retry.");
-                    }
-
-                    readyResponse = await WaitForReadyAsync(ReadyStatus);
-                    if (!IsValid("$getstatus", readyResponse, ReadyStatus, false))
-                    {
-                        await AttemptRecoveryAsync();
-
-                        memOnResponse = await SendCommandAsync(memOnCommand);
-                        if (!IsValid(memOnCommand, memOnResponse, "#", false))
-                            throw new EpsonException(memOnCommand, memOnResponse, _robotIp);
-
-                        stageResponse = await SendCommandAsync(stageCommand);
-                        if (!IsValid(stageCommand, stageResponse, "#", false))
-                            throw new EpsonException(stageCommand, stageResponse, _robotIp);
-
-                        readyResponse = await WaitForReadyAsync(ReadyStatus);
-                        if (!IsValid("$getstatus", readyResponse, ReadyStatus, false))
-                            throw new EpsonException("$getstatus", readyResponse, _robotIp);
-
-                        ChessLog.LogInformation("Stage successful after retry.");
-                    }
-
-                    int bitNumber = int.Parse(bit);
-                    double deltaX = baseDeltas[0];
-                    double deltaY = baseDeltas[1];
-                    if (bitNumber < 64 || (bitNumber > 127 && bitNumber < 160))  // Picking a piece
-                    {
-                        (double cognexDeltaX, double cognexDeltaY) = await _cognex.GetDeltasAsync(cognexListenPort);
-
-                        double pickDeltaX = deltaX + (cognexDeltaX * deltaScalar);
-                        double pickDeltaY = deltaY + (cognexDeltaY * deltaScalar);
-
-                        if (!IsValid($"$setvariable,deltaX,{pickDeltaX}", await SendCommandAsync($"$setvariable,deltaX,{pickDeltaX}"), "#", true)) return false;
-                        if (!IsValid($"$setvariable,deltaY,{pickDeltaY}", await SendCommandAsync($"$setvariable,deltaY,{pickDeltaY}"), "#", true)) return false;
-                    }
-                    else  // Placing a piece
-                    {
-                        if (!IsValid($"$setvariable,deltaX,{deltaX}", await SendCommandAsync($"$setvariable,deltaX,{deltaX}"), "#", true)) return false;
-                        if (!IsValid($"$setvariable,deltaY,{deltaY}", await SendCommandAsync($"$setvariable,deltaY,{deltaY}"), "#", true)) return false;
-                    }
-
-                    memOnResponse = await SendCommandAsync(memOnCommand);
-                    if (!IsValid(memOnCommand, memOnResponse, "#", false))
-                    {
-                        await AttemptRecoveryAsync();
-
-                        memOnResponse = await SendCommandAsync(memOnCommand);
-                        if (!IsValid(memOnCommand, memOnResponse, "#", false))
-                            throw new EpsonException(memOnCommand, memOnResponse, _robotIp);
-
-                        ChessLog.LogInformation("MemOn successful after retry.");
-                    }
-
-                    string moveCommand = "$start,3";
-                    string moveResponse = await SendCommandAsync(moveCommand);
-                    if (!IsValid(moveCommand, moveResponse, "#", false))
-                    {
-                        await AttemptRecoveryAsync();
-
-                        moveResponse = await SendCommandAsync(moveCommand);
-                        if (!IsValid(moveCommand, moveResponse, "#", false))
-                            throw new EpsonException(moveCommand, moveResponse, _robotIp);
-
-                        ChessLog.LogInformation("Move successful after retry.");
-                    }
-
-                    string? completionResponse = await WaitForReadyAsync(ReadyStatus);
-                    if (!IsValid("$getstatus", completionResponse, ReadyStatus, false))
-                    {
+                        ChessLog.LogError($"Invalid bit '{bitStr}' in '{rcBits}'.");
                         return false;
                     }
+
+                    // memon <bit>
+                    string memOnResponse = await SendCommandAsync(MemOn(bitStr), ct: ct);
+                    if (!IsValid(MemOn(bitStr), memOnResponse, "#", disconnectOnFailure: false))
+                        throw new EpsonException(MemOn(bitStr), memOnResponse, _robotIp);
+
+                    // $start,1
+                    string stageResponse = await SendCommandAsync(Start(1), ct: ct);
+                    if (!IsValid(Start(1), stageResponse, "#", disconnectOnFailure: false))
+                        throw new EpsonException(Start(1), stageResponse, _robotIp);
+
+                    // getstatus
+                    string? getstatusResponse = await WaitForReadyAsync(ReadyStatus, ct: ct);
+                    if (!IsValid(GetStatusCmd, getstatusResponse, ReadyStatus, disconnectOnFailure:false))
+                        throw new EpsonException(GetStatusCmd, getstatusResponse, _robotIp);
+
+                    // Compute deltas
+                    double deltaX = baseDeltas[0];
+                    double deltaY = baseDeltas[1];
+
+                    bool cameraConnected =
+                        (_color == Color.White && GlobalState.WhiteCognexConnected) ||
+                        (_color == Color.Black && GlobalState.BlackCognexConnected);
+
+                    // Picking regions only
+                    bool isPick = bitNumber < 64 || (bitNumber > 127 && bitNumber < 160);
+
+                    if (cameraConnected && isPick && _cognex is not null)
+                    {
+                        var (ok, dx, dy) = await _cognex.GetDeltasAsync(_listenPort, ct);
+
+                        if (ok)
+                        {
+                            deltaX += (dx * deltaScalar);
+                            deltaY += (dy * deltaScalar);
+                        }
+                        else
+                        {
+                            ChessLog.LogWarning($"Camera deltas unavailable for bit {bitNumber}; using base deltas.");
+                        }
+                    }
+
+                    // Write both deltas
+                    if (!IsValid(SetDouble("deltaX", deltaX), await SendCommandAsync(SetDouble("deltaX", deltaX), ct: ct), "#", disconnectOnFailure: false)) return false;
+                    if (!IsValid(SetDouble("deltaY", deltaY), await SendCommandAsync(SetDouble("deltaY", deltaY), ct: ct), "#", disconnectOnFailure: false)) return false;
+
+                    // Re-assert bit, then $start,3
+                    memOnResponse = await SendCommandAsync(MemOn(bitStr), ct: ct);
+                    if (!IsValid(MemOn(bitStr), memOnResponse, "#", disconnectOnFailure: false))
+                        throw new EpsonException(MemOn(bitStr), memOnResponse, _robotIp);
+
+                    string startResponse = await SendCommandAsync(Start(3), ct: ct);
+                    if (!IsValid(Start(3), startResponse, "#", disconnectOnFailure: false))
+                        throw new EpsonException(Start(3), startResponse, _robotIp);
+
+                    string? completionResponse = await WaitForReadyAsync(ReadyStatus, ct: ct);
+                    if (!IsValid(GetStatusCmd, completionResponse, ReadyStatus, disconnectOnFailure:false))
+                        throw new EpsonException(GetStatusCmd, completionResponse, _robotIp);
                 }
 
-                string homeCommand = "$start,2";
-                string homeResponse = await SendCommandAsync(homeCommand);
-                if (!IsValid(homeCommand, homeResponse, "#", false))
-                {
-                    await AttemptRecoveryAsync();
-                    ChessLog.LogInformation("Move to home successful after retry.");
-                }
+                // Send robot home
+                string homeResponse = await SendCommandAsync(Start(2), ct: ct);
+                if (!IsValid(Start(2), homeResponse, "#", disconnectOnFailure:false))
+                    throw new EpsonException(Start(2), homeResponse, _robotIp);
 
-                readyResponse = await WaitForReadyAsync(ReadyStatus);
-                if (!IsValid("$getstatus", readyResponse, ReadyStatus, false))
-                {
-                    await AttemptRecoveryAsync();
-                    ChessLog.LogInformation("Move to home successful after retry.");
-                }
+                string? ready = await WaitForReadyAsync(ReadyStatus, ct: ct);
+                if (!IsValid(GetStatusCmd, ready, ReadyStatus, disconnectOnFailure:false))
+                    throw new EpsonException(GetStatusCmd, ready, _robotIp);
 
                 return true;
 
             }
-            catch (EpsonException eEx)
-            {
-                ChessLog.LogFatal($"Epson RC700A {_robotIp} encountered a fatal error. Entering error state.", eEx);
-                ChangeRobotState(RobotState.Error);
-                return false;
-            }
             catch (Exception ex)
             {
-                ChessLog.LogFatal($"Epson RC700A {_robotIp} encountered a fatal error. Entering error state.", ex);
+                ChessLog.LogError($"Data send failed for {_robotIp}:{_robotPort} (bits: '{rcBits}').", ex);
                 ChangeRobotState(RobotState.Error);
                 return false;
             }
         }
 
         /// <summary>
-        /// Attempts to restore the Epson RC700A controller to a known good state by issuing a reset command,
-        /// initiating the homing routine, and confirming that the controller reports a ready status.
+        /// Starts the controller's low-speed routine (program slot <c>5</c>) by sending <c>$start,5</c>
+        /// and validating the reply.
         /// </summary>
         /// <returns>
-        /// A task that represents the asynchronous recovery operation.
+        /// <see langword="true"/> if the controller acknowledges the command (reply begins with <c>#</c>);
+        /// otherwise, <see langword="false"/>.
         /// </returns>
-        /// <exception cref="EpsonException">
-        /// Thrown if any of the recovery steps (reset, home, or ready check) fail to complete successfully.
-        /// </exception>
         /// <remarks>
-        /// This method is typically called after a failed motion command. It performs the following steps:
-        /// <list type="number">
-        ///   <item>Sends a <c>$reset</c> command to clear controller errors.</item>
-        ///   <item>Issues a <c>$start,2</c> command to move the robot to its home position.</item>
-        ///   <item>Polls the controller until it reports the expected ready status.</item>
-        /// </list>
-        /// Any failure during these steps results in an <see cref="EpsonException"/> being thrown.
-        /// <para>✅ Written on 6/10/2025</para>
+        /// This method sends <c>$start,5</c> and validates the response. This method itself does not throw.
+        /// <para>✅ Updated on 8/28/2025</para>
         /// </remarks>
-        private async Task AttemptRecoveryAsync()
-        {
-            ChessLog.LogInformation($"Epson RC700A {_robotIp} attempting recovery to home.");
-
-            string resetCommand = "$reset";
-            string resetResponse = await SendCommandAsync(resetCommand);
-            if (!resetResponse.StartsWith('#'))
-                throw new EpsonException(resetCommand, resetResponse, _robotIp);
-
-            string homeCommand = "$start,2";
-            string homeResponse = await SendCommandAsync(homeCommand);
-            if (!homeResponse.StartsWith('#'))
-                throw new EpsonException(homeCommand, homeResponse, _robotIp);
-
-            string? readyResponse = await WaitForReadyAsync(ReadyStatus);
-            if (string.IsNullOrEmpty(readyResponse) || !readyResponse.StartsWith("#getstatus,00100000001"))
-                throw new EpsonException("$getstatus", readyResponse, _robotIp);
-
-            ChessLog.LogInformation($"Epson RC700A {_robotIp} successfully recovered. Retrying move.");
-        }
-
         public async Task<bool> LowSpeedAsync()
         {
-            if (!IsValid("$start,5", await SendCommandAsync("$start,5"), "#", true)) return false;
+            if (!IsValid(Start(5), await SendCommandAsync(Start(5)), "#", false)) return false;
             return true;
         }
 
+        /// <summary>
+        /// Starts the controller's high-speed routine (program slot <c>4</c>) by sending <c>$start,4</c>
+        /// and validating the reply.
+        /// </summary>
+        /// <returns>
+        /// <see langword="true"/> if the controller acknowledges the command (reply begins with <c>#</c>);
+        /// otherwise, <see langword="false"/>.
+        /// </returns>
+        /// <remarks>
+        /// This method sends <c>$start,4</c> and validates the response. This method itself does not throw.
+        /// <para>✅ Updated on 8/28/2025</para>
+        /// </remarks>
         public async Task<bool> HighSpeedAsync()
         {
-            if (!IsValid("$start,4", await SendCommandAsync("$start,4"), "#", true)) return false;
+            if (!IsValid(Start(4), await SendCommandAsync(Start(4)), "#", false)) return false;
             return true;
         }
 
@@ -520,12 +541,12 @@ namespace Chess_Project
         /// </summary>
         /// <param name="robotState">The new <see cref="RobotState"/> to assign to the corresponding robot.</param>
         /// <remarks>
-        /// This method sets either <see cref="GlobalState.WhiteState"/> or <see cref="GlobalState.BlackState"/> depending on the value of <see cref="_robotColor"/>.
+        /// This method sets either <see cref="GlobalState.WhiteState"/> or <see cref="GlobalState.BlackState"/> depending on the value of <see cref="_color"/>.
         /// <para>✅ Written on 6/10/2025</para>
         /// </remarks>
         public void ChangeRobotState(RobotState robotState)
         {
-            if (_robotColor == RobotColor.White)
+            if (_color == Color.White)
                 GlobalState.WhiteState = robotState;
             else
                 GlobalState.BlackState = robotState;
@@ -545,7 +566,7 @@ namespace Chess_Project
         /// <remarks>
         /// This exception provides detailed context by including the command, response, and controller IP
         /// in its message, making it easier to diagnose and log communication issues during robot operations.
-        /// <para>✅ Class written on 6/10/2025</para>
+        /// <para>✅ Written on 6/10/2025</para>
         /// </remarks>
         public class EpsonException(string commandSent, string response, string ip) : Exception(FormatMessage(commandSent, response, ip))
         {

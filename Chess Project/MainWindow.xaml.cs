@@ -36,6 +36,8 @@ namespace Chess_Project
         private DispatcherTimer _inactivityTimer;
         private EpsonController _whiteRobot;
         private EpsonController _blackRobot;
+        private CognexController _whiteCognex;
+        private CognexController _blackCognex;
         private readonly string _whiteRobotIp = "192.168.0.2";
         private readonly string _blackRobotIp = "192.168.0.3";
         private readonly int _whiteRobotPort = 5000;
@@ -197,6 +199,7 @@ namespace Chess_Project
         private bool _pieceSounds = true;
         private bool _moveConfirm = true;
         private bool _robotComm = true;
+        private bool _cameraComm = true;
         private bool _moving = false;
         private bool _holdResume = false;
         private bool _wasPlayable = false;
@@ -273,10 +276,51 @@ namespace Chess_Project
             InitializeUserPreferences();
             InitializeSounds();
             SetupInactivityTimer();
-            InitializeRobots();
+            InitializeConnections();
             ApplyThemeFormatting();
 
             this.PreviewMouseDown += MainWindow_PreviewMouseDown;
+        }
+
+        /// <summary>
+        /// Initializes user preferences by loading values from persistent storage (JSON),
+        /// updating UI toggle states, and preloading all required asset paths for themes and pieces.
+        /// </summary>
+        /// <remarks>
+        /// Falls back to default preferences if loading fails. Also logs missing or failed preference loads.
+        /// Paths to all piece and board assets are resolved and cached for later use.
+        /// <para>✅ Updated on 6/11/2025</para>
+        /// </remarks>
+        private void InitializeUserPreferences()
+        {
+            _stockfishPath = System.IO.Path.Combine(_executableDirectory, "Stockfish.exe");
+
+            try
+            {
+                _preferences = PreferencesManager.Load();
+            }
+            catch (Exception ex)
+            {
+                ChessLog.LogWarning("Failed to load preferences. Using defaults.", ex);
+                _preferences = new Preferences();
+            }
+
+            // Update checkboxes and internal flags based on loaded preferences
+            Sounds.IsChecked = _pieceSounds = _preferences.PieceSounds;
+            ConfirmMove.IsChecked = _moveConfirm = _preferences.ConfirmMove;
+            EpsonRCConnection.IsChecked = _robotComm = _preferences.EpsonRC;
+            CognexVision.IsChecked = _cameraComm = _preferences.CognexVision;
+
+            // Define base asset paths
+            string assetPath = System.IO.Path.Combine(_executableDirectory, "Assets");
+            string piecePath = System.IO.Path.Combine(assetPath, "Pieces", _preferences.Pieces);
+
+            // Set chess piece image paths using reflection
+            SetPieceImagePaths(piecePath);
+
+            // Set image paths for board and background
+            _backgroundImagePath = System.IO.Path.Combine(_executableDirectory, "Assets", "Backgrounds", $"{_preferences.Background}.png");
+            _boardImagePath = System.IO.Path.Combine(_executableDirectory, "Assets", "Boards", $"{_preferences.Board}.png");
         }
 
         /// <summary>
@@ -339,16 +383,18 @@ namespace Chess_Project
         }
 
         /// <summary>
-        /// Instantiates Epson robot controller objects for both the white and black robots
+        /// Instantiates Cognex camera and Epson robot controller objects for both the white and black robots
         /// using their respective IP addresses and ports, then attempts to establish initial
         /// connections to both controllers.
         /// </summary>
         /// <remarks>✅ Updated on 8/1/2025</remarks>
-        private void InitializeRobots()
+        private void InitializeConnections()
         {
-            _whiteRobot = new EpsonController(_whiteRobotIp, _whiteRobotPort, _whiteRobotBaseDeltas, _whiteRobotDeltaScalar, RobotColor.White, _whiteCognexIp, _whiteCognexTcpPort, _whiteCognexListenPort);
-            _blackRobot = new EpsonController(_blackRobotIp, _blackRobotPort, _blackRobotBaseDeltas, _blackRobotDeltaScalar, RobotColor.Black, _blackCognexIp, _blackCognexTcpPort, _blackCognexListenPort);
-            HandleEpsonConnectionAsync();
+            _whiteCognex = new CognexController(_whiteCognexIp, _whiteCognexTcpPort, Chess_Project.Color.White);
+            _blackCognex = new CognexController(_blackCognexIp, _blackCognexTcpPort, Chess_Project.Color.Black);
+            _whiteRobot = new EpsonController(_whiteRobotIp, _whiteRobotPort, _whiteRobotBaseDeltas, _whiteRobotDeltaScalar, Chess_Project.Color.White, _whiteCognex, _whiteCognexListenPort);
+            _blackRobot = new EpsonController(_blackRobotIp, _blackRobotPort, _blackRobotBaseDeltas, _blackRobotDeltaScalar, Chess_Project.Color.Black, _blackCognex, _blackCognexListenPort);
+            HandleInitialConnectionsAsync();
         }
 
         /// <summary>
@@ -356,99 +402,62 @@ namespace Chess_Project
         /// and updates the application state and preferences accordingly.
         /// </summary>
         /// <remarks>✅ Updated on 6/11/2025</remarks>
-        private async void HandleEpsonConnectionAsync()
+        private async void HandleInitialConnectionsAsync()
         {
-            if (EpsonRCConnection.IsChecked == true)
+            if (_robotComm == true || _cameraComm == true)
             {
-                SetStatusLights(Brushes.Yellow, Brushes.Yellow);
-                DisableUI();
+                DisableEpsonElements();
 
                 // Begin animated feedback
-                EpsonRCRect.Height = 45;
-                AttemptingConnection.Visibility = Visibility.Visible;
-                UpdateRectangleClip();
+                UpdateRectangleClip(65, Visibility.Visible, 75);
 
-                // Attempt to connect to both robots
-                if (!GlobalState.WhiteEpsonConnected || !GlobalState.WhiteCognexConnected) { await _whiteRobot.ConnectAsync(); }
-                if (!GlobalState.BlackEpsonConnected || !GlobalState.BlackCognexConnected) { await _blackRobot.ConnectAsync(); }
-                _robotComm = GlobalState.WhiteEpsonConnected && GlobalState.BlackEpsonConnected && GlobalState.WhiteCognexConnected && GlobalState.BlackCognexConnected;
+                SetEpsonStatusLight(Chess_Project.Color.White, _robotComm ? Brushes.Yellow : Brushes.Red);
+                SetEpsonStatusLight(Chess_Project.Color.Black, _robotComm ? Brushes.Yellow : Brushes.Red);
+                SetCognexStatusLight(Chess_Project.Color.White, _cameraComm ? Brushes.Yellow : Brushes.Red);
+                SetCognexStatusLight(Chess_Project.Color.Black, _cameraComm ? Brushes.Yellow : Brushes.Red);
 
-                // Update UI
-                EpsonRCConnection.IsChecked = _robotComm;
-                SetStatusLights(
-                    GlobalState.WhiteEpsonConnected && GlobalState.WhiteCognexConnected ? Brushes.Green : Brushes.Red,
-                    GlobalState.BlackEpsonConnected && GlobalState.BlackCognexConnected ? Brushes.Green : Brushes.Red
-                );
+                if (_robotComm)
+                {
+                    await _whiteRobot.ConnectAsync();
+                    await _blackRobot.ConnectAsync();
 
+                    EpsonRCConnection.IsChecked = _robotComm = GlobalState.WhiteEpsonConnected && GlobalState.BlackEpsonConnected;
 
-                EnableUI();
-                EpsonRCRect.Height = 30;
-                AttemptingConnection.Visibility = Visibility.Collapsed;
+                    SetEpsonStatusLight(Chess_Project.Color.White, GlobalState.WhiteEpsonConnected ? Brushes.Green : Brushes.Red);
+                    SetEpsonStatusLight(Chess_Project.Color.Black, GlobalState.BlackEpsonConnected ? Brushes.Green : Brushes.Red);
+                }
+
+                if (_cameraComm)
+                {
+                    await _whiteCognex.ConnectAsync();
+                    await _blackCognex.ConnectAsync();
+
+                    CognexVision.IsChecked = _cameraComm = GlobalState.WhiteCognexConnected && GlobalState.BlackCognexConnected;
+
+                    SetCognexStatusLight(Chess_Project.Color.White, GlobalState.WhiteCognexConnected ? Brushes.Green : Brushes.Red);
+                    SetCognexStatusLight(Chess_Project.Color.Black, GlobalState.BlackCognexConnected ? Brushes.Green : Brushes.Red);
+                }
+
+                EnableEpsonElements();
+                UpdateRectangleClip(50, Visibility.Collapsed, 60);
 
                 // Update preference and save
                 _preferences.EpsonRC = _robotComm;
+                _preferences.CognexVision = _cameraComm;
                 PreferencesManager.Save(_preferences);
             }
             else
             {
-                // Disconnect all robots and update UI
-                if (GlobalState.WhiteEpsonConnected) _whiteRobot.Disconnect();
-                if (GlobalState.BlackEpsonConnected) _blackRobot.Disconnect();
-
-                GlobalState.WhiteEpsonConnected = false;
-                GlobalState.BlackEpsonConnected = false;
-                _robotComm = false;
-                SetStatusLights(Brushes.Red, Brushes.Red);
-
-                // Update preference and save
-                _preferences.EpsonRC = false;
-                PreferencesManager.Save(_preferences);
+                SetEpsonStatusLight(Chess_Project.Color.White, Brushes.Red);
+                SetEpsonStatusLight(Chess_Project.Color.Black, Brushes.Red);
+                SetCognexStatusLight(Chess_Project.Color.White, Brushes.Red);
+                SetCognexStatusLight(Chess_Project.Color.Black, Brushes.Red);
             }
         }
 
         #endregion
 
         #region Theme and Preference Methods
-
-        /// <summary>
-        /// Initializes user preferences by loading values from persistent storage (JSON),
-        /// updating UI toggle states, and preloading all required asset paths for themes and pieces.
-        /// </summary>
-        /// <remarks>
-        /// Falls back to default preferences if loading fails. Also logs missing or failed preference loads.
-        /// Paths to all piece and board assets are resolved and cached for later use.
-        /// <para>✅ Updated on 6/11/2025</para>
-        /// </remarks>
-        private void InitializeUserPreferences()
-        {
-            _stockfishPath = System.IO.Path.Combine(_executableDirectory, "Stockfish.exe");
-
-            try
-            {
-                _preferences = PreferencesManager.Load();
-            }
-            catch (Exception ex)
-            {
-                ChessLog.LogWarning("Failed to load preferences. Using defaults.", ex);
-                _preferences = new Preferences();
-            }
-
-            // Update checkboxes and internal flags based on loaded preferences
-            Sounds.IsChecked = _pieceSounds = _preferences.PieceSounds;
-            ConfirmMove.IsChecked = _moveConfirm = _preferences.ConfirmMove;
-            EpsonRCConnection.IsChecked = _robotComm = _preferences.EpsonRC;
-
-            // Define base asset paths
-            string assetPath = System.IO.Path.Combine(_executableDirectory, "Assets");
-            string piecePath = System.IO.Path.Combine(assetPath, "Pieces", _preferences.Pieces);
-
-            // Set chess piece image paths using reflection
-            SetPieceImagePaths(piecePath);
-
-            // Set image paths for board and background
-            _backgroundImagePath = System.IO.Path.Combine(_executableDirectory, "Assets", "Backgrounds", $"{_preferences.Background}.png");
-            _boardImagePath = System.IO.Path.Combine(_executableDirectory, "Assets", "Boards", $"{_preferences.Board}.png");
-        }
 
         /// <summary>
         /// Sets the image paths for each chess piece (white and black) based on the given theme directory.
@@ -2585,10 +2594,10 @@ namespace Chess_Project
             _inactivityTimer.Stop();
 
             // Attempt to connect to robots if not already
-            if (!GlobalState.WhiteEpsonConnected || !GlobalState.WhiteCognexConnected || !GlobalState.BlackEpsonConnected || !GlobalState.BlackCognexConnected) { EpsonRcAsync(EpsonRCConnection, EventArgs.Empty); }
+            if (!GlobalState.WhiteEpsonConnected || !GlobalState.BlackEpsonConnected) { EpsonRcAsync(EpsonRCConnection, EventArgs.Empty); }
 
             // Start or resume the game
-            if (GlobalState.WhiteEpsonConnected && GlobalState.BlackEpsonConnected && GlobalState.WhiteCognexConnected && GlobalState.BlackCognexConnected)
+            if (GlobalState.WhiteEpsonConnected && GlobalState.BlackEpsonConnected)
             {
                 // Randomize difficulty and set mode
                 AssignRandomElo();
@@ -2868,7 +2877,7 @@ namespace Chess_Project
 
                 if (ReferenceEquals(selectedPiece, _clickedKing))
                     return new KingValidMove.KingValidation(Chess_Board, this)
-                        .ValidateMove(_move, _oldRow, _oldColumn, _newRow, _newColumn,
+                        .ValidateMove(_oldRow, _oldColumn, _newRow, _newColumn, _move,
                                       _cWK, _cBK, _cWR1, _cWR2, _cBR1, _cBR2);
 
                 return false;
@@ -2894,9 +2903,9 @@ namespace Chess_Project
             }
 
             // Ensure the move does not leave your king in check
-            var checkValidator = new CheckVerification.Check(Chess_Board, this);
-            bool positionOk = checkValidator.ValidatePosition(
-                _move, _whiteKingRow, _whiteKingColumn, _blackKingRow, _blackKingColumn, _newRow, _newColumn);
+            var checkVerification = new CheckVerification(Chess_Board, this);
+            bool positionOk = checkVerification.ValidatePosition(
+                _whiteKingRow, _whiteKingColumn, _blackKingRow, _blackKingColumn, _newRow, _newColumn, _move);
 
             if (!positionOk)
             {
@@ -2999,23 +3008,40 @@ namespace Chess_Project
 
             // Stop inactivity timer and indicate attempt
             _inactivityTimer.Stop();
-            SetStatusLights(Brushes.Yellow, Brushes.Yellow);
-            DisableUI();
+
+            DisableEpsonElements();
+            if (!GlobalState.WhiteEpsonConnected) { SetEpsonStatusLight(Chess_Project.Color.White, Brushes.Yellow); }
+            if (!GlobalState.BlackEpsonConnected) { SetEpsonStatusLight(Chess_Project.Color.Black, Brushes.Yellow); }
 
             // Preserve resume/play state
             StorePlayState();
 
-            // Begin animated feedback
-            EpsonRCRect.Height = 45;
-            AttemptingConnection.Visibility = Visibility.Visible;
-            UpdateRectangleClip();
-
             // Toggle RobotComm state and attempt communication
             _robotComm = !_robotComm;
-            await AttemptCommunication(checkBox);
+            await EpsonConnectAsync(checkBox);
 
             // Restore UI
-            EnableUI();
+            EnableEpsonElements();
+        }
+
+        private async void CognexVisionAsync(object sender, EventArgs e)
+        {
+            if (sender is not CheckBox checkBox)
+                return;
+
+            CognexVision.IsChecked = false;
+            CognexVision.IsEnabled = false;
+            if (!GlobalState.WhiteCognexConnected) { SetCognexStatusLight(Chess_Project.Color.White, Brushes.Yellow); }
+            if (!GlobalState.BlackCognexConnected) { SetCognexStatusLight(Chess_Project.Color.Black, Brushes.Yellow); }
+
+            // Begin animated feedback
+            UpdateRectangleClip(65, Visibility.Visible, 75);
+
+            // Toggle CameraComm state and attempt communication
+            _cameraComm = !_cameraComm;
+            await CognexConnectAsync(checkBox);
+
+            CognexVision.IsEnabled = true;
         }
 
         #endregion
@@ -3063,7 +3089,7 @@ namespace Chess_Project
         /// Sets the fill color of both robot status indicators to reflect connection state.
         /// </summary>
         /// <param name="whiteStatus">The brush color to apply to the white robot's status light.</param>
-        /// <param name="blackStatus">The brush color ro apply to the black robot's status light.</param>
+        /// <param name="statusColor">The brush color ro apply to the black robot's status light.</param>
         /// <remarks>
         /// <list type="bullet">
         ///     <item><c>Green</c>: Connected</item>
@@ -3072,17 +3098,23 @@ namespace Chess_Project
         /// </list>
         /// <para>✅ Updated on 7/18/2025</para>
         /// </remarks>
-        private void SetStatusLights(Brush whiteStatus, Brush blackStatus)
+        private void SetEpsonStatusLight(Color color, Brush statusColor)
         {
-            uoStatus.Fill = whiteStatus;
-            osuStatus.Fill = blackStatus;
+            if (color == Chess_Project.Color.White) { WhiteEpsonStatus.Fill = statusColor; }
+            if (color == Chess_Project.Color.Black) { BlackEpsonStatus.Fill = statusColor; }
+        }
+
+        private void SetCognexStatusLight(Color color, Brush statusColor)
+        {
+            if (color == Chess_Project.Color.White) { WhiteCognexStatus.Fill = statusColor; }
+            if (color == Chess_Project.Color.Black) { BlackCognexStatus.Fill = statusColor; }
         }
 
         /// <summary>
         /// Disables key UI elements during an Epson RC+ connection attempt.
         /// </summary>
         /// <remarks>✅ Updated on 7/18/2025</remarks>
-        private void DisableUI()
+        private void DisableEpsonElements()
         {
             EpsonRCConnection.IsChecked = false;
             EpsonRCConnection.IsEnabled = false;
@@ -3091,11 +3123,17 @@ namespace Chess_Project
             TogglePlayTypeUI(false);
         }
 
+        private void DisableCognexElements()
+        {
+            CognexVision.IsChecked = false;
+            CognexVision.IsEnabled = false;
+        }
+
         /// <summary>
         /// Re-enables key UI elements after completing an Epson RC+ connection attempt.
         /// </summary>
         /// <remarks>✅ Updated on 7/18/2025</remarks>
-        private void EnableUI()
+        private void EnableEpsonElements()
         {
             Play_Type.IsEnabled = true;
             EpsonRCConnection.IsEnabled = true;
@@ -3105,18 +3143,21 @@ namespace Chess_Project
         }
 
         /// <summary>
-        /// Updates the clipping geometry of the <see cref="EpsonRCRect"/> rectangle to support smooth animation effects.
+        /// Updates the clipping geometry of the <see cref="ConnectionRect"/> rectangle to support smooth animation effects.
         /// </summary>
         /// <remarks>
         /// Modifies the clip region's dimensions and corner radius for consistent visual behavior
         /// during connection state transitions.
         /// <para>✅ Updated on 7/18/2025</para>
         /// </remarks>
-        private void UpdateRectangleClip()
+        private void UpdateRectangleClip(int rectHeight, Visibility visibility, int clipHeight)
         {
-            if (FindName("EpsonRCRect") is Rectangle epsonRCRect && epsonRCRect.Clip is RectangleGeometry clipGeometry)
+            ConnectionRect.Height = rectHeight;
+            AttemptingConnection.Visibility = visibility;
+
+            if (FindName("ConnectionRect") is Rectangle epsonRCRect && epsonRCRect.Clip is RectangleGeometry clipGeometry)
             {
-                clipGeometry.Rect = new Rect(0, -10, 180, 55);
+                clipGeometry.Rect = new Rect(0, -10, 180, clipHeight);
                 clipGeometry.RadiusX = 5;
                 clipGeometry.RadiusY = 5;
             }
@@ -4098,7 +4139,7 @@ namespace Chess_Project
                 _threefoldRepetition = true;
 
             // Update the evaluation interface move table (unchanged)
-            Color borderColor = (Color)ColorConverter.ConvertFromString("#FFD0D0D0");
+            System.Windows.Media.Color borderColor = (System.Windows.Media.Color)ColorConverter.ConvertFromString("#FFD0D0D0");
             SolidColorBrush borderBrush = new(borderColor);
             FontFamily fontFamily = new("Sans Serif Collection");
             FontWeight fontWeight = FontWeights.Bold;
@@ -4176,38 +4217,46 @@ namespace Chess_Project
 
         #endregion
 
+        #region Game Restarting
+
+
+
+        #endregion
+
 
         /// <summary>
         /// Attempts communication and updates Epson RC+ connection setting in the "Preferences" file.
         /// </summary>
         /// <param name="sender">The sender object triggering the connection attempt.</param>
         /// <returns>An asynchronous task representing the connection attempt.</returns>
-        private async Task AttemptCommunication(object sender)  // ✅
+        private async Task EpsonConnectAsync(object sender)  // ✅
         {
             // Ensure sender is a CheckBox
             if (sender is not CheckBox checkBox)
             {
-                SetStatusLights(Brushes.Red, Brushes.Red);
-                return;
+                if (!GlobalState.WhiteEpsonConnected) { SetEpsonStatusLight(Chess_Project.Color.White, Brushes.Red); }
+                if (!GlobalState.BlackEpsonConnected) { SetEpsonStatusLight(Chess_Project.Color.Black, Brushes.Red); }
             }
-
-            if (checkBox.IsChecked.HasValue && _robotComm)  // If user is trying to connect to Epson robots
+            else if (checkBox.IsChecked.HasValue && _robotComm)  // If user is trying to connect to Epson robots
             {
-                // Attempt to connect
-                if (!GlobalState.WhiteEpsonConnected || !GlobalState.WhiteCognexConnected) { await _whiteRobot.ConnectAsync(); }
-                if (!GlobalState.BlackEpsonConnected || !GlobalState.BlackCognexConnected) { await _blackRobot.ConnectAsync(); }
+                // Begin animated feedback
+                UpdateRectangleClip(65, Visibility.Visible, 75);
 
-                if (GlobalState.WhiteEpsonConnected && GlobalState.BlackEpsonConnected && GlobalState.WhiteCognexConnected && GlobalState.BlackCognexConnected)  // Successfully connected to both Epson robots
+                // Attempt to connect
+                if (!GlobalState.WhiteEpsonConnected) { await _whiteRobot.ConnectAsync(); }
+                if (!GlobalState.BlackEpsonConnected) { await _blackRobot.ConnectAsync(); }
+
+                if (GlobalState.WhiteEpsonConnected && GlobalState.BlackEpsonConnected)  // Successfully connected to both Epson robots
                 {
-                    _preferences.EpsonRC = true;
+                    _preferences.EpsonRC = _robotComm = true;
                     PreferencesManager.Save(_preferences);
 
-                    _robotComm = true;
                     checkBox.IsChecked = true;
-                    SetStatusLights(Brushes.Green, Brushes.Green);
+                    SetEpsonStatusLight(Chess_Project.Color.White, Brushes.Green);
+                    SetEpsonStatusLight(Chess_Project.Color.Black, Brushes.Green);
 
-                    EpsonRCRect.Height = 30;
-                    AttemptingConnection.Visibility = Visibility.Collapsed;
+                    UpdateRectangleClip(50, Visibility.Collapsed, 60);
+
                     InfoSymbol.Visibility = Visibility.Visible;
                     SetupText.Visibility = Visibility.Visible;
                     MoveInProgRect.Visibility = Visibility.Visible;
@@ -4240,34 +4289,24 @@ namespace Chess_Project
                 }
                 else
                 {
-                    _robotComm = false;
-                    _preferences.EpsonRC = false;
+                    _preferences.EpsonRC = _robotComm = false;
                     PreferencesManager.Save(_preferences);
 
                     checkBox.IsChecked = false;
-                    SetStatusLights(
-                        GlobalState.WhiteEpsonConnected ? Brushes.Green : Brushes.Red,
-                        GlobalState.BlackEpsonConnected ? Brushes.Green : Brushes.Red
-                    );
-                }
+                    if (!GlobalState.WhiteEpsonConnected) { SetEpsonStatusLight(Chess_Project.Color.White, Brushes.Red); }
+                    if (!GlobalState.BlackEpsonConnected) { SetEpsonStatusLight(Chess_Project.Color.Black, Brushes.Red); }
 
-                EpsonRCRect.Height = 30;
-                AttemptingConnection.Visibility = Visibility.Collapsed;
+                    UpdateRectangleClip(50, Visibility.Collapsed, 60);
+                }
             }
             else
             {
-                EpsonRCRect.Height = 30;
-                AttemptingConnection.Visibility = Visibility.Collapsed;
-
-                _robotComm = false;
-                _preferences.EpsonRC = false;
+                _preferences.EpsonRC = _robotComm = false;
                 PreferencesManager.Save(_preferences);
 
-                GlobalState.WhiteEpsonConnected = false;
-                GlobalState.BlackEpsonConnected = false;
                 checkBox.IsChecked = false;
-
-                SetStatusLights(Brushes.Red, Brushes.Red);
+                SetEpsonStatusLight(Chess_Project.Color.White, Brushes.Red);
+                SetEpsonStatusLight(Chess_Project.Color.Black, Brushes.Red);
 
                 if (_mode != 0)  // Cleanup process if necessary
                 {
@@ -4280,20 +4319,63 @@ namespace Chess_Project
                 _blackRobot.Disconnect();
             }
 
-            // Adjust UI element clip
-            if (FindName("EpsonRCRect") is Rectangle epsonRCRect)
-            {
-                if (epsonRCRect.Clip is RectangleGeometry clipGeometry)
-                {
-                    clipGeometry.Rect = new Rect(0, -10, 180, 40);
-                    clipGeometry.RadiusX = 5;
-                    clipGeometry.RadiusY = 5;
-                }
-            }
-
             // Restart inactivity timer
             EpsonRCConnection.IsEnabled = true;
             _inactivityTimer.Start();
+        }
+
+        private async Task CognexConnectAsync(object sender)
+        {
+            // Ensure sender is a CheckBox
+            if (sender is not CheckBox checkBox)
+            {
+                if (!GlobalState.WhiteCognexConnected) { SetCognexStatusLight(Chess_Project.Color.White, Brushes.Red); }
+                if (!GlobalState.BlackCognexConnected) { SetCognexStatusLight(Chess_Project.Color.Black, Brushes.Red); }
+            }
+            else if (checkBox.IsChecked.HasValue && _cameraComm)
+            {
+                // Begin animated feedback
+                UpdateRectangleClip(65, Visibility.Visible, 75);
+
+                // Attempt to connect
+                if (!GlobalState.WhiteCognexConnected) { await _whiteCognex.ConnectAsync(); }
+                if (!GlobalState.BlackCognexConnected) { await _blackCognex.ConnectAsync(); }
+
+                if (GlobalState.WhiteCognexConnected && GlobalState.BlackCognexConnected)  // Successfully connected to both Cognex cameras
+                {
+                    _preferences.CognexVision = _cameraComm = true;
+                    PreferencesManager.Save(_preferences);
+
+                    checkBox.IsChecked = true;
+                    SetCognexStatusLight(Chess_Project.Color.White, Brushes.Green);
+                    SetCognexStatusLight(Chess_Project.Color.Black, Brushes.Green);
+
+                    UpdateRectangleClip(50, Visibility.Collapsed, 60);
+                }
+                else
+                {
+                    _preferences.CognexVision = _cameraComm = false;
+                    PreferencesManager.Save(_preferences);
+
+                    checkBox.IsChecked = false;
+                    if (!GlobalState.WhiteCognexConnected) { SetCognexStatusLight(Chess_Project.Color.White, Brushes.Red); }
+                    if (!GlobalState.BlackCognexConnected) { SetCognexStatusLight(Chess_Project.Color.Black, Brushes.Red); }
+
+                    UpdateRectangleClip(50, Visibility.Collapsed, 60);
+                }
+            }
+            else
+            {
+                _preferences.CognexVision = _cameraComm = false;
+                PreferencesManager.Save(_preferences);
+
+                checkBox.IsChecked = false;
+                SetCognexStatusLight(Chess_Project.Color.White, Brushes.Red);
+                SetCognexStatusLight(Chess_Project.Color.Black, Brushes.Red);
+
+                _whiteCognex.Disconnect();
+                _blackCognex.Disconnect();
+            }
         }
 
         /// <summary>
@@ -4495,18 +4577,18 @@ namespace Chess_Project
             {
                 WhiteAdvantage.Visibility = Visibility.Visible;
                 BlackAdvantage.Visibility = Visibility.Collapsed;
-                WhiteAdvantage.Foreground = new SolidColorBrush(_flip == 0 ? Colors.Black : (Color)ColorConverter.ConvertFromString("#FFD0D0D0"));
+                WhiteAdvantage.Foreground = new SolidColorBrush(_flip == 0 ? Colors.Black : (System.Windows.Media.Color)ColorConverter.ConvertFromString("#FFD0D0D0"));
             }
             else
             {
                 WhiteAdvantage.Visibility = Visibility.Collapsed;
                 BlackAdvantage.Visibility = Visibility.Visible;
-                BlackAdvantage.Foreground = new SolidColorBrush(_flip == 0 ? (Color)ColorConverter.ConvertFromString("#FFD0D0D0") : Colors.Black);
+                BlackAdvantage.Foreground = new SolidColorBrush(_flip == 0 ? (System.Windows.Media.Color)ColorConverter.ConvertFromString("#FFD0D0D0") : Colors.Black);
             }
 
             // Set bar colors based on the flipped evaluation
-            EvalBar.Fill = new SolidColorBrush(_flip == 0 ? (Color)ColorConverter.ConvertFromString("#FFD0D0D0") : Colors.Black);
-            AdvantageGauge.Fill = new SolidColorBrush(_flip == 0 ? Colors.Black : (Color)ColorConverter.ConvertFromString("#FFD0D0D0"));
+            EvalBar.Fill = new SolidColorBrush(_flip == 0 ? (System.Windows.Media.Color)ColorConverter.ConvertFromString("#FFD0D0D0") : Colors.Black);
+            AdvantageGauge.Fill = new SolidColorBrush(_flip == 0 ? Colors.Black : (System.Windows.Media.Color)ColorConverter.ConvertFromString("#FFD0D0D0"));
             AdvantageGauge.Clip = clipGeometry;
 
             // Compute animation height, flipping evaluation for the bar height
@@ -5414,6 +5496,11 @@ namespace Chess_Project
 
             _rcWhiteBits = "";
             _rcBlackBits = "";
+        }
+
+        private void CognexCamera_Click(object sender, RoutedEventArgs e)
+        {
+
         }
     }
 }
