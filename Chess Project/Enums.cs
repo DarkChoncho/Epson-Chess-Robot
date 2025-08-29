@@ -3,7 +3,7 @@
     /// <summary>
     /// Indicates which chess side (piece color) is in use.
     /// </summary>
-    public enum Color
+    public enum ChessColor
     {
         White,
         Black
@@ -26,6 +26,7 @@
     /// </summary>
     public enum GameMode
     {
+        Blank = -1,
         ComVsCom = 0,
         UserVsCom = 1,
         UserVsUser = 2

@@ -35,7 +35,7 @@ namespace Chess_Project
     /// 
     /// <para>✅ Updated on 8/28/2025</para>
     /// </remarks>
-    public class CognexController(string ip, int port, Color color)
+    public class CognexController(string ip, int port, ChessColor color)
     {
         #region Fields and Constants
 
@@ -45,7 +45,7 @@ namespace Chess_Project
         // Configuration (ctor-initialized)
         private readonly string _ip = ip;
         private readonly int _port = port;
-        private readonly Color _color = color;
+        private readonly ChessColor _color = color;
 
         // Runtime state (mutable)
         private TcpClient? _tcpClient;
@@ -159,19 +159,19 @@ namespace Chess_Project
         /// Sets the Cognex connection status for the specified camera color by updating
         /// the corresponding flag in <see cref="GlobalState"/>.
         /// </summary>
-        /// <param name="color">Which camera's status to set: <see cref="Color.White"/> or <see cref="Color.Black"/>.</param>
+        /// <param name="color">Which camera's status to set: <see cref="ChessColor.White"/> or <see cref="ChessColor.Black"/>.</param>
         /// <param name="value"><see langword="true"/> if connected; otherwise, <see langword="false"/>.</param>
         /// <exception>Thrown if <paramref name="color"/> is not a recognized value.</exception>
         /// <remarks>✅ Updated on 8/28/2025</remarks>
-        private static void SetCognexConnected(Color color, bool value)
+        private static void SetCognexConnected(ChessColor color, bool value)
         {
             switch (color)
             {
-                case Color.White:
+                case ChessColor.White:
                     GlobalState.WhiteCognexConnected = value;
                     break;
 
-                case Color.Black:
+                case ChessColor.Black:
                     GlobalState.BlackCognexConnected = value;
                     break;
 

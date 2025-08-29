@@ -13,7 +13,7 @@ namespace Chess_Project.Configuration
         public string Board { get; set; } = "IcySea";
         public bool PieceSounds { get; set; } = false;
         public bool ConfirmMove { get; set; } = true;
-        public bool EpsonRC { get; set; } = false;
+        public bool EpsonMotion { get; set; } = false;
         public bool CognexVision { get; set; } = false;
     }
 }

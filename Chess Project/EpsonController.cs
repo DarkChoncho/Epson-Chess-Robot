@@ -43,7 +43,7 @@ namespace Chess_Project
     /// 
     /// <para>✅ Updated on 8/28/2025</para>
     /// </remarks>
-    public class EpsonController(string robotIp, int robotPort, double[] baseDeltas, double deltaScalar, Color color, CognexController cognex, int cognexListenPort)
+    public class EpsonController(string robotIp, int robotPort, double[] baseDeltas, double deltaScalar, ChessColor color, CognexController cognex, int cognexListenPort)
     {
         #region Fields and Protocol
 
@@ -52,7 +52,6 @@ namespace Chess_Project
         private const string ResetCmd     = "$reset";
         private const string GetStatusCmd = "$getstatus";
         private const string ReadyStatus  = "#getstatus,00100000001";
-        private const string CRLF         = "\r\n";
 
         // Protocol helpers (string builders)
         private static string Start(int main)   => $"$start,{main}";
@@ -65,7 +64,7 @@ namespace Chess_Project
         // Configuration (ctor-initialized)
         private readonly string _robotIp = robotIp;
         private readonly int _robotPort = robotPort;
-        private readonly Color _color = color;
+        private readonly ChessColor _color = color;
         private readonly int _listenPort = cognexListenPort;
 
         // Runtime state (mutable)
@@ -91,7 +90,7 @@ namespace Chess_Project
         {
             try
             {
-                if ((_color == Color.White && !GlobalState.WhiteEpsonConnected) || (_color == Color.Black && !GlobalState.BlackEpsonConnected))
+                if ((_color == ChessColor.White && !GlobalState.WhiteEpsonConnected) || (_color == ChessColor.Black && !GlobalState.BlackEpsonConnected))
                 {
                     SetEpsonConnected(_color, true);
 
@@ -182,19 +181,19 @@ namespace Chess_Project
         /// Sets the Epson connection status for the specified robot color by updating
         /// the corresponding flag in <see cref="GlobalState"/>.
         /// </summary>
-        /// <param name="color">Which robot's status to set: <see cref="Color.White"/> or <see cref="Color.Black"/>.</param>
+        /// <param name="color">Which robot's status to set: <see cref="ChessColor.White"/> or <see cref="ChessColor.Black"/>.</param>
         /// <param name="value"><see langword="true"/> if connected; otherwise, <see langword="false"/>.</param>
         /// <exception>Thrown if <paramref name="color"/> is not a recognized value.</exception>
         /// <remarks>✅ Updated on 8/26/2025</remarks>
-        private static void SetEpsonConnected(Color color, bool value)
+        private static void SetEpsonConnected(ChessColor color, bool value)
         {
             switch (color)
             {
-                case Color.White:
+                case ChessColor.White:
                     GlobalState.WhiteEpsonConnected = value;
                     break;
 
-                case Color.Black:
+                case ChessColor.Black:
                     GlobalState.BlackEpsonConnected = value;
                     break;
 
@@ -437,8 +436,8 @@ namespace Chess_Project
                     double deltaY = baseDeltas[1];
 
                     bool cameraConnected =
-                        (_color == Color.White && GlobalState.WhiteCognexConnected) ||
-                        (_color == Color.Black && GlobalState.BlackCognexConnected);
+                        (_color == ChessColor.White && GlobalState.WhiteCognexConnected) ||
+                        (_color == ChessColor.Black && GlobalState.BlackCognexConnected);
 
                     // Picking regions only
                     bool isPick = bitNumber < 64 || (bitNumber > 127 && bitNumber < 160);
@@ -546,7 +545,7 @@ namespace Chess_Project
         /// </remarks>
         public void ChangeRobotState(RobotState robotState)
         {
-            if (_color == Color.White)
+            if (_color == ChessColor.White)
                 GlobalState.WhiteState = robotState;
             else
                 GlobalState.BlackState = robotState;

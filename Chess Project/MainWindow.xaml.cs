@@ -1,14 +1,11 @@
 ﻿using Chess_Project.Configuration;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Media;
-using System.Net.Sockets;
-using System.Numerics;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -30,22 +27,26 @@ namespace Chess_Project
     /// The script features three modes: User Vs. User, User Vs. Computer, and Computer Vs. Computer. It also features multiple appearances for pieces, boards, and backgrounds.
     /// Written in approximately 400 hours from October 2023 to July 2024.
     /// </summary>
-
     public partial class MainWindow : Window
     {
-        private DispatcherTimer _inactivityTimer;
-        private EpsonController _whiteRobot;
-        private EpsonController _blackRobot;
-        private CognexController _whiteCognex;
-        private CognexController _blackCognex;
+        public GameSession Session { get; } = new();
+        private GameOver? _gameOver;
+
+        #region Epson Configuration (local)
+
         private readonly string _whiteRobotIp = "192.168.0.2";
         private readonly string _blackRobotIp = "192.168.0.3";
         private readonly int _whiteRobotPort = 5000;
         private readonly int _blackRobotPort = 5000;
+
         private readonly double[] _whiteRobotBaseDeltas = [-1.218, -67.697];
         private readonly double[] _blackRobotBaseDeltas = [0.616, -80.406];
-        private readonly double _whiteRobotDeltaScalar = 0.095952;
-        private readonly double _blackRobotDeltaScalar = 0.0895833;
+        private readonly double _whiteDeltaScalar = 0.095952;
+        private readonly double _blackDeltaScalar = 0.0895833;
+
+        #endregion
+
+        #region Cognex Configuration (local)
 
         private readonly string _whiteCognexIp = "192.168.0.12";
         private readonly string _blackCognexIp = "192.168.0.13";
@@ -54,62 +55,28 @@ namespace Chess_Project
         private readonly int _whiteCognexListenPort = 3000;
         private readonly int _blackCognexListenPort = 3001;
 
-        private readonly Dictionary<string, SoundPlayer> _soundPlayer = [];
-        public List<Tuple<int, int>> ImageCoordinates = [];
-        public List<Tuple<int, int>> EnPassantSquare = [];
-        public List<string> _gameFens = [];
+        #endregion
 
-        private ComboBoxItem? _selectedPlayType;  // Combo boxes
-        private ComboBoxItem? _selectedElo;
-        private ComboBoxItem? _selectedColor;
-        private ComboBoxItem? _selectedWhiteElo;
-        private ComboBoxItem? _selectedBlackElo;
-        private ComboBoxItem? _backgroundTheme;
-        private ComboBoxItem? _pieceTheme;
-        private ComboBoxItem? _boardTheme;
+        #region Epson Pick/Place & Origins (constants)
 
-        private Image? _clickedPawn;  // Piece entities
-        private Image? _clickedRook;
-        private Image? _clickedKnight;
-        private Image? _clickedBishop;
-        private Image? _clickedQueen;
-        private Image? _clickedKing;
-        private Image? _capturedPiece;
-
-        public int imageRows;  // Piece coordinates
-        public int imageColumns;
-        private int _pickBit1;
-        private int _pickBit2;
-        private int _pickBit3;
-        private int _placeBit1;
-        private int _placeBit2;
-        private int _placeBit3;
-        private string _promotedPawn;
-        private string _promotedTo;
-        private string _activePiece;
-        private string _takenPiece;
-        private string _rcPastWhiteBits;
-        private string _rcPastBlackBits;
-        private string _rcWhiteBits;
-        private string _rcBlackBits;
-        private string _fen;
-        private string _previousFen;
-
-        private readonly int[] _pawnPick = [136, 137, 138, 139, 140, 141, 142, 143];  // Off-board pick locations
+        // Off-board pick locations
+        private readonly int[] _pawnPick = [136, 137, 138, 139, 140, 141, 142, 143];
         private readonly int[] _rookPick = [128, 135, 148, 149, 151, 151];
         private readonly int[] _knightPick = [129, 134, 156, 157, 158, 159];
         private readonly int[] _bishopPick = [130, 133, 152, 153, 154, 155];
         private readonly int[] _queenPick = [131, 144, 145, 146, 147];
         private readonly int _kingPick = 132;
 
-        private readonly int[] _pawnPlace = [168, 169, 170, 171, 172, 173, 174, 175];  // Off-board place locations
+        // Off-board place locations
+        private readonly int[] _pawnPlace = [168, 169, 170, 171, 172, 173, 174, 175];
         private readonly int[] _rookPlace = [160, 167, 180, 181, 182, 183];
         private readonly int[] _knightPlace = [161, 166, 188, 189, 190, 191];
         private readonly int[] _bishopPlace = [162, 165, 184, 185, 186, 187];
         private readonly int[] _queenPlace = [163, 176, 177, 178, 179];
         private readonly int _kingPlace = 164;
 
-        private readonly int[] _whitePawnOrigin = [72, 73, 74, 75, 76, 77, 78, 79];  // On-board place locations
+        // On-board place locations
+        private readonly int[] _whitePawnOrigin = [72, 73, 74, 75, 76, 77, 78, 79];
         private readonly int[] _blackPawnOrigin = [112, 113, 114, 115, 116, 117, 118, 119];
         private readonly int[] _whiteRookOrigin = [64, 71];
         private readonly int[] _blackRookOrigin = [120, 127];
@@ -122,10 +89,180 @@ namespace Chess_Project
         private readonly int _whiteKingOrigin = 68;
         private readonly int _blackKingOrigin = 124;
 
-        private int _oldRow;  // Active piece coordinates
+        #endregion
+
+        #region Services (runtime)
+
+        private DispatcherTimer _inactivityTimer;
+        private readonly Dictionary<string, SoundPlayer> _soundPlayer = [];
+
+        private EpsonController _whiteRobot;
+        private EpsonController _blackRobot;
+        private CognexController _whiteCognex;
+        private CognexController _blackCognex;
+
+        #endregion
+
+        #region Board/Position Collections (mixed)
+
+        public List<Tuple<int, int>> ImageCoordinates { get => Session.ImageCoordinates; set => Session.ImageCoordinates = value; }
+        public List<Tuple<int, int>> EnPassantSquare { get => Session.EnPassantSquare; set => Session.EnPassantSquare = value; }
+        private List<string> GameFens { get => Session.GameFens; set => Session.GameFens = value; }
+
+        private sealed class PieceInit
+        {
+            public required Image Img { get; set; }
+            public required string Name { get; init; }
+            public required int Row { get; init; }
+            public required int Col { get; init; }
+            public required int Z { get; init; }
+            public required bool Enabled { get; init; }
+            public object? Tag { get; init; }
+        }
+
+        private Dictionary<string, PieceInit> _initialPieces = [];
+
+        #endregion
+
+        #region Move & Notation Metadata (session-backed)
+
+        private string? PromotedPawn { get => Session.PromotedPawn; set => Session.PromotedPawn = value; }
+        private string? PromotedTo { get => Session.PromotedTo; set => Session.PromotedTo = value; }
+        private string? ActivePiece { get => Session.ActivePiece; set => Session.ActivePiece = value; }
+        private string? TakenPiece { get => Session.TakenPiece; set => Session.TakenPiece = value; }
+        private string? Fen { get => Session.Fen; set => Session.Fen = value; }
+        private string? PreviousFen { get => Session.PreviousFen; set => Session.PreviousFen = value; }
+
+        #endregion
+
+        #region Epson RC+ Bit Signals (session-backed)
+
+        private int? PickBit1 { get => Session.PickBit1; set => Session.PickBit1 = value; }
+        private int? PickBit2 { get => Session.PickBit2; set => Session.PickBit2 = value; }
+        private int? PickBit3 { get => Session.PickBit3; set => Session.PickBit3 = value; }
+        private int? PlaceBit1 { get => Session.PlaceBit1; set => Session.PlaceBit1 = value; }
+        private int? PlaceBit2 { get => Session.PlaceBit2; set => Session.PlaceBit2 = value; }
+        private int? PlaceBit3 { get => Session.PlaceBit3; set => Session.PlaceBit3 = value; }
+
+        private string? WhiteBits { get => Session.WhiteBits; set => Session.WhiteBits = value; }
+        private string? BlackBits { get => Session.BlackBits; set => Session.BlackBits = value; }
+        private string? PrevWhiteBits { get => Session.PrevWhiteBits; set => Session.PrevWhiteBits = value; }
+        private string? PrevBlackBits { get => Session.PrevBlackBits; set => Session.PrevBlackBits = value; }
+
+        #endregion
+
+        #region Castling Flags (session-backed)
+
+        private int CWK { get => Session.CWK; set => Session.CWK = value; }
+        private int CWR1 { get => Session.CWR1; set => Session.CWR1 = value; }
+        private int CWR2 { get => Session.CWR2; set => Session.CWR2 = value; }
+        private int CBK { get => Session.CBK; set => Session.CBK = value; }
+        private int CBR1 { get => Session.CBR1; set => Session.CBR1 = value; }
+        private int CBR2 { get => Session.CBR2; set => Session.CBR2 = value; }
+        private bool KingCastle { get => Session.KingCastle; set => Session.KingCastle = value; }
+        private bool QueenCastle { get => Session.QueenCastle; set => Session.QueenCastle = value; }
+
+        #endregion
+
+        #region Capture & Promotion Counters/Flags (session-backed)
+
+        private int NumWN { get => Session.NumWN; set => Session.NumWN = value; }
+        private int NumWB { get => Session.NumWB; set => Session.NumWB = value; }
+        private int NumWR { get => Session.NumWR; set => Session.NumWR = value; }
+        private int NumWQ { get => Session.NumWQ; set => Session.NumWQ = value; }
+        private int NumBN { get => Session.NumBN; set => Session.NumBN = value; }
+        private int NumBB { get => Session.NumBB; set => Session.NumBB = value; }
+        private int NumBR { get => Session.NumBR; set => Session.NumBR = value; }
+        private int NumBQ { get => Session.NumBQ; set => Session.NumBQ = value; }
+
+        private bool Capture { get => Session.Capture; set => Session.Capture = value; }
+        private bool EnPassantCreated { get => Session.EnPassantCreated; set => Session.EnPassantCreated = value; }
+        private bool EnPassant { get => Session.EnPassant; set => Session.EnPassant = value; }
+        private bool Promoted { get => Session.Promoted; set => Session.Promoted = value; }
+        private char? PromotionPiece { get => Session.PromotionPiece; set => Session.PromotionPiece = value; }
+
+        #endregion
+
+        #region Turn & State Tracking (session-backed)
+
+        private int Move { get => Session.Move; set => Session.Move = value; }
+        private int Halfmove { get => Session.Halfmove; set => Session.Halfmove = value; }
+        private int Fullmove { get => Session.Fullmove; set => Session.Fullmove = value; }
+
+        private bool UserTurn { get => Session.UserTurn; set => Session.UserTurn = value; }
+        private bool Moving { get => Session.Moving; set => Session.Moving = value; }
+        private bool HoldResume { get => Session.HoldResume; set => Session.HoldResume = value; }
+        private bool WasPlayable { get => Session.WasPlayable; set => Session.WasPlayable = value; }
+        private bool WasResumable { get => Session.WasResumable; set => Session.WasResumable = value; }
+        private bool IsPaused { get => Session.IsPaused; set => Session.IsPaused = value; }
+        private bool BoardSet { get => Session.BoardSet; set => Session.BoardSet = value; }
+
+        #endregion
+
+        #region Engine/CPU Flags (session-backed)
+
+        private bool TopEngineMove { get => Session.TopEngineMove; set => Session.TopEngineMove = value; }
+
+        #endregion
+
+        #region Stockfish Evaluation (session-backed)
+
+        private int WhiteMaterial { get => Session.WhiteMaterial; set => Session.WhiteMaterial = value; }
+        private int BlackMaterial { get => Session.BlackMaterial; set => Session.BlackMaterial = value; }
+        private double QuantifiedEvaluation { get => Session.QuantifiedEvaluation; set => Session.QuantifiedEvaluation = value; }
+        private string DisplayedAdvantage { get => Session.DisplayedAdvantage; set => Session.DisplayedAdvantage = value; }
+
+        #endregion
+
+        #region Game End Flags (session-backed)
+
+        private bool EndGame { get => Session.EndGame; set => Session.EndGame = value; }
+        private bool ThreefoldRepetition { get => Session.ThreefoldRepetition; set => Session.ThreefoldRepetition = value; }
+
+        #endregion
+
+        #region UI Combo Box Selections (local)
+
+        private ComboBoxItem? _selectedPlayType;
+        private ComboBoxItem? _selectedElo;
+        private ComboBoxItem? _selectedColor;
+        private ComboBoxItem? _selectedWhiteElo;
+        private ComboBoxItem? _selectedBlackElo;
+
+        #endregion
+
+        #region UI Piece Selections (local)
+
+        private Image? _clickedPawn = null;
+        private Image? _clickedKnight = null;
+        private Image? _clickedBishop = null;
+        private Image? _clickedRook = null;
+        private Image? _clickedQueen = null;
+        private Image? _clickedKing = null;
+        private Image? _capturedPiece = null;
+
+        #endregion
+
+        #region Game Settings Counters/Flags (local)
+
+        private int _mode;
+
+        private bool _pieceSounds;
+        private bool _moveConfirm;
+        private bool _robotMotion;
+        private bool _cameraVision;
+
+        private readonly int _timeoutDuration = 30;
+
+        #endregion
+
+        #region Working Coordinates & Notation Scratch (local)
+
+        private int _oldRow;
         private int _oldColumn;
         private int _newRow;
         private int _newColumn;
+
         private string _clickedButtonName;
         private string _pawnName;
         private char? _startFile;
@@ -137,123 +274,26 @@ namespace Chess_Project
         private string? _executedMove;
         private string? _pgnMove;
 
-        private int _whiteKingRow;  // King coordinates
+        private int _whiteKingRow;
         private int _whiteKingColumn;
         private int _blackKingRow;
         private int _blackKingColumn;
 
-        #region Castling Flags
-
-        private int _cWK = 0;
-        private int _cWR1 = 0;
-        private int _cWR2 = 0;
-        private int _cBK = 0;
-        private int _cBR1 = 0;
-        private int _cBR2 = 0;
-        private bool _kingCastle;
-        private bool _queenCastle;
-
         #endregion
 
-        #region Capture & Promotion Flags
-
-        private bool _capture;
-        private bool _enPassantCreated;
-        private bool _enPassant;
-        private bool _promoted;
-        private char _promotionPiece;
-        private int _numWQ;
-        private int _numWR;
-        private int _numWB;
-        private int _numWN;
-        private int _numBQ;
-        private int _numBR;
-        private int _numBB;
-        private int _numBN;
-
-        #endregion
-
-        #region CPU Values & Flags
-
-        private int _depth;  // CPU flags and values
-        private int _whiteCpuDepth;
-        private int _blackCpuDepth;
-        private int _blunderPercent;
-        private int _whiteCpuBlunderPercent;
-        private int _blackCpuBlunderPercent;
-        private int _scale = 1;
-        private bool _blunderMove;
-        private bool _topEngineMove;
-        private bool _whiteCpuTopEngineMove;
-        private bool _blackCpuTopEngineMove;
-
-        #endregion
-
-        #region Turn Tracking & Movement
-
-        private int _move;
-        private int _mode;
-        private int _halfmove;
-        private int _fullmove;
-        private bool _userTurn = false;
-        private bool _pieceSounds = true;
-        private bool _moveConfirm = true;
-        private bool _robotComm = true;
-        private bool _cameraComm = true;
-        private bool _moving = false;
-        private bool _holdResume = false;
-        private bool _wasPlayable = false;
-        private bool _wasResumable = false;
-        private bool _isPaused = false;
-        private bool _boardSet = false;
-        private readonly int _timeoutDuration = 90;
-
-        #endregion
-
-        #region Board Flipping Values
+        #region Board Orientation (local)
 
         private int _flip;
         private int _theta;
 
-        #endregion
+        #endregion    
 
-        #region Stockfish Evaluation
-
-        private string _stockfishEvaluation = "0";
-        private double _quantifiedEvaluation = 10;
-        private string _displayedAdvantage = "0.0";
-        private int _whiteMaterial;
-        private int _blackMaterial;
-
-        #endregion
-
-        #region Game End Flags
-
-        private bool _endGame;
-        private bool _threefoldRepetition;
-
-        #endregion
-
-        #region File Paths
+        #region File Paths (local)
 
         private readonly string _executableDirectory;
         private string? _stockfishPath;
         private readonly string _fenFilePath = "FEN_Codes.txt";
         private readonly string _pgnFilePath = "GamePGN.pgn";
-        private string _preferencesFilePath;
-        private string? _storedBoardTheme;
-        private string _whitePawnImagePath;
-        private string _whiteRookImagePath;
-        private string _whiteKnightImagePath;
-        private string _whiteBishopImagePath;
-        private string _whiteQueenImagePath;
-        private string _whiteKingImagePath;
-        private string _blackPawnImagePath;
-        private string _blackRookImagePath;
-        private string _blackKnightImagePath;
-        private string _blackBishopImagePath;
-        private string _blackQueenImagePath;
-        private string _blackKingImagePath;
         private string _backgroundImagePath;
         private string _boardImagePath;
         private Preferences _preferences;
@@ -263,11 +303,19 @@ namespace Chess_Project
         #region Program Initialization
 
         /// <summary>
-        /// Initializes the main application window, sets up user preferences, audio, robot configurations,
-        /// inactivity tracking, and applies theme formatting. Also, attaches a global mouse click event handler
-        /// to reset inactivity tracking.
+        /// Constructs the main window and performs one-time app setup:
+        /// <list type="bullet">
+        ///     <item><description>Loads user preferences.</description></item>
+        ///     <item><description>Preloads sounds.</description></item>
+        ///     <item><description>Starts the inactivity timer.</description></item>
+        ///     <item><description>Initializes robot/camera connections.</description></item>
+        ///     <item><description>Applies the selected theme.</description></item>
+        ///     <item><description>Wires a global mouse handler to reset inactivity.</description></item>
+        /// </list>
         /// </summary>
-        /// <remarks>✅ Updated on 6/11/2025</remarks>
+        /// <remarks>
+        /// <para>✅ Updated on 8/29/2025</para>
+        /// </remarks>
         public MainWindow()
         {
             InitializeComponent();
@@ -283,18 +331,29 @@ namespace Chess_Project
         }
 
         /// <summary>
-        /// Initializes user preferences by loading values from persistent storage (JSON),
-        /// updating UI toggle states, and preloading all required asset paths for themes and pieces.
+        /// Loads persisted user preferences, applies them to UI and runtime flags,
+        /// and resolves all asset paths (pieces, board, background). Falls back to
+        /// defaults if loading fails. Also snapshots the initial board layout once
+        /// the visual tree is ready.
         /// </summary>
-        /// <remarks>
-        /// Falls back to default preferences if loading fails. Also logs missing or failed preference loads.
-        /// Paths to all piece and board assets are resolved and cached for later use.
-        /// <para>✅ Updated on 6/11/2025</para>
-        /// </remarks>
+        /// <remarks>✅ Updated on 8/29/2025</remarks>
         private void InitializeUserPreferences()
         {
+            // Resolve Stockfish path and exit if missing (fatal)
             _stockfishPath = System.IO.Path.Combine(_executableDirectory, "Stockfish.exe");
 
+            if (!File.Exists(_stockfishPath))
+            {
+                var msg = $"Stockfish executable not found at:\n{_stockfishPath}\n\n" +
+                    "The game cannot run without Stockfish.";
+                ChessLog.LogFatal(msg);
+                MessageBox.Show(msg, "Fatal Error - Stockfish Missing", MessageBoxButton.OK, MessageBoxImage.Error);
+
+                Application.Current.Shutdown(-1);
+                return;  // keep compiler happy; Shutdown tears down the app
+            }
+
+            // Load preferences with fallback
             try
             {
                 _preferences = PreferencesManager.Load();
@@ -305,153 +364,198 @@ namespace Chess_Project
                 _preferences = new Preferences();
             }
 
-            // Update checkboxes and internal flags based on loaded preferences
+            // Apply toggles (keep internal flags in sync with UI)
             Sounds.IsChecked = _pieceSounds = _preferences.PieceSounds;
             ConfirmMove.IsChecked = _moveConfirm = _preferences.ConfirmMove;
-            EpsonRCConnection.IsChecked = _robotComm = _preferences.EpsonRC;
-            CognexVision.IsChecked = _cameraComm = _preferences.CognexVision;
+            EpsonMotion.IsChecked = _robotMotion = _preferences.EpsonMotion;
+            CognexVision.IsChecked = _cameraVision = _preferences.CognexVision;
 
-            // Define base asset paths
-            string assetPath = System.IO.Path.Combine(_executableDirectory, "Assets");
-            string piecePath = System.IO.Path.Combine(assetPath, "Pieces", _preferences.Pieces);
+            // Build asset roots
+            string assetRoot = System.IO.Path.Combine(_executableDirectory, "Assets");
+            string piecesRoot = System.IO.Path.Combine(assetRoot, "Pieces", _preferences.Pieces);
 
-            // Set chess piece image paths using reflection
-            SetPieceImagePaths(piecePath);
+            // Fill per-piece image paths
+            SetPieceImagePaths(piecesRoot);
 
-            // Set image paths for board and background
+            // Board & background skins
             _backgroundImagePath = System.IO.Path.Combine(_executableDirectory, "Assets", "Backgrounds", $"{_preferences.Background}.png");
             _boardImagePath = System.IO.Path.Combine(_executableDirectory, "Assets", "Boards", $"{_preferences.Board}.png");
+
+            // Snapshot initial board once the tree is ready (avoids race with XAML load)
+            Dispatcher.BeginInvoke(
+                new Action(() =>
+                {
+                    try { SnapshotInitialBoard(); }
+                    catch (Exception ex) { ChessLog.LogWarning("Failed to snapshot board.", ex); }
+                }),
+                System.Windows.Threading.DispatcherPriority.Loaded
+            );
         }
 
         /// <summary>
-        /// Load and pre-caches all chess-related sound effects into memory for fast playback during gameplay.
+        /// Preloads chess sound effects into memory for fast playback.
         /// </summary>
         /// <remarks>
-        /// This method scans the "Assets/Sounds" directory for predefined sound effect names (e.g., "PieceMove", "GameStart"),
-        /// constructs their full file path, and loads each sound into a <see cref="SoundPlayer"/> instance. The preloaded sounds
-        /// are stored in the <see cref="_soundPlayer"/> dictionary using their name as the key for efficient lookup.
-        /// <para>
-        /// Missing sound files are logged as warnings and skipped. This ensures that gameplay can continue
-        /// even if one or more sound files are unavailable.
-        /// </para>
-        /// ✅ Updated on 6/11/2025
+        /// Looks for a fixed set of *.wav files in <c>Assets/Sounds</c>. Missing files are logged and skipped.
+        /// Disposes any previously loaded players before reloading.
+        /// <para>✅ Updated on 8/29/2025</para>
         /// </remarks>
         private void InitializeSounds()
         {
             string soundsDirectory = System.IO.Path.Combine(_executableDirectory, "Assets", "Sounds");
-            string[] soundNames = [
+            if (!Directory.Exists(soundsDirectory))
+            {
+                ChessLog.LogWarning($"Sounds directory not found: {soundsDirectory}");
+                return;
+            }
+
+            string[] soundNames =
+            [
                 "GameEnd", "GameStart", "PieceCapture", "PieceCastle", "PieceCheck",
                 "PieceIllegal", "PieceMove", "PieceOpponent", "PiecePromote"
             ];
 
             foreach (var sound in soundNames)
             {
-                string soundFilePath = System.IO.Path.Combine(soundsDirectory, $"{sound}.wav");
-
-                if (!File.Exists(soundFilePath))
+                string path = System.IO.Path.Combine(soundsDirectory, $"{sound}.wav");
+                if (!File.Exists(path))
                 {
-                    ChessLog.LogWarning($"Sound file nto found: {soundFilePath}");
+                    ChessLog.LogWarning($"Sound file not found: {path}");
                     continue;
                 }
 
-                SoundPlayer player = new(soundFilePath);
+                SoundPlayer player = new(path);
                 player.Load();
                 _soundPlayer[sound] = player;
-
-                ChessLog.LogDebug($"Preloaded sound: {sound} -> {soundFilePath}");
             }
         }
 
         /// <summary>
-        /// Initializes and starts the inactivity timer that triggers after a specified timeout period.
+        /// Creates (if needed) and starts the UI-thread inactivity timer that fires after
+        /// <see cref="_timeoutDuration"/> seconds of inactivity.
         /// </summary>
         /// <remarks>
-        /// The timer uses the UI thread via <see cref="DispatcherTimer"/> and is configured to tick every
-        /// <see cref="_timeoutDuration"/> seconds. When the timer elapses, it invokes the <see cref="InactivityTimer_Tick(object?, EventArgs)"/>
-        /// handler to perform any inactivity-related actions.
-        /// <para>✅ Updated on 6/11/2025</para>
+        /// Uses <see cref="DispatcherTimer"/> (UI thread). The handler <see cref="InactivityTimer_Tick"/>
+        /// is (re)attached safely so repeated calls won't double-subscribe.
+        /// <para>✅ Updated on 8/29/2025</para>
         /// </remarks>
         private void SetupInactivityTimer()
         {
-            _inactivityTimer = new DispatcherTimer
+            _inactivityTimer ??= new DispatcherTimer(DispatcherPriority.Background)
             {
                 Interval = TimeSpan.FromSeconds(_timeoutDuration)
             };
 
+            // Ensure we don't end up with duplicate handlers if called more than once
+            _inactivityTimer.Tick -= InactivityTimer_Tick;
             _inactivityTimer.Tick += InactivityTimer_Tick;
+
             _inactivityTimer.Start();
         }
 
         /// <summary>
-        /// Instantiates Cognex camera and Epson robot controller objects for both the white and black robots
-        /// using their respective IP addresses and ports, then attempts to establish initial
-        /// connections to both controllers.
+        /// Instantiates Cognex camera and Epson robot controller objects for the white and black sides
+        /// using configured IPs/ports, then kicks off the initial connection routine in the background.
         /// </summary>
-        /// <remarks>✅ Updated on 8/1/2025</remarks>
+        /// <remarks>
+        /// This method replaces any existing controller instances. If <see cref="HandleInitialConnectionsAsync"/>
+        /// throws, its exceptions are observed inside that method. Since the call is not awaited here,
+        /// connection progress occurs asynchronously after this method returns.
+        /// <para>✅ Updated on 8/29/2025</para>
+        /// </remarks>
         private void InitializeConnections()
         {
-            _whiteCognex = new CognexController(_whiteCognexIp, _whiteCognexTcpPort, Chess_Project.Color.White);
-            _blackCognex = new CognexController(_blackCognexIp, _blackCognexTcpPort, Chess_Project.Color.Black);
-            _whiteRobot = new EpsonController(_whiteRobotIp, _whiteRobotPort, _whiteRobotBaseDeltas, _whiteRobotDeltaScalar, Chess_Project.Color.White, _whiteCognex, _whiteCognexListenPort);
-            _blackRobot = new EpsonController(_blackRobotIp, _blackRobotPort, _blackRobotBaseDeltas, _blackRobotDeltaScalar, Chess_Project.Color.Black, _blackCognex, _blackCognexListenPort);
-            HandleInitialConnectionsAsync();
+            // Clean up old instances to avoid socket leaks if this is called more than once
+            _whiteRobot?.Disconnect();
+            _blackRobot?.Disconnect();
+            _whiteCognex?.Disconnect();
+            _blackCognex?.Disconnect();
+
+            _whiteCognex = new CognexController(_whiteCognexIp, _whiteCognexTcpPort, ChessColor.White);
+            _blackCognex = new CognexController(_blackCognexIp, _blackCognexTcpPort, ChessColor.Black);
+            _whiteRobot = new EpsonController(_whiteRobotIp, _whiteRobotPort, _whiteRobotBaseDeltas, _whiteDeltaScalar, ChessColor.White, _whiteCognex, _whiteCognexListenPort);
+            _blackRobot = new EpsonController(_blackRobotIp, _blackRobotPort, _blackRobotBaseDeltas, _blackDeltaScalar, ChessColor.Black, _blackCognex, _blackCognexListenPort);
+            _ = HandleInitialConnectionsAsync();
         }
 
         /// <summary>
-        /// Handles Epson RC+ robot connection toggling. Attempts to connect or disconnect both robots
-        /// and updates the application state and preferences accordingly.
+        /// Attempts initial connections for Epson robots and Cognex cameras based on the current
+        /// toggle flags (<see cref="_robotMotion"/> and <see cref="_cameraVision"/>), while updating
+        /// UI status indicators and persisting the resulting states to preferences.
+        /// Displays a busy overlay during the operation and always restores UI interactivity in <see langword="finally"/>.
         /// </summary>
-        /// <remarks>✅ Updated on 6/11/2025</remarks>
-        private async void HandleInitialConnectionsAsync()
+        /// <remarks>
+        /// <list type="bullet">
+        ///     <item><description>Sets status lights to Yellow while connecting; Green on success, Red on failure or when the corresponding feature is disabled.</description></item>
+        ///     <item><description>Connection attempts for white/black devices run in parallel via <see cref="Task.WhenAll"/>.</description></item>
+        ///     <item><description>Persists <see cref="_preferences.EpsonMotion"/> and <see cref="_preferences.CognexVision"/> based on the final connection result.</description></item>
+        ///     <item><description>If both features are disabled, no connection is attempted and all lights are set to red.</description></item>
+        /// </list>
+        /// Any exceptions thrown by inner calls are expected to be handled by those methods;
+        /// otherwise they will bubble up to the caller.
+        /// <para>✅ Updated on 8/29/2025</para>
+        /// </remarks>
+        /// <returns>A task that completes when all requested connection work and UI updates are finished.</returns>
+        private async Task HandleInitialConnectionsAsync()
         {
-            if (_robotComm == true || _cameraComm == true)
+            if (_robotMotion || _cameraVision)
             {
                 DisableEpsonElements();
-
-                // Begin animated feedback
                 UpdateRectangleClip(65, Visibility.Visible, 75);
 
-                SetEpsonStatusLight(Chess_Project.Color.White, _robotComm ? Brushes.Yellow : Brushes.Red);
-                SetEpsonStatusLight(Chess_Project.Color.Black, _robotComm ? Brushes.Yellow : Brushes.Red);
-                SetCognexStatusLight(Chess_Project.Color.White, _cameraComm ? Brushes.Yellow : Brushes.Red);
-                SetCognexStatusLight(Chess_Project.Color.Black, _cameraComm ? Brushes.Yellow : Brushes.Red);
+                // "Attempting" feedback
+                SetEpsonStatusLight(ChessColor.White, _robotMotion ? Brushes.Yellow : Brushes.Red);
+                SetEpsonStatusLight(ChessColor.Black, _robotMotion ? Brushes.Yellow : Brushes.Red);
+                SetCognexStatusLight(ChessColor.White, _cameraVision ? Brushes.Yellow : Brushes.Red);
+                SetCognexStatusLight(ChessColor.Black, _cameraVision ? Brushes.Yellow : Brushes.Red);
 
-                if (_robotComm)
+                try
                 {
-                    await _whiteRobot.ConnectAsync();
-                    await _blackRobot.ConnectAsync();
+                    // Epson robots
+                    if (_robotMotion)
+                    {
+                        var whiteRobot = _whiteRobot?.ConnectAsync() ?? Task.CompletedTask;
+                        var blackRobot = _blackRobot?.ConnectAsync() ?? Task.CompletedTask;
+                        await Task.WhenAll(whiteRobot, blackRobot);
 
-                    EpsonRCConnection.IsChecked = _robotComm = GlobalState.WhiteEpsonConnected && GlobalState.BlackEpsonConnected;
+                        _robotMotion = GlobalState.WhiteEpsonConnected && GlobalState.BlackEpsonConnected;
+                        EpsonMotion.IsChecked = _robotMotion;
 
-                    SetEpsonStatusLight(Chess_Project.Color.White, GlobalState.WhiteEpsonConnected ? Brushes.Green : Brushes.Red);
-                    SetEpsonStatusLight(Chess_Project.Color.Black, GlobalState.BlackEpsonConnected ? Brushes.Green : Brushes.Red);
+                        SetEpsonStatusLight(ChessColor.White, GlobalState.WhiteEpsonConnected ? Brushes.Green : Brushes.Red);
+                        SetEpsonStatusLight(ChessColor.Black, GlobalState.BlackEpsonConnected ? Brushes.Green : Brushes.Red);
+                    }
+
+                    // Cognex cameras
+                    if (_cameraVision)
+                    {
+                        var whiteCognex = _whiteCognex?.ConnectAsync() ?? Task.CompletedTask;
+                        var blackCognex = _blackCognex?.ConnectAsync() ?? Task.CompletedTask;
+                        await Task.WhenAll(whiteCognex, blackCognex);
+
+                        _cameraVision = GlobalState.WhiteCognexConnected && GlobalState.BlackCognexConnected;
+                        CognexVision.IsChecked = _cameraVision;
+
+                        SetCognexStatusLight(ChessColor.White, GlobalState.WhiteCognexConnected ? Brushes.Green : Brushes.Red);
+                        SetCognexStatusLight(ChessColor.Black, GlobalState.BlackCognexConnected ? Brushes.Green : Brushes.Red);
+                    }
+
+                    // Persist the final state of the toggles
+                    _preferences.EpsonMotion = _robotMotion;
+                    _preferences.CognexVision = _cameraVision;
+                    PreferencesManager.Save(_preferences);
                 }
-
-                if (_cameraComm)
+                finally
                 {
-                    await _whiteCognex.ConnectAsync();
-                    await _blackCognex.ConnectAsync();
-
-                    CognexVision.IsChecked = _cameraComm = GlobalState.WhiteCognexConnected && GlobalState.BlackCognexConnected;
-
-                    SetCognexStatusLight(Chess_Project.Color.White, GlobalState.WhiteCognexConnected ? Brushes.Green : Brushes.Red);
-                    SetCognexStatusLight(Chess_Project.Color.Black, GlobalState.BlackCognexConnected ? Brushes.Green : Brushes.Red);
-                }
-
-                EnableEpsonElements();
-                UpdateRectangleClip(50, Visibility.Collapsed, 60);
-
-                // Update preference and save
-                _preferences.EpsonRC = _robotComm;
-                _preferences.CognexVision = _cameraComm;
-                PreferencesManager.Save(_preferences);
+                    UpdateRectangleClip(50, Visibility.Collapsed, 60);
+                    EnableEpsonElements();
+                }          
             }
             else
             {
-                SetEpsonStatusLight(Chess_Project.Color.White, Brushes.Red);
-                SetEpsonStatusLight(Chess_Project.Color.Black, Brushes.Red);
-                SetCognexStatusLight(Chess_Project.Color.White, Brushes.Red);
-                SetCognexStatusLight(Chess_Project.Color.Black, Brushes.Red);
+                SetEpsonStatusLight(ChessColor.White, Brushes.Red);
+                SetEpsonStatusLight(ChessColor.Black, Brushes.Red);
+                SetCognexStatusLight(ChessColor.White, Brushes.Red);
+                SetCognexStatusLight(ChessColor.Black, Brushes.Red);
             }
         }
 
@@ -487,6 +591,26 @@ namespace Chess_Project
                 typeof(MainWindow).GetField($"black{piece}ImagePath", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
                     ?.SetValue(this, blackPath);
             }
+        }
+
+        private void SnapshotInitialBoard()
+        {
+            _initialPieces = Chess_Board.Children
+                .OfType<Image>()
+                // filter to only chess pieces if you have other images
+                .Where(i => Equals(i.Tag, "WhitePiece") || Equals(i.Tag, "BlackPiece"))
+                .ToDictionary(
+                    i => i.Name,
+                    i => new PieceInit
+                    {
+                        Img = i,
+                        Name = i.Name,
+                        Row = Grid.GetRow(i),
+                        Col = Grid.GetColumn(i),
+                        Z = Panel.GetZIndex(i),
+                        Enabled = i.IsEnabled,
+                        Tag = i.Tag
+                    });
         }
 
         /// <summary>
@@ -787,6 +911,7 @@ namespace Chess_Project
             string? playerColor = _selectedColor?.Content?.ToString();
 
             // UI Setup: Hide and disable setup elements
+            Chess_Board.IsHitTestVisible = true;
             Game_Start.Visibility = Visibility.Collapsed;
             Game_Start.IsEnabled = false;
             UvCorUvU.Visibility = Visibility.Collapsed;
@@ -795,46 +920,43 @@ namespace Chess_Project
             CvC.IsEnabled = false;
             PlayButton.Visibility = Visibility.Collapsed;
             PlayButton.IsEnabled = false;
+            PauseButton.IsEnabled = false;
             ResumeButton.Visibility = Visibility.Visible;
-            EpsonRCConnection.IsEnabled = false;
+            EpsonMotion.IsEnabled = false;
 
             // Game state initializations
-            _move = 1;
-            _fullmove = 1;
-            ResetCapturedPieceCounts();
             EnableAllPieces();
             EraseAnnotations();
-
-            // Handle robot-controlled game setup
-            if (_robotComm)
-            {
-                ShowSetupPopup(true);
-
-                if (!_boardSet)
-                    await SetupBoard();
-
-                ShowSetupPopup(false);
-            }
 
             // Initialize FEN and PGN
             CreateFenCode();
             File.WriteAllText(_fenFilePath, string.Empty);
 
-            // Determine game mode
-            switch (playType)
+            _mode = playType == "Com Vs. Com" ? 1 : playType == "User Vs. Com" ? 2 : 3;
+            WritePGNFile();
+
+            // Handle robot-controlled game setup
+            if (_robotMotion && !BoardSet)
             {
-                case "Com Vs. Com":
-                    _mode = 1;
-                    _moving = true;
-                    _userTurn = false;
+                ShowSetupPopup(true);
+                await SetupBoard();
+                ShowSetupPopup(false);
+            }
+
+            PauseButton.IsEnabled = true;
+
+            // Determine game mode
+            switch (_mode)
+            {
+                case 1:
+                    Moving = true;
+                    UserTurn = false;
                     Chess_Board.IsHitTestVisible = false;
 
-                    ComputerMoveAsync();
+                    await ComputerMoveAsync();
                     break;
 
-                case "User Vs. Com":
-                    _mode = 2;
-
+                case 2:
                     // Flip board if necessary
                     if ((_flip == 0 && playerColor == "Black") || (_flip == 1 && playerColor == "White"))
                     {
@@ -844,25 +966,25 @@ namespace Chess_Project
 
                     if (playerColor == "Black")
                     {
-                        _moving = true;
-                        _userTurn = false;
-                        ComputerMoveAsync();
+                        Moving = true;
+                        UserTurn = false;
+                        await ComputerMoveAsync();
                     }
                     else
                     {
-                        _userTurn = true;
+                        UserTurn = true;
+                        EnableImagesWithTag("WhitePiece", true);
+                        EnableImagesWithTag("BlackPiece", false);
                     }
                     break;
 
-                case "User Vs. User":
+                case 3:
                 default:
-                    _mode = 3;
-                    _userTurn = true;
+                    UserTurn = true;
+                    EnableImagesWithTag("WhitePiece", true);
+                    EnableImagesWithTag("BlackPiece", false);
                     break;
             }
-
-            await DocumentMoveAsync();
-            WritePGNFile();
         }
 
         /// <summary>
@@ -885,7 +1007,7 @@ namespace Chess_Project
         {
             // Snapshot board state & castling rights for potential undo.
             PiecePositions();
-            int[] castlingRightsSnapshot = [_cWR1, _cWK, _cWR2, _cBR1, _cBK, _cBR2];
+            int[] castlingRightsSnapshot = [CWR1, CWK, CWR2, CBR1, CBK, CBR2];
 
             _pawnName = activePawn.Name;
 
@@ -895,19 +1017,19 @@ namespace Chess_Project
             DisableCastlingRights(activePawn, _capturedPiece);
 
             // En passant eligibility & promotion
-            _enPassantCreated = false;
+            EnPassantCreated = false;
 
-            if (_move == 1)  // White just moved
+            if (Move == 1)  // White just moved
             {
                 if (_oldRow - _newRow == 2)
                 {
                     EnPassantSquare.Clear();
                     EnPassantSquare.Add(Tuple.Create(_newRow + 1, _newColumn));
-                    _enPassantCreated = true;
+                    EnPassantCreated = true;
                 }
                 else if (_newRow == 0)
                 {
-                    PawnPromote(activePawn, _move);
+                    PawnPromote(activePawn, Move);
                 }
             }
             else  // Black just moved
@@ -916,16 +1038,16 @@ namespace Chess_Project
                 {
                     EnPassantSquare.Clear();
                     EnPassantSquare.Add(Tuple.Create(_newRow - 1, _newColumn));
-                    _enPassantCreated = true;
+                    EnPassantCreated = true;
                 }
                 else if (_newRow == 7)
                 {
-                    PawnPromote(activePawn, _move);
+                    PawnPromote(activePawn, Move);
                 }
             }
 
             // Optional user confirmation path
-            if (_userTurn && _moveConfirm)
+            if (UserTurn && _moveConfirm)
             {
                 // Callout proposed move
                 SelectedPiece(_oldRow, _oldColumn);
@@ -971,7 +1093,7 @@ namespace Chess_Project
         {
             // Snapshot board state & castling rights for potential undo.
             PiecePositions();
-            int[] castlingRightsSnapshot = [_cWR1, _cWK, _cWR2, _cBR1, _cBK, _cBR2];
+            int[] castlingRightsSnapshot = [CWR1, CWK, CWR2, CBR1, CBK, CBR2];
 
             // King-specific pre-processing (e.g., castling)
             if (activePiece.Name.Contains("King"))
@@ -982,14 +1104,14 @@ namespace Chess_Project
             DisableCastlingRights(activePiece, _capturedPiece);
 
             // Optional user confirmation path
-            if (_userTurn && _moveConfirm)
+            if (UserTurn && _moveConfirm)
             {
                 // Callout proposed move
-                if (_kingCastle)
+                if (KingCastle)
                 {
                     await HandleCastlingMoveAsync("King");
                 }
-                else if (_queenCastle)
+                else if (QueenCastle)
                 {
                     await HandleCastlingMoveAsync("Queen");
                 }
@@ -1009,7 +1131,7 @@ namespace Chess_Project
 
                 if (confirmed)
                 {
-                    MoveCallout(_oldRow, _oldColumn, _kingCastle ? _oldRow : _queenCastle ? _oldRow : _newRow, _kingCastle ? 7 : _queenCastle ? 0 : _newColumn);
+                    MoveCallout(_oldRow, _oldColumn, KingCastle ? _oldRow : QueenCastle ? _oldRow : _newRow, KingCastle ? 7 : QueenCastle ? 0 : _newColumn);
                     await FinalizeMoveAsync(activePiece);
                     await DocumentMoveAsync();
                     await CheckmateVerifierAsync();
@@ -1069,9 +1191,9 @@ namespace Chess_Project
 
             // Mark which castle type occurred for downstream logic/visuals.
             if (isKingside)
-                _kingCastle = true;
+                KingCastle = true;
             else
-                _queenCastle = true;
+                QueenCastle = true;
         }
 
         /// <summary>
@@ -1091,7 +1213,7 @@ namespace Chess_Project
                 return;
 
             // Determine color from the active moving piece (e.g., "WhiteKing", "BlackKing")
-            bool isWhite = _activePiece?.StartsWith("White", StringComparison.Ordinal) == true;
+            bool isWhite = ActivePiece?.StartsWith("White", StringComparison.Ordinal) == true;
 
             // By naming convention: Rook1 = queenside (col 0), Rook2 = kingside (col 7)
             string rookName =
@@ -1127,18 +1249,18 @@ namespace Chess_Project
         private void HandleRookReset()
         {
             // Only applicable if a castle was in effect
-            if ((!_kingCastle && !_queenCastle))
+            if ((!KingCastle && !QueenCastle))
                 return;
 
-            string rookName = (_move == 1) ?
-                (_kingCastle ? "WhiteRook2" : "WhiteRook1") :
-                (_kingCastle ? "BlackRook2" : "BlackRook1");
+            string rookName = (Move == 1) ?
+                (KingCastle ? "WhiteRook2" : "WhiteRook1") :
+                (KingCastle ? "BlackRook2" : "BlackRook1");
 
             var rook = Chess_Board.Children.OfType<Image>().FirstOrDefault(img => img.Name == rookName);
             if (rook != null)
             {
                 Grid.SetRow(rook, _oldRow);
-                Grid.SetColumn(rook, _kingCastle ? 7 : 0);
+                Grid.SetColumn(rook, KingCastle ? 7 : 0);
             }
         }
 
@@ -1148,7 +1270,7 @@ namespace Chess_Project
         /// <param name="activePiece">The piece being moved.</param>
         /// <remarks>
         /// If an enemy piece is on (<see cref="_newRow"/>, <see cref="_newColumn"/>), it's recorded,
-        /// removed from the board, and <see cref="_capture"/> is set. The moving piece is untouched.
+        /// removed from the board, and <see cref="Capture"/> is set. The moving piece is untouched.
         /// <para>✅ Updated on 8/19/2025</para>
         /// </remarks>
         private void HandlePieceCapture(Image activePiece)
@@ -1164,7 +1286,7 @@ namespace Chess_Project
 
             if (captured is null) return;
  
-            _takenPiece = captured.Name;
+            TakenPiece = captured.Name;
             _capturedPiece = captured;
 
             // Remove visually & logically
@@ -1173,7 +1295,7 @@ namespace Chess_Project
             _capturedPiece.IsEnabled = false;
             Chess_Board.Children.Remove(_capturedPiece);
 
-            _capture = true;
+            Capture = true;
         }
 
         /// <summary>
@@ -1191,7 +1313,7 @@ namespace Chess_Project
             if (!isEnPassant) return;
 
             // Determine the row of the pawn to capture (the pawn that advanced two squares last move)
-            int capturedRow = (_move == 1) ? _newRow + 1 : _newRow - 1;
+            int capturedRow = (Move == 1) ? _newRow + 1 : _newRow - 1;
 
             // Locate the captured pawn
             var capturedPawn = Chess_Board.Children
@@ -1200,7 +1322,7 @@ namespace Chess_Project
 
             if (capturedPawn != null)
             {
-                _takenPiece = capturedPawn.Name;
+                TakenPiece = capturedPawn.Name;
                 _capturedPiece = capturedPawn;
 
                 // Remove visually & logically
@@ -1209,7 +1331,7 @@ namespace Chess_Project
                 _capturedPiece.IsEnabled = false;
                 Chess_Board.Children.Remove(_capturedPiece);
 
-                _enPassant = true;
+                EnPassant = true;
             }
         }
 
@@ -1228,12 +1350,12 @@ namespace Chess_Project
             // Local helper: map a piece name to its castling flag and set it.
             void DisableByName(string name)
             {
-                if (name.StartsWith("WhiteKing")) { _cWK = 1; return; }
-                if (name.StartsWith("BlackKing")) { _cBK = 1; return; }
-                if (name.StartsWith("WhiteRook1")) { _cWR1 = 1; return; }
-                if (name.StartsWith("WhiteRook2")) { _cWR2 = 1; return; }
-                if (name.StartsWith("BlackRook1")) { _cBR1 = 1; return; }
-                if (name.StartsWith("BlackRook2")) { _cBR2 = 1; return; }
+                if (name.StartsWith("WhiteKing")) { CWK = 1; return; }
+                if (name.StartsWith("BlackKing")) { CBK = 1; return; }
+                if (name.StartsWith("WhiteRook1")) { CWR1 = 1; return; }
+                if (name.StartsWith("WhiteRook2")) { CWR2 = 1; return; }
+                if (name.StartsWith("BlackRook1")) { CBR1 = 1; return; }
+                if (name.StartsWith("BlackRook2")) { CBR2 = 1; return; }
             }
 
             // Disable because the moving piece is a king/rook.
@@ -1254,16 +1376,16 @@ namespace Chess_Project
         private async Task FinalizeMoveAsync(Image activePiece)
         {
             // Switch side to move
-            _move = 1 - _move;
+            Move = 1 - Move;
 
             // Clear en passant square unless one was created by a double pawn push
-            if (!_enPassantCreated) EnPassantSquare.Clear();
+            if (!EnPassantCreated) EnPassantSquare.Clear();
 
             // Halfmove clock: reset on capture or pawn move; otherwise increment
-            _halfmove = (_capture || _clickedPawn != null) ? 0 : _halfmove + 1;
+            Halfmove = (Capture || _clickedPawn != null) ? 0 : Halfmove + 1;
 
             // Fullmove number increases after Black completes a move
-            if (_move == 1) _fullmove++;
+            if (Move == 1) Fullmove++;
 
             // Record SAN/PGN start square; update FEN snapshot.
             _startFile = (char)('a' + _oldColumn);
@@ -1272,17 +1394,17 @@ namespace Chess_Project
             CreateFenCode();
 
             // If the user isn't moving or the user isn't confirming moves, animate & callout now
-            if (!_userTurn || !_moveConfirm)
+            if (!UserTurn || !_moveConfirm)
             {
                 // Animate the piece to its destination
                 Grid.SetRow(activePiece, _oldRow);
                 Grid.SetColumn(activePiece, _oldColumn);
                 await MovePieceAsync(activePiece, _newRow, _newColumn, _oldRow, _oldColumn);
 
-                if (_kingCastle || _queenCastle)
+                if (KingCastle || QueenCastle)
                 {
-                    bool kingside = _kingCastle;
-                    bool blackJustMoved = (_move == 1);
+                    bool kingside = KingCastle;
+                    bool blackJustMoved = (Move == 1);
 
                     // Callout uses rook file for castle visualization
                     MoveCallout(_oldRow, _oldColumn, _oldRow, kingside ? 7 : 0);
@@ -1317,20 +1439,20 @@ namespace Chess_Project
             // Restore castling rights (defensive: ensure array shape)
             if (castlingRights is { Length: 6 })
             {
-                _cWR1 = castlingRights[0];
-                _cWK = castlingRights[1];
-                _cWR2 = castlingRights[2];
-                _cBR1 = castlingRights[3];
-                _cBK = castlingRights[4];
-                _cBR2 = castlingRights[5];
+                CWR1 = castlingRights[0];
+                CWK = castlingRights[1];
+                CWR2 = castlingRights[2];
+                CBR1 = castlingRights[3];
+                CBK = castlingRights[4];
+                CBR2 = castlingRights[5];
             }
 
             // If the move was a castle attempt, put the rook back
-            if (_kingCastle || _queenCastle)
+            if (KingCastle || QueenCastle)
                 HandleRookReset();
 
             // If a capture or en passant was undone, restore the captured piece
-            if (_capture || _enPassant)
+            if (Capture || EnPassant)
             {
                 _capturedPiece.Visibility = Visibility.Visible;
                 _capturedPiece.IsHitTestVisible = true;
@@ -1339,9 +1461,9 @@ namespace Chess_Project
             }
 
             // If a promotion was undone, restore the pawn's sprite, name, events, and counts
-            if (_promoted)
+            if (Promoted)
             {
-                bool whiteToMove = (_move == 1);
+                bool whiteToMove = (Move == 1);
 
                 string pawnImagePath = System.IO.Path.Combine(
                     _executableDirectory, "Assets", "Pieces",
@@ -1355,33 +1477,33 @@ namespace Chess_Project
                 if (_clickedButtonName.StartsWith("Queen", StringComparison.Ordinal))
                 {
                     _clickedPawn.MouseUp -= ChessQueen_Click;
-                    if (whiteToMove) _numWQ--; else _numBQ--;
+                    if (whiteToMove) NumWQ--; else NumBQ--;
                 }
                 else if (_clickedButtonName.StartsWith("Knight", StringComparison.Ordinal))
                 {
                     _clickedPawn.MouseUp -= ChessKnight_Click;
-                    if (whiteToMove) _numWN--; else _numBN--;
+                    if (whiteToMove) NumWN--; else NumBN--;
                 }
                 else if (_clickedButtonName.StartsWith("Rook", StringComparison.Ordinal))
                 {
                     _clickedPawn.MouseUp -= ChessRook_Click;
-                    if (whiteToMove) _numWR--; else _numBR--;
+                    if (whiteToMove) NumWR--; else NumBR--;
                 }
                 else
                 {
                     _clickedPawn.MouseUp -= ChessBishop_Click;
-                    if (whiteToMove) _numWB--; else _numBB--;
+                    if (whiteToMove) NumWB--; else NumBB--;
                 }
             }
 
             // Clear selection and transient flags
             DeselectPieces();
             _capturedPiece = null;
-            _capture = false;
-            _enPassant = false;
-            _promoted = false;
-            _kingCastle = false;
-            _queenCastle = false;
+            Capture = false;
+            EnPassant = false;
+            Promoted = false;
+            KingCastle = false;
+            QueenCastle = false;
         }
 
         /// <summary>
@@ -1419,15 +1541,15 @@ namespace Chess_Project
             // Small human-ish delay
             await Task.Delay(Random.Shared.Next(1000, 4501));
 
-            if (_endGame) return;
+            if (EndGame) return;
 
-            _moving = true;
+            Moving = true;
 
             // Resolve ELO / difficulty
             int cpuElo =
                 _mode == 2
                     ? int.Parse(_selectedElo.Content.ToString()!)
-                    : (_move == 1
+                    : (Move == 1
                         ? int.Parse(_selectedWhiteElo.Content.ToString()!)
                         : int.Parse(_selectedBlackElo.Content.ToString()!));
 
@@ -1438,7 +1560,7 @@ namespace Chess_Project
             int criticalMoveConversion = settings.CriticalMoveConversion;
 
             // Query Stockfish
-            var (primary, reserve, lines) = await ParseStockfishOutputAsync(_fen, searchDepth, _stockfishPath!);
+            var (primary, reserve, lines) = await ParseStockfishOutputAsync(Fen, searchDepth, _stockfishPath!);
 
             // Fallback if nothing parsed in primary
             if (primary.Count == 0)
@@ -1480,22 +1602,22 @@ namespace Chess_Project
                 if (!int.TryParse(m.cpValue, out int cpVal)) continue;
 
                 int diff = Math.Abs(cpVal - maxCpValue);
-                int threshold = _fullmove < 6 ? cpLossThreshold / 8 : cpLossThreshold;
+                int threshold = Fullmove < 6 ? cpLossThreshold / 8 : cpLossThreshold;
 
                 if (diff <= threshold)
                     moves.Add(m);
             }
 
             //  Mating override (force top engine move sometimes)
-            if (moves.Count > 0 && moves[0].cp == "mate" && !_topEngineMove)
+            if (moves.Count > 0 && moves[0].cp == "mate" && !TopEngineMove)
             {
                 int mateIn = Math.Abs(int.Parse(moves[0].cpValue));
                 if (ShouldPlayMatingMove(cpuElo, mateIn))
-                    _topEngineMove = true;
+                    TopEngineMove = true;
             }
 
             // Determine selected SAN-like string from either forced top move or the Gaussian pick
-            string sel = SelectMoveString(moves, sorted, _topEngineMove, bellCurvePercentile, criticalMoveConversion);
+            string sel = SelectMoveString(moves, sorted, TopEngineMove, bellCurvePercentile, criticalMoveConversion);
 
             // Parse “a2a4” or “a7a8q”
             if (sel.Length == 4)
@@ -1505,7 +1627,7 @@ namespace Chess_Project
             }
             else if (sel.Length == 5)
             {
-                _promotionPiece = sel[^1];
+                PromotionPiece = sel[^1];
                 _startPosition = sel[..2];
                 _endPosition = sel[2..4];
             }
@@ -1798,26 +1920,26 @@ namespace Chess_Project
         }
 
         /// <summary>
-        /// Rebuilds the FEN string (<see cref="_fen"/>) for the current UI board state and updates
+        /// Rebuilds the FEN string (<see cref="Fen"/>) for the current UI board state and updates
         /// material counts. The method:
         /// <list type="bullet">
         ///     <item><description>Scans all pieces (<see cref="Image"/>s) once to build an 8x8 map.</description></item>
         ///     <item><description>Compresses empty runs per rank to produce the piece-placement field.</description></item>
-        ///     <item><description>Appends side-to-move from <see cref="_move"/> (<c>w</c> when <see cref="_move"/> == 1, else <c>b</c>).</description></item>
-        ///     <item><description>Derives castling rights from <see cref="_cWK"/>, <see cref="_cWR1"/>, <see cref="_cWR2"/>, <see cref="_cBK"/>, <see cref="_cBR1"/>, and <see cref="_cBR2"/> order KQkq; <c>-</c> if none).</description></item>
+        ///     <item><description>Appends side-to-move from <see cref="Move"/> (<c>w</c> when <see cref="Move"/> == 1, else <c>b</c>).</description></item>
+        ///     <item><description>Derives castling rights from <see cref="CWK"/>, <see cref="CWR1"/>, <see cref="CWR2"/>, <see cref="CBK"/>, <see cref="CBR1"/>, and <see cref="CBR2"/> order KQkq; <c>-</c> if none).</description></item>
         ///     <item><description>Emits the en passant target square from <see cref="EnPassantSquare"/> (or <c>-</c>).</description></item>
-        ///     <item><description>Appends the halfmove clock <see cref="_halfmove"/> and fullmove number <see cref="_fullmove"/>.</description></item>
+        ///     <item><description>Appends the halfmove clock <see cref="Halfmove"/> and fullmove number <see cref="Fullmove"/>.</description></item>
         /// </list>
         /// </summary>
         /// <remarks>
-        /// Also sets <see cref="_previousFen"/> (old value) and recomputes <see cref="_whiteMaterial"/>/<see cref="_blackMaterial"/>.
+        /// Also sets <see cref="PreviousFen"/> (old value) and recomputes <see cref="WhiteMaterial"/>/<see cref="BlackMaterial"/>.
         /// <para>✅ Updated on 8/20/2025</para>
         /// </remarks>
         private void CreateFenCode()
         {
-            _previousFen = _fen;
-            _whiteMaterial = 0;
-            _blackMaterial = 0;
+            PreviousFen = Fen;
+            WhiteMaterial = 0;
+            BlackMaterial = 0;
 
             // Build a quick lookup of what occupies each grid cell
             int rows = Chess_Board.RowDefinitions.Count;
@@ -1857,19 +1979,19 @@ namespace Chess_Project
             }
 
             // Side to move
-            sb.Append(_move == 1 ? " w " : " b ");
+            sb.Append(Move == 1 ? " w " : " b ");
 
             // Castling rights (KQkq order; '-' if none)
             int startLen = sb.Length;
-            if (_cWK == 0)
+            if (CWK == 0)
             {
-                if (_cWR2 == 0) sb.Append('K');
-                if (_cWR1 == 0) sb.Append('Q');
+                if (CWR2 == 0) sb.Append('K');
+                if (CWR1 == 0) sb.Append('Q');
             }
-            if (_cBK == 0)
+            if (CBK == 0)
             {
-                if (_cBR2 == 0) sb.Append('k');
-                if (_cBR1 == 0) sb.Append('q');
+                if (CBR2 == 0) sb.Append('k');
+                if (CBR1 == 0) sb.Append('q');
             }
             if (sb.Length == startLen) sb.Append('-');
 
@@ -1878,7 +2000,7 @@ namespace Chess_Project
             {
                 sb.Append(' ');
                 sb.Append((char)('a' + _newColumn));
-                sb.Append(_move == 1 ? (_newRow + 3).ToString() : (_newRow - 1).ToString());
+                sb.Append(Move == 1 ? (_newRow + 3).ToString() : (_newRow - 1).ToString());
             }
             else
             {
@@ -1886,10 +2008,10 @@ namespace Chess_Project
             }
 
             // Halfmove and fullmove
-            sb.Append(' ').Append(_halfmove).Append(' ').Append(_fullmove);
+            sb.Append(' ').Append(Halfmove).Append(' ').Append(Fullmove);
 
-            _fen = sb.ToString();
-            System.Diagnostics.Debug.WriteLine($"\n\nFEN: {_fen}");
+            Fen = sb.ToString();
+            System.Diagnostics.Debug.WriteLine($"\n\nFEN: {Fen}");
 
             // Local helper
             char MapNameToFenAndAccumulate(string name)
@@ -1897,20 +2019,20 @@ namespace Chess_Project
                 // Expect names like "WhitePawn1", "BlackQueen2", etc.
                 if (name.StartsWith("White"))
                 {
-                    if (name.Contains("Pawn")) { _whiteMaterial += 1; return 'P'; }
-                    if (name.Contains("Knight")) { _whiteMaterial += 3; return 'N'; }
-                    if (name.Contains("Bishop")) { _whiteMaterial += 3; return 'B'; }
-                    if (name.Contains("Rook")) { _whiteMaterial += 5; return 'R'; }
-                    if (name.Contains("Queen")) { _whiteMaterial += 9; return 'Q'; }
+                    if (name.Contains("Pawn")) { WhiteMaterial += 1; return 'P'; }
+                    if (name.Contains("Knight")) { WhiteMaterial += 3; return 'N'; }
+                    if (name.Contains("Bishop")) { WhiteMaterial += 3; return 'B'; }
+                    if (name.Contains("Rook")) { WhiteMaterial += 5; return 'R'; }
+                    if (name.Contains("Queen")) { WhiteMaterial += 9; return 'Q'; }
                     if (name.Contains("King")) { return 'K'; }
                 }
                 else if (name.StartsWith("Black"))
                 {
-                    if (name.Contains("Pawn")) { _blackMaterial += 1; return 'p'; }
-                    if (name.Contains("Knight")) { _blackMaterial += 3; return 'n'; }
-                    if (name.Contains("Bishop")) { _blackMaterial += 3; return 'b'; }
-                    if (name.Contains("Rook")) { _blackMaterial += 5; return 'r'; }
-                    if (name.Contains("Queen")) { _blackMaterial += 9; return 'q'; }
+                    if (name.Contains("Pawn")) { BlackMaterial += 1; return 'p'; }
+                    if (name.Contains("Knight")) { BlackMaterial += 3; return 'n'; }
+                    if (name.Contains("Bishop")) { BlackMaterial += 3; return 'b'; }
+                    if (name.Contains("Rook")) { BlackMaterial += 5; return 'r'; }
+                    if (name.Contains("Queen")) { BlackMaterial += 9; return 'q'; }
                     if (name.Contains("King")) { return 'k'; }
                 }
                 return '\0';
@@ -2150,7 +2272,7 @@ namespace Chess_Project
         /// <remarks>✅ Updated on 8/20/2025</remarks>
         private async Task CentralMoveHub()
         {
-            _moving = false;
+            Moving = false;
 
             // Local helper
             async Task SendRobotBitsAsync(bool whiteJustMoved)
@@ -2159,26 +2281,28 @@ namespace Chess_Project
                 // When black just moved: mirror behavior.
                 if (whiteJustMoved)
                 {
-                    if (!string.IsNullOrEmpty(_rcBlackBits))
-                        await _blackRobot.SendDataAsync(_rcBlackBits);
+                    if (!string.IsNullOrEmpty(BlackBits))
+                        await _blackRobot.SendDataAsync(BlackBits);
 
-                    await _whiteRobot.SendDataAsync(_rcWhiteBits);
+                    await _whiteRobot.SendDataAsync(WhiteBits);
                 }
                 else
                 {
-                    if (!string.IsNullOrEmpty(_rcWhiteBits))
-                        await _whiteRobot.SendDataAsync(_rcWhiteBits);
+                    if (!string.IsNullOrEmpty(WhiteBits))
+                        await _whiteRobot.SendDataAsync(WhiteBits);
 
-                    await _blackRobot.SendDataAsync(_rcBlackBits);
+                    await _blackRobot.SendDataAsync(BlackBits);
                 }
             }
 
             // Local helper
-            static void AppendToHistory(ref string history, string bits)
+            static string? AppendToHistory(string history, string bits)
             {
-                if (string.IsNullOrEmpty(bits)) return;
+                if (string.IsNullOrEmpty(bits)) return string.Empty;
                 if (string.IsNullOrEmpty(history)) history = bits;
                 else history += "\n" + bits;
+
+                return history;
             }
 
             // Local helper
@@ -2189,21 +2313,21 @@ namespace Chess_Project
                 MoveInProgRect.Visibility = Visibility.Collapsed;
             }
 
-            if (_robotComm)
+            if (_robotMotion)
             {
                 // Convention in code: _move == 0 means White just moved; _move == 1 means Black just moved
-                await SendRobotBitsAsync(whiteJustMoved: _move == 0);
+                await SendRobotBitsAsync(whiteJustMoved: Move == 0);
                 HideMoveInProgressPopup();
             }
 
             // Accumulate bit history and clear current buffers
-            AppendToHistory(ref _rcPastWhiteBits, _rcWhiteBits);
-            AppendToHistory(ref _rcPastBlackBits, _rcBlackBits);
-            _rcWhiteBits = string.Empty;
-            _rcBlackBits = string.Empty;
+            PrevWhiteBits = AppendToHistory(PrevWhiteBits, WhiteBits);
+            PrevBlackBits = AppendToHistory(PrevBlackBits, BlackBits);
+            WhiteBits = string.Empty;
+            BlackBits = string.Empty;
 
             // Next action / turn routing
-            if (!_isPaused && !_endGame)
+            if (!IsPaused && !EndGame)
             {
                 PauseButton.IsEnabled = true;
 
@@ -2211,8 +2335,8 @@ namespace Chess_Project
                 {
                     // Com vs Com
                     case 1:
-                        _moving = true;
-                        _userTurn = false;
+                        Moving = true;
+                        UserTurn = false;
                         await ComputerMoveAsync();
                         break;
 
@@ -2222,17 +2346,17 @@ namespace Chess_Project
                         bool userIsWhite = string.Equals(userColor, "White", StringComparison.OrdinalIgnoreCase);
 
                         // If it's the computer's turn, we move the CPU
-                        bool cpuToMove = (userIsWhite && _move == 0) || (!userIsWhite && _move == 1);
+                        bool cpuToMove = (userIsWhite && Move == 0) || (!userIsWhite && Move == 1);
 
                         if (cpuToMove)
                         {
-                            _moving = true;
-                            _userTurn = false;
+                            Moving = true;
+                            UserTurn = false;
                             await ComputerMoveAsync();
                         }
                         else
                         {
-                            _userTurn = false;
+                            UserTurn = true;
                             Chess_Board.IsHitTestVisible = true;
 
                             // Enable only the user's color pieces
@@ -2243,10 +2367,10 @@ namespace Chess_Project
 
                     // User vs User
                     default:
-                        _userTurn = true;
+                        UserTurn = true;
                         Chess_Board.IsHitTestVisible = true;
 
-                        bool whiteToMove = (_move == 1);
+                        bool whiteToMove = (Move == 1);
                         EnableImagesWithTag("WhitePiece", whiteToMove);
                         EnableImagesWithTag("BlackPiece", !whiteToMove);
                         break;
@@ -2255,15 +2379,20 @@ namespace Chess_Project
             }
 
             // Paused or End-game paths
-            if (_isPaused && _holdResume)
+            if (IsPaused && HoldResume)
             {
                 _inactivityTimer.Start();
 
-                _holdResume = false;
+                HideMoveInProgressPopup();
+
+                HoldResume = false;
                 Play_Type.IsEnabled = true;
                 ResumeButton.IsEnabled = true;
-                EpsonRCConnection.IsEnabled = true;
-                HideMoveInProgressPopup();
+                EpsonMotion.IsEnabled = true;
+                
+
+                QuitButton.Visibility = Visibility.Visible;
+                QuitButton.IsEnabled = true;
 
                 string? playType = _selectedPlayType?.Content?.ToString();
                 if (string.Equals(playType, "Com Vs. Com", StringComparison.OrdinalIgnoreCase))
@@ -2272,12 +2401,19 @@ namespace Chess_Project
                     UvCorUvU.IsEnabled = true;
             }
 
-            if (_endGame && _robotComm)
+            if (EndGame)
             {
-                await ClearBoard();
-                _whiteRobot.Disconnect();
-                _blackRobot.Disconnect();
+                if (_robotMotion)
+                {
+                    ShowCleanupPopup(true);
+                    await ClearBoard();
+                    ShowCleanupPopup(false);
+                }
+
+                await Task.Delay(10000);
+                NewGameFunnel();
             }
+                
         }
 
         #endregion
@@ -2530,7 +2666,7 @@ namespace Chess_Project
                 BlackCPUElo.IsEnabled = false;
 
                 // Resume or play based on pause state
-                if (!_isPaused)
+                if (!IsPaused)
                     PlayButton.IsEnabled = true;
                 else
                     ResumeButton.IsEnabled = true;
@@ -2589,18 +2725,21 @@ namespace Chess_Project
         /// It prepares the game for autonomous play and ensures the UI reflects the new state.
         /// <para>✅ Verified on 8/22/2025</para>
         /// </remarks>
-        private void InactivityTimer_Tick(object? sender, EventArgs e)
+        private async void InactivityTimer_Tick(object? sender, EventArgs e)
         {
             _inactivityTimer.Stop();
 
-            // Attempt to connect to robots if not already
-            if (!GlobalState.WhiteEpsonConnected || !GlobalState.BlackEpsonConnected) { EpsonRcAsync(EpsonRCConnection, EventArgs.Empty); }
+            // This is good, keep this
+            if (!GlobalState.WhiteEpsonConnected || !GlobalState.BlackEpsonConnected)
+            {
+                await EpsonConnectAsync(EpsonMotion);
+            }
 
             // Start or resume the game
             if (GlobalState.WhiteEpsonConnected && GlobalState.BlackEpsonConnected)
             {
                 // Randomize difficulty and set mode
-                AssignRandomElo();
+                await AssignRandomElo();
                 Play_Type.SelectedIndex = (int)GameMode.ComVsCom;
 
                 // Reset UI state
@@ -2610,7 +2749,7 @@ namespace Chess_Project
                 Elo.SelectedItem = null;
                 Color.SelectedItem = null;
 
-                if (!_isPaused)
+                if (!IsPaused)
                 {
                     ChessLog.LogInformation("Inactivity timeout reached. Starting new game.");
                     SimulateStartClick(PlayButton);
@@ -2650,7 +2789,7 @@ namespace Chess_Project
             bool isWhite = _clickedPawn.Name.StartsWith("White");
 
             // If it's not the player's turn, deselect the pawn and return
-            if ((isWhite && _move == 0) || (!isWhite && _move == 1))
+            if ((isWhite && Move == 0) || (!isWhite && Move == 1))
             {
                 _clickedPawn = null;
                 return;
@@ -2682,7 +2821,7 @@ namespace Chess_Project
             bool isWhite = _clickedKnight.Name.StartsWith("White");
 
             // If it's not the player's turn, deselect the knight and return
-            if ((isWhite && _move == 0) || (!isWhite && _move == 1))
+            if ((isWhite && Move == 0) || (!isWhite && Move == 1))
             {
                 _clickedKnight = null;
                 return;
@@ -2714,7 +2853,7 @@ namespace Chess_Project
             bool isWhite = _clickedBishop.Name.StartsWith("White");
 
             // If it's not the player's turn, deselect the bishop and return
-            if ((isWhite && _move == 0) || (!isWhite && _move == 1))
+            if ((isWhite && Move == 0) || (!isWhite && Move == 1))
             {
                 _clickedBishop = null;
                 return;
@@ -2746,7 +2885,7 @@ namespace Chess_Project
             bool isWhite = _clickedRook.Name.StartsWith("White");
 
             // If it's not the player's turn, deselect the rook and return
-            if ((isWhite && _move == 0) || (!isWhite && _move == 1))
+            if ((isWhite && Move == 0) || (!isWhite && Move == 1))
             {
                 _clickedRook = null;
                 return;
@@ -2778,7 +2917,7 @@ namespace Chess_Project
             bool isWhite = _clickedQueen.Name.StartsWith("White");
 
             // If it's not the player's turn, deselect the queen and return
-            if ((isWhite && _move == 0) || (!isWhite && _move == 1))
+            if ((isWhite && Move == 0) || (!isWhite && Move == 1))
             {
                 _clickedQueen = null;
                 return;
@@ -2810,7 +2949,7 @@ namespace Chess_Project
             bool isWhite = _clickedKing.Name.StartsWith("White");
 
             // If it's not the player's turn, deselect the king and return
-            if ((isWhite && _move == 0) || (!isWhite && _move == 1))
+            if ((isWhite && Move == 0) || (!isWhite && Move == 1))
             {
                 _clickedKing = null;
                 return;
@@ -2857,7 +2996,7 @@ namespace Chess_Project
             {
                 if (ReferenceEquals(selectedPiece, _clickedPawn))
                     return new PawnValidMove.PawnValidation(Chess_Board, this)
-                        .ValidateMove(_oldRow, _oldColumn, _newRow, _newColumn, _move);
+                        .ValidateMove(_oldRow, _oldColumn, _newRow, _newColumn, Move);
 
                 if (ReferenceEquals(selectedPiece, _clickedKnight))
                     return new KnightValidMove.KnightValidation()
@@ -2877,8 +3016,8 @@ namespace Chess_Project
 
                 if (ReferenceEquals(selectedPiece, _clickedKing))
                     return new KingValidMove.KingValidation(Chess_Board, this)
-                        .ValidateMove(_oldRow, _oldColumn, _newRow, _newColumn, _move,
-                                      _cWK, _cBK, _cWR1, _cWR2, _cBR1, _cBR2);
+                        .ValidateMove(_oldRow, _oldColumn, _newRow, _newColumn, Move,
+                                      CWK, CBK, CWR1, CWR2, CBR1, CBR2);
 
                 return false;
             }
@@ -2905,7 +3044,7 @@ namespace Chess_Project
             // Ensure the move does not leave your king in check
             var checkVerification = new CheckVerification(Chess_Board, this);
             bool positionOk = checkVerification.ValidatePosition(
-                _whiteKingRow, _whiteKingColumn, _blackKingRow, _blackKingColumn, _newRow, _newColumn, _move);
+                _whiteKingRow, _whiteKingColumn, _blackKingRow, _blackKingColumn, _newRow, _newColumn, Move);
 
             if (!positionOk)
             {
@@ -2930,7 +3069,7 @@ namespace Chess_Project
             }
 
             Chess_Board.IsHitTestVisible = false;
-            _activePiece = selectedPiece.Name;
+            ActivePiece = selectedPiece.Name;
 
             // Dispatch to the correct move manager
             if (selectedPiece.Name.Contains("Pawn", StringComparison.Ordinal))
@@ -3008,20 +3147,8 @@ namespace Chess_Project
 
             // Stop inactivity timer and indicate attempt
             _inactivityTimer.Stop();
-
-            DisableEpsonElements();
-            if (!GlobalState.WhiteEpsonConnected) { SetEpsonStatusLight(Chess_Project.Color.White, Brushes.Yellow); }
-            if (!GlobalState.BlackEpsonConnected) { SetEpsonStatusLight(Chess_Project.Color.Black, Brushes.Yellow); }
-
-            // Preserve resume/play state
-            StorePlayState();
-
-            // Toggle RobotComm state and attempt communication
-            _robotComm = !_robotComm;
             await EpsonConnectAsync(checkBox);
-
-            // Restore UI
-            EnableEpsonElements();
+            _inactivityTimer.Start();
         }
 
         private async void CognexVisionAsync(object sender, EventArgs e)
@@ -3029,16 +3156,15 @@ namespace Chess_Project
             if (sender is not CheckBox checkBox)
                 return;
 
-            CognexVision.IsChecked = false;
-            CognexVision.IsEnabled = false;
-            if (!GlobalState.WhiteCognexConnected) { SetCognexStatusLight(Chess_Project.Color.White, Brushes.Yellow); }
-            if (!GlobalState.BlackCognexConnected) { SetCognexStatusLight(Chess_Project.Color.Black, Brushes.Yellow); }
+            DisableCognexElements();
+            if (!GlobalState.WhiteCognexConnected) { SetCognexStatusLight(Chess_Project.ChessColor.White, Brushes.Yellow); }
+            if (!GlobalState.BlackCognexConnected) { SetCognexStatusLight(Chess_Project.ChessColor.Black, Brushes.Yellow); }
 
             // Begin animated feedback
             UpdateRectangleClip(65, Visibility.Visible, 75);
 
             // Toggle CameraComm state and attempt communication
-            _cameraComm = !_cameraComm;
+            _cameraVision = !_cameraVision;
             await CognexConnectAsync(checkBox);
 
             CognexVision.IsEnabled = true;
@@ -3098,16 +3224,16 @@ namespace Chess_Project
         /// </list>
         /// <para>✅ Updated on 7/18/2025</para>
         /// </remarks>
-        private void SetEpsonStatusLight(Color color, Brush statusColor)
+        private void SetEpsonStatusLight(ChessColor color, Brush statusColor)
         {
-            if (color == Chess_Project.Color.White) { WhiteEpsonStatus.Fill = statusColor; }
-            if (color == Chess_Project.Color.Black) { BlackEpsonStatus.Fill = statusColor; }
+            if (color == Chess_Project.ChessColor.White) { WhiteEpsonStatus.Fill = statusColor; }
+            if (color == Chess_Project.ChessColor.Black) { BlackEpsonStatus.Fill = statusColor; }
         }
 
-        private void SetCognexStatusLight(Color color, Brush statusColor)
+        private void SetCognexStatusLight(ChessColor color, Brush statusColor)
         {
-            if (color == Chess_Project.Color.White) { WhiteCognexStatus.Fill = statusColor; }
-            if (color == Chess_Project.Color.Black) { BlackCognexStatus.Fill = statusColor; }
+            if (color == Chess_Project.ChessColor.White) { WhiteCognexStatus.Fill = statusColor; }
+            if (color == Chess_Project.ChessColor.Black) { BlackCognexStatus.Fill = statusColor; }
         }
 
         /// <summary>
@@ -3116,8 +3242,8 @@ namespace Chess_Project
         /// <remarks>✅ Updated on 7/18/2025</remarks>
         private void DisableEpsonElements()
         {
-            EpsonRCConnection.IsChecked = false;
-            EpsonRCConnection.IsEnabled = false;
+            EpsonMotion.IsChecked = false;
+            EpsonMotion.IsEnabled = false;
             Play_Type.IsEnabled = false;
 
             TogglePlayTypeUI(false);
@@ -3136,7 +3262,7 @@ namespace Chess_Project
         private void EnableEpsonElements()
         {
             Play_Type.IsEnabled = true;
-            EpsonRCConnection.IsEnabled = true;
+            EpsonMotion.IsEnabled = true;
 
             RestorePlayState();
             TogglePlayTypeUI(true);
@@ -3686,14 +3812,14 @@ namespace Chess_Project
         /// <remarks>✅ Updated on 7/18/2025</remarks>
         private void StorePlayState()
         {
-            if (_isPaused && ResumeButton.IsEnabled)
+            if (IsPaused && ResumeButton.IsEnabled)
             {
-                _wasResumable = true;
+                WasResumable = true;
                 ResumeButton.IsEnabled = false;
             }
             else if (PlayButton.IsEnabled)
             {
-                _wasPlayable = true;
+                WasPlayable = true;
                 PlayButton.IsEnabled = false;
             }
         }
@@ -3705,14 +3831,14 @@ namespace Chess_Project
         /// <remarks>✅ Updated on 7/18/2025</remarks>
         private void RestorePlayState()
         {
-            if (_wasResumable)
+            if (WasResumable)
             {
-                _wasResumable = false;
+                WasResumable = false;
                 ResumeButton.IsEnabled = true;
             }
-            else if (_wasPlayable)
+            else if (WasPlayable)
             {
-                _wasPlayable = false;
+                WasPlayable = false;
                 PlayButton.IsEnabled = true;
             }
         }
@@ -3724,7 +3850,7 @@ namespace Chess_Project
         /// <remarks>✅ Updated on 7/18/2025</remarks>
         private void TogglePlayButtons(bool canPlay)
         {
-            if (_isPaused)
+            if (IsPaused)
                 ResumeButton.IsEnabled = canPlay;
             else
                 PlayButton.IsEnabled = canPlay;
@@ -3757,18 +3883,6 @@ namespace Chess_Project
         }
 
         /// <summary>
-        /// Resets captured piece counters to initial values.
-        /// </summary>
-        /// <remarks>✅ Written on 7/18/2025</remarks>
-        private void ResetCapturedPieceCounts()
-        {
-            _numWQ = 2; _numBQ = 2;
-            _numWN = 3; _numBN = 3;
-            _numWR = 3; _numBR = 3;
-            _numWB = 3; _numBB = 3;
-        }
-
-        /// <summary>
         /// Enables all visible chess pieces for gameplay.
         /// </summary>
         /// <remarks>✅ Written on 7/18/2025</remarks>
@@ -3789,11 +3903,8 @@ namespace Chess_Project
         /// temporarily unsubscribing event handlers to prevent unnecessary triggers.
         /// </summary>
         /// <remarks>✅ Updated on 6/11/2025</remarks>
-        private void AssignRandomElo()
+        private Task AssignRandomElo()
         {
-            if (WhiteCPUElo.Items.Count == 0 || BlackCPUElo.Items.Count == 0)
-                return;
-
             // Temporarily unsubscribe to prevent triggering logic during changes
             WhiteCPUElo.SelectionChanged -= CheckDropdownSelections;
             BlackCPUElo.SelectionChanged -= CheckDropdownSelections;
@@ -3802,9 +3913,15 @@ namespace Chess_Project
             WhiteCPUElo.SelectedIndex = rng.Next(WhiteCPUElo.Items.Count);
             BlackCPUElo.SelectedIndex = rng.Next(BlackCPUElo.Items.Count);
 
+            // Manually update the cached fields since the handler didn’t run
+            _selectedWhiteElo = (ComboBoxItem?)WhiteCPUElo.SelectedItem;
+            _selectedBlackElo = (ComboBoxItem?)BlackCPUElo.SelectedItem;
+
             // Re-subscribe after assignments
             WhiteCPUElo.SelectionChanged += CheckDropdownSelections;
             BlackCPUElo.SelectionChanged += CheckDropdownSelections;
+
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -3906,193 +4023,193 @@ namespace Chess_Project
             int rank1 = 8 - _oldRow;
             int rank2 = 8 - _newRow;
 
-            _pickBit1 = SquareToBitIndex(file1, rank1);
-            _pickBit2 = SquareToBitIndex(file2, rank2);
-            _placeBit1 = SquareToBitIndex(file2, rank2) + 64;
+            PickBit1 = SquareToBitIndex(file1, rank1);
+            PickBit2 = SquareToBitIndex(file2, rank2);
+            PlaceBit1 = SquareToBitIndex(file2, rank2) + 64;
 
             // Captures / En Passant
-            if (_capture || _enPassant)
+            if (Capture || EnPassant)
             {
                 // Map taken piece to its off-board place bit
-                if (_takenPiece.Contains("Pawn"))
+                if (TakenPiece.Contains("Pawn"))
                 {
-                    int pawnNumber = ParseDigitAt(_takenPiece, 9) - 1;
-                    _placeBit2 = _pawnPlace[pawnNumber];
+                    int pawnNumber = ParseDigitAt(TakenPiece, 9) - 1;
+                    PlaceBit2 = _pawnPlace[pawnNumber];
                 }
-                else if (_takenPiece.Contains("Knight"))
+                else if (TakenPiece.Contains("Knight"))
                 {
-                    int knightNumber = ParseDigitAt(_takenPiece, 11) - 1;
-                    _placeBit2 = _knightPlace[knightNumber];
+                    int knightNumber = ParseDigitAt(TakenPiece, 11) - 1;
+                    PlaceBit2 = _knightPlace[knightNumber];
                 }
-                else if (_takenPiece.Contains("Bishop"))
+                else if (TakenPiece.Contains("Bishop"))
                 {
-                    int bishopNumber = ParseDigitAt(_takenPiece, 11) - 1;
-                    _placeBit2 = _bishopPlace[bishopNumber];
+                    int bishopNumber = ParseDigitAt(TakenPiece, 11) - 1;
+                    PlaceBit2 = _bishopPlace[bishopNumber];
                 }
-                else if (_takenPiece.Contains("Rook"))
+                else if (TakenPiece.Contains("Rook"))
                 {
-                    int rookNumber = ParseDigitAt(_takenPiece, 9) - 1;
-                    _placeBit2 = _rookPlace[rookNumber];
+                    int rookNumber = ParseDigitAt(TakenPiece, 9) - 1;
+                    PlaceBit2 = _rookPlace[rookNumber];
                 }
-                else if (_takenPiece.Contains("Queen"))
+                else if (TakenPiece.Contains("Queen"))
                 {
-                    int queenNumber = ParseDigitAt(_takenPiece, 10) - 1;
-                    _placeBit2 = _queenPlace[queenNumber];
+                    int queenNumber = ParseDigitAt(TakenPiece, 10) - 1;
+                    PlaceBit2 = _queenPlace[queenNumber];
                 }
 
-                if (_move == 0)  // White just moved
+                if (Move == 0)  // White just moved
                 {
-                    _rcWhiteBits = $"{_pickBit1}, {_placeBit1}";
-                    _rcBlackBits = $"{_pickBit2}, {_placeBit2}";
+                    WhiteBits = $"{PickBit1}, {PlaceBit1}";
+                    BlackBits = $"{PickBit2}, {PlaceBit2}";
                 }
                 else  // Black just moved
                 {
-                    _rcWhiteBits = $"{_pickBit2}, {_placeBit2}";
-                    _rcBlackBits = $"{_pickBit1}, {_placeBit1}";
+                    WhiteBits = $"{PickBit2}, {PlaceBit2}";
+                    BlackBits = $"{PickBit1}, {PlaceBit1}";
                 }
 
                 // En Passant adjustment
-                if (_enPassant)
+                if (EnPassant)
                 {
-                    if (_move == 0)  // White just moved
+                    if (Move == 0)  // White just moved
                     {
-                        _rcWhiteBits = $"{_pickBit1}, {_placeBit1}";
-                        _rcBlackBits = $"{_pickBit2 - 8}, {_placeBit2}";
+                        WhiteBits = $"{PickBit1}, {PlaceBit1}";
+                        BlackBits = $"{PickBit2 - 8}, {PlaceBit2}";
                     }
 
                     else  // Black just moved
                     {
-                        _rcWhiteBits = $"{_pickBit2 + 8}, {_placeBit2}";
-                        _rcBlackBits = $"{_pickBit1}, {_placeBit1}";
+                        WhiteBits = $"{PickBit2 + 8}, {PlaceBit2}";
+                        BlackBits = $"{PickBit1}, {PlaceBit1}";
                     }
                 }
             }
             else
             {
                 // Non-capture move
-                if (_move == 0)
-                    _rcWhiteBits = $"{_pickBit1}, {_placeBit1}";
+                if (Move == 0)
+                    WhiteBits = $"{PickBit1}, {PlaceBit1}";
                 else
-                    _rcBlackBits = $"{_pickBit1}, {_placeBit1}";
+                    BlackBits = $"{PickBit1}, {PlaceBit1}";
             }
 
             // Promotion
-            if (_promoted)
+            if (Promoted)
             {
-                _endPosition = $"{_endPosition}{_promotionPiece}";
+                _endPosition = $"{_endPosition}{PromotionPiece}";
 
                 // Off-board place bit for the pawn that left the board
                 {
-                    int pawnNumber = ParseDigitAt(_promotedPawn, 9) - 1;
-                    _placeBit2 = _pawnPlace[pawnNumber];
+                    int pawnNumber = ParseDigitAt(PromotedPawn, 9) - 1;
+                    PlaceBit2 = _pawnPlace[pawnNumber];
                 }
 
                 // Pick bit for the promoted piece type (from off-board location)
-                if (_promotionPiece == 'k')
+                if (PromotionPiece == 'k')
                 {
-                    int knightNumber = ParseDigitAt(_activePiece, 11) - 1;
-                    _promotedTo = "Q";
-                    _pickBit3 = _knightPick[knightNumber];
+                    int knightNumber = ParseDigitAt(ActivePiece, 11) - 1;
+                    PromotedTo = "Q";
+                    PickBit3 = _knightPick[knightNumber];
                 }
-                else if (_promotionPiece == 'b')
+                else if (PromotionPiece == 'b')
                 {
-                    int bishopNumber = ParseDigitAt(_activePiece, 11) - 1;
-                    _promotedTo = "B";
-                    _pickBit3 = _bishopPick[bishopNumber];
+                    int bishopNumber = ParseDigitAt(ActivePiece, 11) - 1;
+                    PromotedTo = "B";
+                    PickBit3 = _bishopPick[bishopNumber];
                 }
-                else if (_promotionPiece == 'r')
+                else if (PromotionPiece == 'r')
                 {
-                    int rookNumber = ParseDigitAt(_activePiece, 9) - 1;
-                    _promotedTo = "R";
-                    _pickBit3 = _rookPick[rookNumber];
+                    int rookNumber = ParseDigitAt(ActivePiece, 9) - 1;
+                    PromotedTo = "R";
+                    PickBit3 = _rookPick[rookNumber];
                 }
-                else if (_promotionPiece == 'q')
+                else if (PromotionPiece == 'q')
                 {
-                    int queenNumber = ParseDigitAt(_activePiece, 10) - 1;
-                    _promotedTo = "Q";
-                    _pickBit3 = _queenPick[queenNumber];
+                    int queenNumber = ParseDigitAt(ActivePiece, 10) - 1;
+                    PromotedTo = "Q";
+                    PickBit3 = _queenPick[queenNumber];
                 }
 
-                if (_capture)
+                if (Capture)
                 {
                     // Off-board place bit for the captured (non-pawn) piece
-                    if (_takenPiece.Contains("Knight"))
+                    if (TakenPiece.Contains("Knight"))
                     {
-                        int knightNumber = ParseDigitAt(_takenPiece, 11) - 1;
-                        _placeBit3 = _knightPlace[knightNumber];
+                        int knightNumber = ParseDigitAt(TakenPiece, 11) - 1;
+                        PlaceBit3 = _knightPlace[knightNumber];
                     }
-                    else if (_takenPiece.Contains("Bishop"))
+                    else if (TakenPiece.Contains("Bishop"))
                     {
-                        int bishopNumber = ParseDigitAt(_takenPiece, 11) - 1;
-                        _placeBit3 = _bishopPlace[bishopNumber];
+                        int bishopNumber = ParseDigitAt(TakenPiece, 11) - 1;
+                        PlaceBit3 = _bishopPlace[bishopNumber];
                     }
-                    else if (_takenPiece.Contains("Rook"))
+                    else if (TakenPiece.Contains("Rook"))
                     {
-                        int rookNumber = ParseDigitAt(_takenPiece, 9) - 1;
-                        _placeBit3 = _rookPlace[rookNumber];
+                        int rookNumber = ParseDigitAt(TakenPiece, 9) - 1;
+                        PlaceBit3 = _rookPlace[rookNumber];
                     }
-                    else if (_takenPiece.Contains("Queen"))
+                    else if (TakenPiece.Contains("Queen"))
                     {
-                        int queenNumber = ParseDigitAt(_takenPiece, 10) - 1;
-                        _placeBit3 = _queenPlace[queenNumber];
+                        int queenNumber = ParseDigitAt(TakenPiece, 10) - 1;
+                        PlaceBit3 = _queenPlace[queenNumber];
                     }
 
-                    if (_move == 0)  // White just moved
+                    if (Move == 0)  // White just moved
                     {
-                        _rcWhiteBits = $"{_pickBit1}, {_placeBit2}, {_pickBit3}, {_placeBit1}";
-                        _rcBlackBits = $"{_pickBit2}, {_placeBit3}";
+                        WhiteBits = $"{PickBit1}, {PlaceBit2}, {PickBit3}, {PlaceBit1}";
+                        BlackBits = $"{PickBit2}, {PlaceBit3}";
                     }
                     else  // Black just moved
                     {
-                        _rcWhiteBits = $"{_pickBit2}, {_placeBit3}";
-                        _rcBlackBits = $"{_pickBit1}, {_placeBit2}, {_pickBit3}, {_placeBit1}";
+                        WhiteBits = $"{PickBit2}, {PlaceBit3}";
+                        BlackBits = $"{PickBit1}, {PlaceBit2}, {PickBit3}, {PlaceBit1}";
                     }
                 }
                 else
                 {
-                    if (_move == 0)  // White just moved
-                        _rcWhiteBits = $"{_pickBit1}, {_placeBit2}, {_pickBit3}, {_placeBit1}";
+                    if (Move == 0)  // White just moved
+                        WhiteBits = $"{PickBit1}, {PlaceBit2}, {PickBit3}, {PlaceBit1}";
                     else  // Black just moved
-                        _rcBlackBits = $"{_pickBit1}, {_placeBit2}, {_pickBit3}, {_placeBit1}";
+                        BlackBits = $"{PickBit1}, {PlaceBit2}, {PickBit3}, {PlaceBit1}";
                 }
             }
 
             // Castling bit patterns
-            if (_kingCastle)
+            if (KingCastle)
             {
-                if (_move == 0) // White just moved
+                if (Move == 0) // White just moved
                 {
                     _startPosition = "e1";
                     _endPosition = "g1";
-                    _rcWhiteBits = "4, 70, 7, 69";
+                    WhiteBits = "4, 70, 7, 69";
                 }
                 else            // Black just moved
                 {
                     _startPosition = "e8";
                     _endPosition = "g8";
-                    _rcBlackBits = "60, 126, 63, 125";
+                    BlackBits = "60, 126, 63, 125";
                 }
             }
-            else if (_queenCastle)
+            else if (QueenCastle)
             {
-                if (_move == 0) // White just moved
+                if (Move == 0) // White just moved
                 {
                     _startPosition = "e1";
                     _endPosition = "c1";
-                    _rcWhiteBits = "4, 66, 0, 67";
+                    WhiteBits = "4, 66, 0, 67";
                 }
                 else            // Black just moved
                 {
                     _startPosition = "e8";
                     _endPosition = "c8";
-                    _rcBlackBits = "60, 122, 56, 123";
+                    BlackBits = "60, 122, 56, 123";
                 }
             }
 
             // Compose move, PGN, sound
             _executedMove = $"{_startPosition}{_endPosition}";
-            string checkModifier = await StockfishCheckAnalysisAsync(_fen, _stockfishPath!);
-            _pgnMove = UCItoPGNConverter.Convert(_previousFen, _executedMove, _kingCastle, _queenCastle, _enPassant, _promoted, _promotedTo, checkModifier);
+            string checkModifier = await StockfishCheckAnalysisAsync(Fen, _stockfishPath!);
+            _pgnMove = UCItoPGNConverter.Convert(PreviousFen, _executedMove, KingCastle, QueenCastle, EnPassant, Promoted, PromotedTo, checkModifier);
 
             if (_pieceSounds)
             {
@@ -4103,8 +4220,8 @@ namespace Chess_Project
                     _pgnMove.Contains('x') ? "PieceCapture" :
                     _pgnMove.Contains('-') ? "PieceCastle" :
                     (_mode == 1 || (_mode == 2 &&
-                        ((_selectedColor.Content.ToString() == "White" && _move == 0) ||
-                        (_selectedColor.Content.ToString() == "Black" && _move == 1))))
+                        ((_selectedColor.Content.ToString() == "White" && Move == 0) ||
+                        (_selectedColor.Content.ToString() == "Black" && Move == 1))))
                         ? "PieceOpponent"
                         : "PieceMove";
 
@@ -4114,29 +4231,29 @@ namespace Chess_Project
         finalize_and_log:
 
             // Reset transient flags (exact same set/order)
-            _capture = false;
+            Capture = false;
             _capturedPiece = null;
-            _enPassantCreated = false;
-            _enPassant = false;
-            _promoted = false;
-            _kingCastle = false;
-            _queenCastle = false;
+            EnPassantCreated = false;
+            EnPassant = false;
+            Promoted = false;
+            KingCastle = false;
+            QueenCastle = false;
 
             // Append line to FEN log file
-            writer.WriteLine($"\nMove Played: {_pgnMove}   Resulting Position: {_fen}");
+            writer.WriteLine($"\nMove Played: {_pgnMove}   Resulting Position: {Fen}");
 
             // Track threefold repetition
-            string[] fenParts = _fen.Split(' ');
+            string[] fenParts = Fen.Split(' ');
             string currentFEN = $"{fenParts[0]} {fenParts[1]};";
-            _gameFens.Add(currentFEN);
+            GameFens.Add(currentFEN);
 
-            var fenCounts = _gameFens
+            var fenCounts = GameFens
                 .Select(f => f[..f.LastIndexOf(';')])
                 .GroupBy(f => f)
                 .ToDictionary(g => g.Key, g => g.Count());
 
             if (fenCounts.Any(p => p.Value >= 3))
-                _threefoldRepetition = true;
+                ThreefoldRepetition = true;
 
             // Update the evaluation interface move table (unchanged)
             System.Windows.Media.Color borderColor = (System.Windows.Media.Color)ColorConverter.ConvertFromString("#FFD0D0D0");
@@ -4154,7 +4271,7 @@ namespace Chess_Project
 
             TextBlock newMoveNumber = new()
             {
-                Text = $"{_fullmove}.",
+                Text = $"{Fullmove}.",
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
                 Foreground = borderBrush,
@@ -4188,13 +4305,13 @@ namespace Chess_Project
                 Padding = new Thickness(10, 0, 0, 0),
             };
 
-            if (_move == 0)
+            if (Move == 0)
             {
-                Grid.SetRow(newBorder, _fullmove);
+                Grid.SetRow(newBorder, Fullmove);
                 Grid.SetColumnSpan(newBorder, 3);
-                Grid.SetRow(newMoveNumber, _fullmove);
+                Grid.SetRow(newMoveNumber, Fullmove);
                 Grid.SetColumn(newMoveNumber, 0);
-                Grid.SetRow(newWhiteMove, _fullmove);
+                Grid.SetRow(newWhiteMove, Fullmove);
                 Grid.SetColumn(newWhiteMove, 1);
 
                 Moves.RowDefinitions.Add(newRowDefinition);
@@ -4202,11 +4319,11 @@ namespace Chess_Project
                 Moves.Children.Add(newMoveNumber);
                 Moves.Children.Add(newWhiteMove);
 
-                File.AppendAllText(_pgnFilePath, $"{_fullmove}. {_pgnMove} ");
+                File.AppendAllText(_pgnFilePath, $"{Fullmove}. {_pgnMove} ");
             }
             else
             {
-                Grid.SetRow(newBlackMove, _fullmove - 1);
+                Grid.SetRow(newBlackMove, Fullmove - 1);
                 Grid.SetColumn(newBlackMove, 2);
 
                 Moves.Children.Add(newBlackMove);
@@ -4227,17 +4344,24 @@ namespace Chess_Project
         /// <summary>
         /// Attempts communication and updates Epson RC+ connection setting in the "Preferences" file.
         /// </summary>
-        /// <param name="sender">The sender object triggering the connection attempt.</param>
+        /// <param name="checkBox">The sender object triggering the connection attempt.</param>
         /// <returns>An asynchronous task representing the connection attempt.</returns>
         private async Task EpsonConnectAsync(object sender)  // ✅
         {
-            // Ensure sender is a CheckBox
             if (sender is not CheckBox checkBox)
-            {
-                if (!GlobalState.WhiteEpsonConnected) { SetEpsonStatusLight(Chess_Project.Color.White, Brushes.Red); }
-                if (!GlobalState.BlackEpsonConnected) { SetEpsonStatusLight(Chess_Project.Color.Black, Brushes.Red); }
-            }
-            else if (checkBox.IsChecked.HasValue && _robotComm)  // If user is trying to connect to Epson robots
+                return;
+
+            DisableEpsonElements();
+            if (!GlobalState.WhiteEpsonConnected) { SetEpsonStatusLight(ChessColor.White, Brushes.Yellow); }
+            if (!GlobalState.BlackEpsonConnected) { SetEpsonStatusLight(ChessColor.Black, Brushes.Yellow); }
+
+            // Preserve resume/play state
+            StorePlayState();
+
+            // Toggle RobotComm state and attempt communication
+            _robotMotion = !_robotMotion;
+
+            if (checkBox.IsChecked.HasValue && _robotMotion)  // If user is trying to connect to Epson robots
             {
                 // Begin animated feedback
                 UpdateRectangleClip(65, Visibility.Visible, 75);
@@ -4248,38 +4372,34 @@ namespace Chess_Project
 
                 if (GlobalState.WhiteEpsonConnected && GlobalState.BlackEpsonConnected)  // Successfully connected to both Epson robots
                 {
-                    _preferences.EpsonRC = _robotComm = true;
+                    _preferences.EpsonMotion = _robotMotion = true;
                     PreferencesManager.Save(_preferences);
 
                     checkBox.IsChecked = true;
-                    SetEpsonStatusLight(Chess_Project.Color.White, Brushes.Green);
-                    SetEpsonStatusLight(Chess_Project.Color.Black, Brushes.Green);
+                    SetEpsonStatusLight(ChessColor.White, Brushes.Green);
+                    SetEpsonStatusLight(ChessColor.Black, Brushes.Green);
 
                     UpdateRectangleClip(50, Visibility.Collapsed, 60);
 
-                    InfoSymbol.Visibility = Visibility.Visible;
-                    SetupText.Visibility = Visibility.Visible;
-                    MoveInProgRect.Visibility = Visibility.Visible;
-
-                    if (!_boardSet)
+                    if (!BoardSet)
+                    {
+                        ShowSetupPopup(true);
                         await SetupBoard();
-
-                    InfoSymbol.Visibility = Visibility.Collapsed;
-                    SetupText.Visibility = Visibility.Collapsed;
-                    MoveInProgRect.Visibility = Visibility.Collapsed;
+                        ShowSetupPopup(false);
+                    }
 
                     // Process any prior moves before proceeding
-                    if (!string.IsNullOrEmpty(_rcPastWhiteBits))
+                    if (!string.IsNullOrEmpty(PrevWhiteBits))
                     {
                         ShowMoveInProgressPopup(true);
 
-                        string[] whiteBitLines = _rcPastWhiteBits.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+                        string[] whiteBitLines = PrevWhiteBits.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
                         foreach (var line in whiteBitLines)
                             await _whiteRobot.SendDataAsync(line);
 
-                        if (!string.IsNullOrEmpty(_rcPastBlackBits))
+                        if (!string.IsNullOrEmpty(PrevBlackBits))
                         {
-                            string[] blackBitLines = _rcPastWhiteBits.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+                            string[] blackBitLines = PrevWhiteBits.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
                             foreach (var line in blackBitLines)
                                 await _blackRobot.SendDataAsync(line);
                         }
@@ -4289,24 +4409,24 @@ namespace Chess_Project
                 }
                 else
                 {
-                    _preferences.EpsonRC = _robotComm = false;
+                    _preferences.EpsonMotion = _robotMotion = false;
                     PreferencesManager.Save(_preferences);
 
                     checkBox.IsChecked = false;
-                    if (!GlobalState.WhiteEpsonConnected) { SetEpsonStatusLight(Chess_Project.Color.White, Brushes.Red); }
-                    if (!GlobalState.BlackEpsonConnected) { SetEpsonStatusLight(Chess_Project.Color.Black, Brushes.Red); }
+                    if (!GlobalState.WhiteEpsonConnected) { SetEpsonStatusLight(ChessColor.White, Brushes.Red); }
+                    if (!GlobalState.BlackEpsonConnected) { SetEpsonStatusLight(ChessColor.Black, Brushes.Red); }
 
                     UpdateRectangleClip(50, Visibility.Collapsed, 60);
                 }
             }
             else
             {
-                _preferences.EpsonRC = _robotComm = false;
+                _preferences.EpsonMotion = _robotMotion = false;
                 PreferencesManager.Save(_preferences);
 
                 checkBox.IsChecked = false;
-                SetEpsonStatusLight(Chess_Project.Color.White, Brushes.Red);
-                SetEpsonStatusLight(Chess_Project.Color.Black, Brushes.Red);
+                SetEpsonStatusLight(Chess_Project.ChessColor.White, Brushes.Red);
+                SetEpsonStatusLight(Chess_Project.ChessColor.Black, Brushes.Red);
 
                 if (_mode != 0)  // Cleanup process if necessary
                 {
@@ -4319,9 +4439,11 @@ namespace Chess_Project
                 _blackRobot.Disconnect();
             }
 
-            // Restart inactivity timer
-            EpsonRCConnection.IsEnabled = true;
-            _inactivityTimer.Start();
+
+            // Restore UI
+            EnableEpsonElements();
+
+            EpsonMotion.IsEnabled = true;
         }
 
         private async Task CognexConnectAsync(object sender)
@@ -4329,10 +4451,10 @@ namespace Chess_Project
             // Ensure sender is a CheckBox
             if (sender is not CheckBox checkBox)
             {
-                if (!GlobalState.WhiteCognexConnected) { SetCognexStatusLight(Chess_Project.Color.White, Brushes.Red); }
-                if (!GlobalState.BlackCognexConnected) { SetCognexStatusLight(Chess_Project.Color.Black, Brushes.Red); }
+                if (!GlobalState.WhiteCognexConnected) { SetCognexStatusLight(Chess_Project.ChessColor.White, Brushes.Red); }
+                if (!GlobalState.BlackCognexConnected) { SetCognexStatusLight(Chess_Project.ChessColor.Black, Brushes.Red); }
             }
-            else if (checkBox.IsChecked.HasValue && _cameraComm)
+            else if (checkBox.IsChecked.HasValue && _cameraVision)
             {
                 // Begin animated feedback
                 UpdateRectangleClip(65, Visibility.Visible, 75);
@@ -4343,35 +4465,35 @@ namespace Chess_Project
 
                 if (GlobalState.WhiteCognexConnected && GlobalState.BlackCognexConnected)  // Successfully connected to both Cognex cameras
                 {
-                    _preferences.CognexVision = _cameraComm = true;
+                    _preferences.CognexVision = _cameraVision = true;
                     PreferencesManager.Save(_preferences);
 
                     checkBox.IsChecked = true;
-                    SetCognexStatusLight(Chess_Project.Color.White, Brushes.Green);
-                    SetCognexStatusLight(Chess_Project.Color.Black, Brushes.Green);
+                    SetCognexStatusLight(Chess_Project.ChessColor.White, Brushes.Green);
+                    SetCognexStatusLight(Chess_Project.ChessColor.Black, Brushes.Green);
 
                     UpdateRectangleClip(50, Visibility.Collapsed, 60);
                 }
                 else
                 {
-                    _preferences.CognexVision = _cameraComm = false;
+                    _preferences.CognexVision = _cameraVision = false;
                     PreferencesManager.Save(_preferences);
 
                     checkBox.IsChecked = false;
-                    if (!GlobalState.WhiteCognexConnected) { SetCognexStatusLight(Chess_Project.Color.White, Brushes.Red); }
-                    if (!GlobalState.BlackCognexConnected) { SetCognexStatusLight(Chess_Project.Color.Black, Brushes.Red); }
+                    if (!GlobalState.WhiteCognexConnected) { SetCognexStatusLight(Chess_Project.ChessColor.White, Brushes.Red); }
+                    if (!GlobalState.BlackCognexConnected) { SetCognexStatusLight(Chess_Project.ChessColor.Black, Brushes.Red); }
 
                     UpdateRectangleClip(50, Visibility.Collapsed, 60);
                 }
             }
             else
             {
-                _preferences.CognexVision = _cameraComm = false;
+                _preferences.CognexVision = _cameraVision = false;
                 PreferencesManager.Save(_preferences);
 
                 checkBox.IsChecked = false;
-                SetCognexStatusLight(Chess_Project.Color.White, Brushes.Red);
-                SetCognexStatusLight(Chess_Project.Color.Black, Brushes.Red);
+                SetCognexStatusLight(Chess_Project.ChessColor.White, Brushes.Red);
+                SetCognexStatusLight(Chess_Project.ChessColor.Black, Brushes.Red);
 
                 _whiteCognex.Disconnect();
                 _blackCognex.Disconnect();
@@ -4396,7 +4518,7 @@ namespace Chess_Project
             if (isUserVsUserOrCom)
             {
                 UvCorUvU.Visibility = Visibility.Visible;
-                if (!_moving)
+                if (!Moving)
                 {
                     UvCorUvU.IsEnabled = true;
                     Play_Type.IsEnabled = true;
@@ -4405,28 +4527,31 @@ namespace Chess_Project
             else
             {
                 CvC.Visibility = Visibility.Visible;
-                if (!_moving)
+                if (!Moving)
                 {
                     CvC.IsEnabled = true;
                     Play_Type.IsEnabled = true;
                 }
             }
 
-            _isPaused = true;
+            IsPaused = true;
             PauseButton.IsEnabled = false;
-
-            if (!_moving)   // If CPU is not currently moving
+            
+            if (!Moving)   // If CPU is not currently moving
             {
                 _inactivityTimer.Start();
                 ResumeButton.IsEnabled = true;
-                EpsonRCConnection.IsEnabled = true;   // Enables user to attempt communication with Epson
+                EpsonMotion.IsEnabled = true;   // Enables user to attempt communication with Epson
+
+                QuitButton.Visibility = Visibility.Visible;
+                QuitButton.IsEnabled = true;
             }
             else   // CPU is currently moving
             {
                 ShowMoveInProgressPopup(true);
                 Play_Type.IsEnabled = false;
                 ResumeButton.IsEnabled = false;
-                _holdResume = true;
+                HoldResume = true;
             }
 
             // Enable relevant settings based on game mode
@@ -4452,7 +4577,7 @@ namespace Chess_Project
         /// <summary>
         /// Resumes the paused game and restores the game state.
         /// </summary>
-        private void Resume(object sender, EventArgs e)  // ✅
+        private async void Resume(object sender, EventArgs e)  // ✅
         {
             _inactivityTimer.Stop();
 
@@ -4467,10 +4592,13 @@ namespace Chess_Project
             CvC.Visibility = Visibility.Collapsed;
             CvC.IsEnabled = false;
 
-            _isPaused = false;
+            IsPaused = false;
             PauseButton.IsEnabled = true;
             ResumeButton.IsEnabled = false;
-            EpsonRCConnection.IsEnabled = false;
+            EpsonMotion.IsEnabled = false;
+
+            QuitButton.Visibility = Visibility.Collapsed;
+            QuitButton.IsEnabled = false;
 
             EnableImagesWithTag("WhitePiece", true);
             EnableImagesWithTag("BlackPiece", true);
@@ -4478,14 +4606,14 @@ namespace Chess_Project
             if (_selectedPlayType.Content.ToString() == "Com Vs. Com")
             {
                 _mode = 1;
-                _moving = true;
-                _userTurn = false;
+                Moving = true;
+                UserTurn = false;
                 Chess_Board.IsHitTestVisible = false;
 
                 //SetEloValues(selectedWhiteElo.Content.ToString(), true);
                 //SetEloValues(selectedBlackElo.Content.ToString(), false);
 
-                ComputerMoveAsync();
+                await ComputerMoveAsync();
             }
             else if (_selectedPlayType.Content.ToString() == "User Vs. Com")
             {
@@ -4502,24 +4630,24 @@ namespace Chess_Project
                 }
 
                 // If it's the computer's turn, make a move
-                if ((_move == 1 && _selectedColor.Content.ToString() == "Black") ||
-                    (_move == 0 && _selectedColor.Content.ToString() == "White"))
+                if ((Move == 1 && _selectedColor.Content.ToString() == "Black") ||
+                    (Move == 0 && _selectedColor.Content.ToString() == "White"))
                 {
-                    _moving = true;
-                    _userTurn = false;
+                    Moving = true;
+                    UserTurn = false;
                     Chess_Board.IsHitTestVisible = false;
-                    ComputerMoveAsync();
+                    await ComputerMoveAsync();
                 }
                 else
                 {
-                    _userTurn = true;
+                    UserTurn = true;
                     Chess_Board.IsHitTestVisible = true;
                 }
             }
             else
             {
                 _mode = 3;
-                _userTurn = true;
+                UserTurn = true;
                 Chess_Board.IsHitTestVisible = true;
             }
         }
@@ -4541,8 +4669,8 @@ namespace Chess_Project
             const double EvalBarCornerRadius = 2;  // Corner radius of evaluation bar
             const double AnimationDuration = 1.5;
 
-            WhiteAdvantage.Text = _displayedAdvantage;
-            BlackAdvantage.Text = _displayedAdvantage;
+            WhiteAdvantage.Text = DisplayedAdvantage;
+            BlackAdvantage.Text = DisplayedAdvantage;
 
             // Find the pixel width between the left edge of the screen and the right edge of the board with the buffer applied.
             double availableWidth = (Screen.ActualWidth / 2) - (Board.ActualWidth / 2) - (2 * ExternalHorizontalMargin);
@@ -4571,7 +4699,7 @@ namespace Chess_Project
             PlayedMoves.Margin = new Thickness(InternalVerticalMargin, -EvalBar.Height + 30, 0, 0);
 
             // Flip the evaluation perspective if the board is flipped
-            bool whiteIsWinning = (_flip == 0) ? (_quantifiedEvaluation <= 10) : (_quantifiedEvaluation > 10);
+            bool whiteIsWinning = (_flip == 0) ? (QuantifiedEvaluation <= 10) : (QuantifiedEvaluation > 10);
 
             if (whiteIsWinning)
             {
@@ -4593,7 +4721,7 @@ namespace Chess_Project
 
             // Compute animation height, flipping evaluation for the bar height
             double oldHeight = double.IsNaN(AdvantageGauge.Height) ? EvalBar.Height / 2 : AdvantageGauge.Height;
-            double newHeight = (EvalBar.Height / 20) * (_flip == 0 ? _quantifiedEvaluation : (20 - _quantifiedEvaluation));
+            double newHeight = (EvalBar.Height / 20) * (_flip == 0 ? QuantifiedEvaluation : (20 - QuantifiedEvaluation));
 
             DoubleAnimation animation = new()
             {
@@ -4640,10 +4768,10 @@ namespace Chess_Project
 
             if (move == 1)
             {
-                _promoted = true;
-                _promotedPawn = activePawn.Name;
+                Promoted = true;
+                PromotedPawn = activePawn.Name;
 
-                if (_userTurn)
+                if (UserTurn)
                 {
                     Promotion promotion = new(imagePaths);
                     promotion.WhiteQueen.Visibility = Visibility.Visible;
@@ -4663,96 +4791,96 @@ namespace Chess_Project
                     if (_clickedButtonName.StartsWith("Rook"))  // If user promoted to a rook
                     {
                         _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[0]));
-                        _clickedPawn.Name = $"WhiteRook{_numWR}";
+                        _clickedPawn.Name = $"WhiteRook{NumWR}";
                         _clickedPawn.MouseUp -= ChessPawn_Click;
                         _clickedPawn.MouseUp += ChessRook_Click;
 
-                        _promotionPiece = 'r';
-                        _numWR++;
+                        PromotionPiece = 'r';
+                        NumWR++;
                     }
                     else if (_clickedButtonName.StartsWith("Knight"))  // If user promoted to a knight
                     {
                         _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[2]));
-                        _clickedPawn.Name = $"WhiteKnight{_numWN}";
+                        _clickedPawn.Name = $"WhiteKnight{NumWN}";
                         _clickedPawn.MouseUp -= ChessPawn_Click;
                         _clickedPawn.MouseUp += ChessKnight_Click;
 
-                        _promotionPiece = 'n';
-                        _numWN++;
+                        PromotionPiece = 'n';
+                        NumWN++;
                     }
                     else if (_clickedButtonName.StartsWith("Bishop"))  // If user promoted to a bishop
                     {
                         _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[4]));
-                        _clickedPawn.Name = $"WhiteBishop{_numWB}";
+                        _clickedPawn.Name = $"WhiteBishop{NumWB}";
                         _clickedPawn.MouseUp -= ChessPawn_Click;
                         _clickedPawn.MouseUp += ChessBishop_Click;
 
-                        _promotionPiece = 'b';
-                        _numWB++;
+                        PromotionPiece = 'b';
+                        NumWB++;
                     }
                     else if (_clickedButtonName.StartsWith("Queen"))  // If user promoted to a queen
                     {
                         _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[6]));
-                        _clickedPawn.Name = $"WhiteQueen{_numWQ}";
+                        _clickedPawn.Name = $"WhiteQueen{NumWQ}";
                         _clickedPawn.MouseUp -= ChessPawn_Click;
                         _clickedPawn.MouseUp += ChessQueen_Click;
 
-                        _promotionPiece = 'q';
-                        _numWQ++;
+                        PromotionPiece = 'q';
+                        NumWQ++;
                     }
                 }
                 else
                 {
-                    if (_promotionPiece == 'r')  // If CPU promoted to a rook
+                    if (PromotionPiece == 'r')  // If CPU promoted to a rook
                     {
                         _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[0]));
-                        _clickedPawn.Name = $"WhiteRook{_numWR}";
+                        _clickedPawn.Name = $"WhiteRook{NumWR}";
                         _clickedPawn.MouseUp -= ChessPawn_Click;
                         _clickedPawn.MouseUp += ChessRook_Click;
 
-                        _promoted = true;
-                        _numWR++;
+                        Promoted = true;
+                        NumWR++;
                     }
-                    else if (_promotionPiece == 'n')  // If CPU promoted to a knight
+                    else if (PromotionPiece == 'n')  // If CPU promoted to a knight
                     {
                         _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[2]));
-                        _clickedPawn.Name = $"WhiteKnight{_numWN}";
+                        _clickedPawn.Name = $"WhiteKnight{NumWN}";
                         _clickedPawn.MouseUp -= ChessPawn_Click;
                         _clickedPawn.MouseUp += ChessKnight_Click;
 
-                        _promoted = true;
-                        _numWN++;
+                        Promoted = true;
+                        NumWN++;
                     }
-                    else if (_promotionPiece == 'b')  // If CPU promoted to a bishop
+                    else if (PromotionPiece == 'b')  // If CPU promoted to a bishop
                     {
                         _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[4]));
-                        _clickedPawn.Name = $"WhiteBishop{_numWB}";
+                        _clickedPawn.Name = $"WhiteBishop{NumWB}";
                         _clickedPawn.MouseUp -= ChessPawn_Click;
                         _clickedPawn.MouseUp += ChessBishop_Click;
 
-                        _promoted = true;
-                        _numWB++;
+                        Promoted = true;
+                        NumWB++;
                     }
-                    else if (_promotionPiece == 'q')  // If CPU promoted to a queen
+                    else if (PromotionPiece == 'q')  // If CPU promoted to a queen
                     {
                         _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[6]));
-                        _clickedPawn.Name = $"WhiteQueen{_numWQ}";
+                        _clickedPawn.Name = $"WhiteQueen{NumWQ}";
                         _clickedPawn.MouseUp -= ChessPawn_Click;
                         _clickedPawn.MouseUp += ChessQueen_Click;
 
-                        _promoted = true;
-                        _numWQ++;
+                        Promoted = true;
+                        NumWQ++;
                     }
                 }
 
-                _activePiece = activePawn.Name;
+                ActivePiece = activePawn.Name;
             }
             else if (move == 0)
             {
-                _promoted = true;
-                _promotedPawn = activePawn.Name;
+                Promoted = true;
+                PromotedPawn = activePawn.Name;
 
-                if (_userTurn)
+                if (UserTurn)
                 {
                     Promotion promotion = new(imagePaths);
                     promotion.WhiteQueen.Visibility = Visibility.Collapsed;
@@ -4772,89 +4900,89 @@ namespace Chess_Project
                     if (_clickedButtonName.StartsWith("Rook"))  // If user promoted to a rook
                     {
                         _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[1]));
-                        _clickedPawn.Name = $"BlackRook{_numBR}";
+                        _clickedPawn.Name = $"BlackRook{NumBR}";
                         _clickedPawn.MouseUp -= ChessPawn_Click;
                         _clickedPawn.MouseUp += ChessRook_Click;
 
-                        _promotionPiece = 'r';
-                        _numBR++;
+                        PromotionPiece = 'r';
+                        NumBR++;
                     }
                     else if (_clickedButtonName.StartsWith("Knight"))  // If user promoted to a knight
                     {
                         _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[3]));
-                        _clickedPawn.Name = $"BlackKnight{_numBN}";
+                        _clickedPawn.Name = $"BlackKnight{NumBN}";
                         _clickedPawn.MouseUp -= ChessPawn_Click;
                         _clickedPawn.MouseUp += ChessKnight_Click;
 
-                        _promotionPiece = 'n';
-                        _numBN++;
+                        PromotionPiece = 'n';
+                        NumBN++;
                     }
                     else if (_clickedButtonName.StartsWith("Bishop"))  // If user promoted to a bishop
                     {
                         _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[5]));
-                        _clickedPawn.Name = $"BlackBishop{_numBB}";
+                        _clickedPawn.Name = $"BlackBishop{NumBB}";
                         _clickedPawn.MouseUp -= ChessPawn_Click;
                         _clickedPawn.MouseUp += ChessBishop_Click;
 
-                        _promotionPiece = 'b';
-                        _numBB++;
+                        PromotionPiece = 'b';
+                        NumBB++;
                     }
                     else if (_clickedButtonName.StartsWith("Queen"))  // If user promoted to a queen
                     {
                         _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[7]));
-                        _clickedPawn.Name = $"BlackQueen{_numBQ}";
+                        _clickedPawn.Name = $"BlackQueen{NumBQ}";
                         _clickedPawn.MouseUp -= ChessPawn_Click;
                         _clickedPawn.MouseUp += ChessQueen_Click;
 
-                        _promotionPiece = 'q';
-                        _numBQ++;
+                        PromotionPiece = 'q';
+                        NumBQ++;
                     } 
                 }
                 else
                 {
-                    if (_promotionPiece == 'r')  // If CPU promoted to a rook
+                    if (PromotionPiece == 'r')  // If CPU promoted to a rook
                     {
                         activePawn.Source = new BitmapImage(new Uri(imagePaths[1]));
-                        activePawn.Name = $"BlackRook{_numBR}";
+                        activePawn.Name = $"BlackRook{NumBR}";
                         activePawn.MouseUp -= ChessPawn_Click;
                         activePawn.MouseUp += ChessRook_Click;
 
-                        _promoted = true;
-                        _numBR++;
+                        Promoted = true;
+                        NumBR++;
                     }
-                    else if (_promotionPiece == 'n')  // If CPU promoted to a knight
+                    else if (PromotionPiece == 'n')  // If CPU promoted to a knight
                     {
                         activePawn.Source = new BitmapImage(new Uri(imagePaths[3]));
-                        activePawn.Name = $"BlackKnight{_numBN}";
+                        activePawn.Name = $"BlackKnight{NumBN}";
                         activePawn.MouseUp -= ChessPawn_Click;
                         activePawn.MouseUp += ChessKnight_Click;
 
-                        _promoted = true;
-                        _numBN++;
+                        Promoted = true;
+                        NumBN++;
                     }
-                    else if (_promotionPiece == 'b')  // If CPU promoted to a bishop
+                    else if (PromotionPiece == 'b')  // If CPU promoted to a bishop
                     {
                         activePawn.Source = new BitmapImage(new Uri(imagePaths[5]));
-                        activePawn.Name = $"BlackBishop{_numBB}";
+                        activePawn.Name = $"BlackBishop{NumBB}";
                         activePawn.MouseUp -= ChessPawn_Click;
                         activePawn.MouseUp += ChessBishop_Click;
 
-                        _promoted = true;
-                        _numBB++;
+                        Promoted = true;
+                        NumBB++;
                     }
-                    else if (_promotionPiece == 'q')  // If CPU promoted to a queen
+                    else if (PromotionPiece == 'q')  // If CPU promoted to a queen
                     {
                         activePawn.Source = new BitmapImage(new Uri(imagePaths[7]));
-                        activePawn.Name = $"BlackQueen{_numBQ}";
+                        activePawn.Name = $"BlackQueen{NumBQ}";
                         activePawn.MouseUp -= ChessPawn_Click;
                         activePawn.MouseUp += ChessQueen_Click;
 
-                        _promoted = true;
-                        _numBQ++;
+                        Promoted = true;
+                        NumBQ++;
                     }
                 }
 
-                _activePiece = activePawn.Name;
+                ActivePiece = activePawn.Name;
             }
         }
 
@@ -4865,12 +4993,12 @@ namespace Chess_Project
         /// </summary>
         public async Task CheckmateVerifierAsync()
         {
-            if (_robotComm)
+            if (_robotMotion)
             {
                 EnableImagesWithTag("WhitePiece", false);
                 EnableImagesWithTag("BlackPiece", false);
                 PauseButton.IsEnabled = false;
-                EpsonRCConnection.IsEnabled = false;
+                EpsonMotion.IsEnabled = false;
 
                 InfoSymbol.Visibility = Visibility.Visible;   // Show "Move in progress" popup
                 InProgressText.Visibility = Visibility.Visible;
@@ -4878,7 +5006,7 @@ namespace Chess_Project
             }
 
             using StockfishCall stockfishResponse = new(_stockfishPath!);
-            string stockfishFEN = await Task.Run(() => stockfishResponse.GetStockfishResponse(_fen));
+            string stockfishFEN = await Task.Run(() => stockfishResponse.GetStockfishResponse(Fen));
             string[] lines = stockfishFEN.Split('\n').Skip(2).ToArray();
             string[] infoLines = lines.Where(line => line.TrimStart().StartsWith("info")).ToArray();
             string accurateEvaluationLine = infoLines.LastOrDefault() ?? "Most accurate evaluation line not found";
@@ -4886,90 +5014,90 @@ namespace Chess_Project
 
             if (accurateEvaluation[5].StartsWith("0"))   // If game has been won
             {
-                _displayedAdvantage = "1-0";
+                DisplayedAdvantage = "1-0";
 
-                if (_move == 0)
+                if (Move == 0)
                 {
-                    _quantifiedEvaluation = 0;
+                    QuantifiedEvaluation = 0;
                 }
 
                 else
                 {
-                    _quantifiedEvaluation = 20;
+                    QuantifiedEvaluation = 20;
                 }
             }
 
             else if (accurateEvaluation[8].StartsWith("mate") && accurateEvaluation.Length > 9)   // If there is a mating sequence present
             {
-                if (accurateEvaluation[9].StartsWith("-"))
+                if (accurateEvaluation[9].StartsWith('-'))
                 {
-                    _displayedAdvantage = $"M{accurateEvaluation[9][1..]}";
+                    DisplayedAdvantage = $"M{accurateEvaluation[9][1..]}";
                 }
 
                 else
                 {
-                    _displayedAdvantage = $"M{accurateEvaluation[9]}";
+                    DisplayedAdvantage = $"M{accurateEvaluation[9]}";
                 }
 
-                if (_move == 0)   // White just moved
+                if (Move == 0)   // White just moved
                 {
-                    if (accurateEvaluation[9].StartsWith("-"))
+                    if (accurateEvaluation[9].StartsWith('-'))
                     {
-                        _quantifiedEvaluation = 0;
+                        QuantifiedEvaluation = 0;
                     }
 
                     else
                     {
-                        _quantifiedEvaluation = 20;
+                        QuantifiedEvaluation = 20;
                     }
                 }
 
                 else   // Black just moved
                 {
-                    if (accurateEvaluation[9].StartsWith("-"))
+                    if (accurateEvaluation[9].StartsWith('-'))
                     {
-                        _quantifiedEvaluation = 20;
+                        QuantifiedEvaluation = 20;
                     }
 
                     else
                     {
-                        _quantifiedEvaluation = 0;
+                        QuantifiedEvaluation = 0;
                     }
                 }
             }
 
             else
             {
-                _quantifiedEvaluation = double.Parse(accurateEvaluation[9].ToString()) / 100;
-                _displayedAdvantage = Math.Abs(_quantifiedEvaluation).ToString("0.0");
+                QuantifiedEvaluation = double.Parse(accurateEvaluation[9].ToString()) / 100;
+                DisplayedAdvantage = Math.Abs(QuantifiedEvaluation).ToString("0.0");
 
-                if (_move == 0)   // White just moved
+                if (Move == 0)   // White just moved
                 {
-                    _quantifiedEvaluation = 10 + _quantifiedEvaluation;
+                    QuantifiedEvaluation = 10 + QuantifiedEvaluation;
 
-                    if (_quantifiedEvaluation < 1)
+                    if (QuantifiedEvaluation < 1)
                     {
-                        _quantifiedEvaluation = 1;
+                        QuantifiedEvaluation = 1;
                     }
 
-                    else if (_quantifiedEvaluation > 19)
+                    else if (QuantifiedEvaluation > 19)
                     {
-                        _quantifiedEvaluation = 19;
+                        QuantifiedEvaluation = 19;
                     }
                 }
 
                 else   // Black just moved
                 {
-                    _quantifiedEvaluation = 10 - _quantifiedEvaluation;
+                    QuantifiedEvaluation = 10 - QuantifiedEvaluation;
 
-                    if (_quantifiedEvaluation < 1)
+                    if (QuantifiedEvaluation < 1)
                     {
-                        _quantifiedEvaluation = 1;
+                        QuantifiedEvaluation = 1;
                     }
 
-                    else if (_quantifiedEvaluation > 19)
+                    else if (QuantifiedEvaluation > 19)
                     {
-                        _quantifiedEvaluation = 19;
+                        QuantifiedEvaluation = 19;
                     }
                 }
             }
@@ -4986,94 +5114,94 @@ namespace Chess_Project
 
                 if (infoLines.Any(line => line.Contains("mate")))  // If Stockfish calculates a checkmate
                 {
-                    if (_move == 0)   // Checkmate for white
+                    if (Move == 0)   // Checkmate for white
                     {
-                        GameOver gameOver = new();
-                        gameOver.WinnerText.Text = $"White wins by checkmate in {_fullmove} moves!";
-                        gameOver.Owner = this;
-                        gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-                        gameOver.Show();
+                        _gameOver = new();
+                        _gameOver.WinnerText.Text = $"White wins by checkmate in {Fullmove} moves!";
+                        _gameOver.Owner = this;
+                        _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+                        _gameOver.Show();
                         System.Diagnostics.Debug.WriteLine("White wins by checkmate");
                     }
 
                     else   // Checkmate for black
                     {
-                        GameOver gameOver = new();
-                        gameOver.WinnerText.Text = $"Black wins by checkmate in {_fullmove - 1} moves!";
-                        gameOver.Owner = this;
-                        gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-                        gameOver.Show();
+                        _gameOver = new();
+                        _gameOver.WinnerText.Text = $"Black wins by checkmate in {Fullmove - 1} moves!";
+                        _gameOver.Owner = this;
+                        _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+                        _gameOver.Show();
                         System.Diagnostics.Debug.WriteLine("Black wins by checkmate");
                     }
                 }
 
                 else if (infoLines.Any(line => line.Contains("cp")))   // If Stockfish calculates a stalemate
                 {
-                    _displayedAdvantage = ".5 - .5";
-                    _quantifiedEvaluation = 10;
+                    DisplayedAdvantage = ".5 - .5";
+                    QuantifiedEvaluation = 10;
 
-                    if (_move == 0)
+                    if (Move == 0)
                     {
-                        GameOver gameOver = new();
-                        gameOver.WinnerText.Text = $"Game ends in a stalemate after {_fullmove} moves";
-                        gameOver.Owner = this;
-                        gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-                        gameOver.Show();
+                        _gameOver = new();
+                        _gameOver.WinnerText.Text = $"Game ends in a stalemate after {Fullmove} moves";
+                        _gameOver.Owner = this;
+                        _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+                        _gameOver.Show();
                         System.Diagnostics.Debug.WriteLine("Stalemate");
                     }
 
                     else
                     {
-                        GameOver gameOver = new();
-                        gameOver.WinnerText.Text = $"Game ends in a stalemate after {_fullmove - 1} moves";
-                        gameOver.Owner = this;
-                        gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-                        gameOver.Show();
+                        _gameOver = new();
+                        _gameOver.WinnerText.Text = $"Game ends in a stalemate after {Fullmove - 1} moves";
+                        _gameOver.Owner = this;
+                        _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+                        _gameOver.Show();
                         System.Diagnostics.Debug.WriteLine("Stalemate");
                     }
                 }
 
-                _endGame = true;
+                EndGame = true;
                 EnableImagesWithTag("WhitePiece", false);
                 EnableImagesWithTag("BlackPiece", false);
                 UpdateEvalBar();
             }
 
-            else if (_halfmove == 100)   // If fifty-move rule occurs
+            else if (Halfmove == 100)   // If fifty-move rule occurs
             {
-                _displayedAdvantage = ".5 - .5";
-                _quantifiedEvaluation = 10;
+                DisplayedAdvantage = ".5 - .5";
+                QuantifiedEvaluation = 10;
 
-                GameOver gameOver = new();
-                gameOver.WinnerText.Text = "The game is a draw due to the fifty-move rule,\n" +
+                _gameOver = new();
+                _gameOver.WinnerText.Text = "The game is a draw due to the fifty-move rule,\n" +
                                            "as there have been no pawn movements\n" +
                                            "or captures in the last fifty full turns.";
-                gameOver.Owner = this;
-                gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-                gameOver.Show();
+                _gameOver.Owner = this;
+                _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+                _gameOver.Show();
                 System.Diagnostics.Debug.WriteLine("Draw due to fifty-move rule");
 
-                _endGame = true;
+                EndGame = true;
                 EnableImagesWithTag("WhitePiece", false);
                 EnableImagesWithTag("BlackPiece", false);
                 UpdateEvalBar();
             }
 
-            else if (_threefoldRepetition)   // If threefold repetition occurs
+            else if (ThreefoldRepetition)   // If threefold repetition occurs
             {
-                _displayedAdvantage = ".5 - .5";
-                _quantifiedEvaluation = 10;
+                DisplayedAdvantage = ".5 - .5";
+                QuantifiedEvaluation = 10;
 
-                GameOver gameOver = new();
-                gameOver.WinnerText.Text = "The game is a draw due to threemove repetition,\n" +
+                _gameOver = new();
+                _gameOver.WinnerText.Text = "The game is a draw due to threemove repetition,\n" +
                                            "as the same position was reached three\n" +
                                            "times with the same color to move each time.";
-                gameOver.Owner = this;
-                gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-                gameOver.Show();
+                _gameOver.Owner = this;
+                _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+                _gameOver.Show();
                 System.Diagnostics.Debug.WriteLine("Draw due to threefold repetition");
 
-                _endGame = true;
+                EndGame = true;
                 EnableImagesWithTag("WhitePiece", false);
                 EnableImagesWithTag("BlackPiece", false);
                 UpdateEvalBar();
@@ -5169,19 +5297,19 @@ namespace Chess_Project
 
                 if (insufficient)   // If there is insufficient checkmating material
                 {
-                    _displayedAdvantage = ".5 - .5";
-                    _quantifiedEvaluation = 10;
+                    DisplayedAdvantage = ".5 - .5";
+                    QuantifiedEvaluation = 10;
 
-                    GameOver gameOver = new();
-                    gameOver.WinnerText.Text = "The game is a draw due to insufficient material,\n" +
+                    _gameOver = new();
+                    _gameOver.WinnerText.Text = "The game is a draw due to insufficient material,\n" +
                                                 "as neither side has enough remaining pieces\n" +
                                                 "on the board to force a checkmate.";
-                    gameOver.Owner = this;
-                    gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-                    gameOver.Show();
+                    _gameOver.Owner = this;
+                    _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+                    _gameOver.Show();
                     System.Diagnostics.Debug.WriteLine("Draw due to insufficient material");
 
-                    _endGame = true;
+                    EndGame = true;
                     EnableImagesWithTag("WhitePiece", false);
                     EnableImagesWithTag("BlackPiece", false);
                     UpdateEvalBar();
@@ -5195,79 +5323,79 @@ namespace Chess_Project
         // Sets up pieces for game
         public async Task SetupBoard()
         {
-            _boardSet = true;
+            BoardSet = true;
 
             EnableImagesWithTag("WhitePiece", false);
             EnableImagesWithTag("BlackPiece", false);
 
-            if (_fullmove == 1 && _move == 1)   // Game just started
+            if (Fullmove == 1 && Move == 1)   // Game just started
             {
                 for (int i = 1; i < 9; i++)   // Pawn setup
                 {
-                    _pickBit1 = _pawnPick[i - 1];
-                    _placeBit1 = _whitePawnOrigin[i - 1];
+                    PickBit1 = _pawnPick[i - 1];
+                    PlaceBit1 = _whitePawnOrigin[i - 1];
 
                     if (i == 1)   // If this is first entry
                     {
-                        _rcWhiteBits = $"{_pickBit1}, {_placeBit1}";
+                        WhiteBits = $"{PickBit1}, {PlaceBit1}";
                     }
 
                     else
                     {
-                        _rcWhiteBits += $", {_pickBit1}, {_placeBit1}";
+                        WhiteBits += $", {PickBit1}, {PlaceBit1}";
                     }
 
-                    _pickBit1 = _pawnPick[i - 1];
-                    _placeBit1 = _blackPawnOrigin[i - 1];
+                    PickBit1 = _pawnPick[i - 1];
+                    PlaceBit1 = _blackPawnOrigin[i - 1];
 
                     if (i == 1)   // If this is first entry
                     {
-                        _rcBlackBits = $"{_pickBit1}, {_placeBit1}";
+                        BlackBits = $"{PickBit1}, {PlaceBit1}";
                     }
 
                     else
                     {
-                        _rcBlackBits += $", {_pickBit1}, {_placeBit1}";
+                        BlackBits += $", {PickBit1}, {PlaceBit1}";
                     }
                 }
 
                 for (int i = 1; i < 3; i++)   // Rook, knight, and bishop setup
                 {
-                    _pickBit1 = _rookPick[i - 1];
-                    _placeBit1 = _whiteRookOrigin[i - 1];
-                    _rcWhiteBits += $", {_pickBit1}, {_placeBit1}";
+                    PickBit1 = _rookPick[i - 1];
+                    PlaceBit1 = _whiteRookOrigin[i - 1];
+                    WhiteBits += $", {PickBit1}, {PlaceBit1}";
 
-                    _placeBit1 = _blackRookOrigin[i - 1];
-                    _rcBlackBits += $", {_pickBit1}, {_placeBit1}";
+                    PlaceBit1 = _blackRookOrigin[i - 1];
+                    BlackBits += $", {PickBit1}, {PlaceBit1}";
 
-                    _pickBit1 = _knightPick[i - 1];
-                    _placeBit1 = _whiteKnightOrigin[i - 1];
-                    _rcWhiteBits += $", {_pickBit1}, {_placeBit1}";
+                    PickBit1 = _knightPick[i - 1];
+                    PlaceBit1 = _whiteKnightOrigin[i - 1];
+                    WhiteBits += $", {PickBit1}, {PlaceBit1}";
 
-                    _placeBit1 = _blackKnightOrigin[i - 1];
-                    _rcBlackBits += $", {_pickBit1}, {_placeBit1}";
+                    PlaceBit1 = _blackKnightOrigin[i - 1];
+                    BlackBits += $", {PickBit1}, {PlaceBit1}";
 
-                    _pickBit1 = _bishopPick[i - 1];
-                    _placeBit1 = _whiteBishopOrigin[i - 1];
-                    _rcWhiteBits += $", {_pickBit1}, {_placeBit1}";
+                    PickBit1 = _bishopPick[i - 1];
+                    PlaceBit1 = _whiteBishopOrigin[i - 1];
+                    WhiteBits += $", {PickBit1}, {PlaceBit1}";
 
-                    _placeBit1 = _blackBishopOrigin[i - 1];
-                    _rcBlackBits += $", {_pickBit1}, {_placeBit1}";
+                    PlaceBit1 = _blackBishopOrigin[i - 1];
+                    BlackBits += $", {PickBit1}, {PlaceBit1}";
                 }
 
-                _pickBit1 = _queenPick[0];
-                _placeBit1 = _whiteQueenOrigin;
-                _rcWhiteBits += $", {_pickBit1}, {_placeBit1}";
+                PickBit1 = _queenPick[0];
+                PlaceBit1 = _whiteQueenOrigin;
+                WhiteBits += $", {PickBit1}, {PlaceBit1}";
 
-                _placeBit1 = _blackQueenOrigin;
-                _rcBlackBits += $", {_pickBit1}, {_placeBit1}";
+                PlaceBit1 = _blackQueenOrigin;
+                BlackBits += $", {PickBit1}, {PlaceBit1}";
 
-                _pickBit1 = _kingPick;
-                _placeBit1 = _whiteKingOrigin;
-                _rcWhiteBits += $", {_pickBit1}, {_placeBit1}";
+                PickBit1 = _kingPick;
+                PlaceBit1 = _whiteKingOrigin;
+                WhiteBits += $", {PickBit1}, {PlaceBit1}";
 
-                _placeBit1 = _blackKingOrigin;
-                _rcBlackBits += $", {_pickBit1}, {_placeBit1}";
+                PlaceBit1 = _blackKingOrigin;
+                BlackBits += $", {PickBit1}, {PlaceBit1}";
             }
 
             else   // Game is in progress
@@ -5287,14 +5415,14 @@ namespace Chess_Project
                                 int Rank1 = 8 - fPieceRow;
                                 string foundPiece = image.Name;
 
-                                _placeBit1 = File1 - 1 + ((Rank1 - 1) * 8) + 64;
+                                PlaceBit1 = File1 - 1 + ((Rank1 - 1) * 8) + 64;
 
                                 if (image.Name.Contains("Pawn"))   // Pawn was found
                                 {
                                     char pawnNo = foundPiece[9];
                                     int pawnNumber = int.Parse(pawnNo.ToString()) - 1;
 
-                                    _pickBit1 = _pawnPick[pawnNumber];
+                                    PickBit1 = _pawnPick[pawnNumber];
                                 }
 
                                 else if (image.Name.Contains("Rook"))   // Rook was found
@@ -5302,7 +5430,7 @@ namespace Chess_Project
                                     char rookNo = foundPiece[9];
                                     int rookNumber = int.Parse(rookNo.ToString()) - 1;
 
-                                    _pickBit1 = _rookPick[rookNumber];
+                                    PickBit1 = _rookPick[rookNumber];
                                 }
 
                                 else if (image.Name.Contains("Knight"))   // Knight was found
@@ -5310,7 +5438,7 @@ namespace Chess_Project
                                     char knightNo = foundPiece[11];
                                     int knightNumber = int.Parse(knightNo.ToString()) - 1;
 
-                                    _pickBit1 = _knightPick[knightNumber];
+                                    PickBit1 = _knightPick[knightNumber];
                                 }
 
                                 else if (image.Name.Contains("Bishop"))   // Bishop was found
@@ -5318,7 +5446,7 @@ namespace Chess_Project
                                     char bishopNo = foundPiece[11];
                                     int bishopNumber = int.Parse(bishopNo.ToString()) - 1;
 
-                                    _pickBit1 = _bishopPick[bishopNumber];
+                                    PickBit1 = _bishopPick[bishopNumber];
                                 }
 
                                 else if (image.Name.Contains("Queen"))   // Queen was found
@@ -5326,37 +5454,37 @@ namespace Chess_Project
                                     char queenNo = foundPiece[10];
                                     int queenNumber = int.Parse(queenNo.ToString()) - 1;
 
-                                    _pickBit1 = _queenPick[queenNumber];
+                                    PickBit1 = _queenPick[queenNumber];
                                 }
 
                                 else   // King was found
                                 {
-                                    _pickBit1 = _kingPick;
+                                    PickBit1 = _kingPick;
                                 }
 
                                 if (image.Name.StartsWith("White"))   // White piece was found
                                 {
-                                    if (string.IsNullOrEmpty(_rcWhiteBits))
+                                    if (string.IsNullOrEmpty(WhiteBits))
                                     {
-                                        _rcWhiteBits = $"{_pickBit1}, {_placeBit1}";
+                                        WhiteBits = $"{PickBit1}, {PlaceBit1}";
                                     }
 
                                     else
                                     {
-                                        _rcWhiteBits += $", {_pickBit1}, {_placeBit1}";
+                                        WhiteBits += $", {PickBit1}, {PlaceBit1}";
                                     }
                                 }
 
                                 else   // Black piece was found
                                 {
-                                    if (string.IsNullOrEmpty(_rcBlackBits))
+                                    if (string.IsNullOrEmpty(BlackBits))
                                     {
-                                        _rcBlackBits = $"{_pickBit1}, {_placeBit1}";
+                                        BlackBits = $"{PickBit1}, {PlaceBit1}";
                                     }
 
                                     else
                                     {
-                                        _rcBlackBits += $", {_pickBit1}, {_placeBit1}";
+                                        BlackBits += $", {PickBit1}, {PlaceBit1}";
                                     }
                                 }                      
                             }
@@ -5369,8 +5497,8 @@ namespace Chess_Project
             await _blackRobot.HighSpeedAsync();
 
             // Kick both off concurrently
-            var whiteTask = _whiteRobot.SendDataAsync(_rcWhiteBits);
-            var blackTask = _blackRobot.SendDataAsync(_rcBlackBits);
+            var whiteTask = _whiteRobot.SendDataAsync(WhiteBits);
+            var blackTask = _blackRobot.SendDataAsync(BlackBits);
 
             // Wait until BOTH complete (or throw)
             await Task.WhenAll(whiteTask, blackTask);
@@ -5379,8 +5507,8 @@ namespace Chess_Project
             await _blackRobot.LowSpeedAsync();
 
             // Safe to clear/continue only after both finished
-            _rcWhiteBits = "";
-            _rcBlackBits = "";
+            WhiteBits = "";
+            BlackBits = "";
 
             EnableImagesWithTag("WhitePiece", true);
             EnableImagesWithTag("BlackPiece", true);
@@ -5391,7 +5519,7 @@ namespace Chess_Project
         // Resets Epson chess board
         public async Task ClearBoard()
         {
-            _boardSet = false;
+            BoardSet = false;
 
             for (int fRow = 0; fRow < Chess_Board.RowDefinitions.Count; fRow++)   // Iterates through each row on board
             {
@@ -5408,14 +5536,14 @@ namespace Chess_Project
                             int Rank1 = 8 - fPieceRow;
                             string foundPiece = image.Name;
 
-                            _pickBit1 = File1 - 1 + ((Rank1 - 1) * 8);
+                            PickBit1 = File1 - 1 + ((Rank1 - 1) * 8);
 
                             if (image.Name.Contains("Pawn"))   // Pawn was found
                             {
                                 char pawnNo = foundPiece[9];
                                 int pawnNumber = int.Parse(pawnNo.ToString()) - 1;
 
-                                _placeBit1 = _pawnPlace[pawnNumber];
+                                PlaceBit1 = _pawnPlace[pawnNumber];
                             }
 
                             else if (image.Name.Contains("Rook"))   // Rook was found
@@ -5423,7 +5551,7 @@ namespace Chess_Project
                                 char rookNo = foundPiece[9];
                                 int rookNumber = int.Parse(rookNo.ToString()) - 1;
 
-                                _placeBit1 = _rookPlace[rookNumber];
+                                PlaceBit1 = _rookPlace[rookNumber];
                             }
 
                             else if (image.Name.Contains("Knight"))   // Knight was found
@@ -5431,7 +5559,7 @@ namespace Chess_Project
                                 char knightNo = foundPiece[11];
                                 int knightNumber = int.Parse(knightNo.ToString()) - 1;
 
-                                _placeBit1 = _knightPlace[knightNumber];
+                                PlaceBit1 = _knightPlace[knightNumber];
                             }
 
                             else if (image.Name.Contains("Bishop"))   // Bishop was found
@@ -5439,7 +5567,7 @@ namespace Chess_Project
                                 char bishopNo = foundPiece[11];
                                 int bishopNumber = int.Parse(bishopNo.ToString()) - 1;
 
-                                _placeBit1 = _bishopPlace[bishopNumber];
+                                PlaceBit1 = _bishopPlace[bishopNumber];
                             }
 
                             else if (image.Name.Contains("Queen"))   // Queen was found
@@ -5447,37 +5575,37 @@ namespace Chess_Project
                                 char queenNo = foundPiece[10];
                                 int queenNumber = int.Parse(queenNo.ToString()) - 1;
 
-                                _placeBit1 = _queenPlace[queenNumber];
+                                PlaceBit1 = _queenPlace[queenNumber];
                             }
 
                             else   // King was found
                             {
-                                _placeBit1 = _kingPlace;
+                                PlaceBit1 = _kingPlace;
                             }
 
                             if (image.Name.StartsWith("White"))   // White piece was found
                             {
-                                if (string.IsNullOrEmpty(_rcWhiteBits))
+                                if (string.IsNullOrEmpty(WhiteBits))
                                 {
-                                    _rcWhiteBits = $"{_pickBit1}, {_placeBit1}";
+                                    WhiteBits = $"{PickBit1}, {PlaceBit1}";
                                 }
 
                                 else
                                 {
-                                    _rcWhiteBits += $", {_pickBit1}, {_placeBit1}";
+                                    WhiteBits += $", {PickBit1}, {PlaceBit1}";
                                 }
                             }
 
                             else   // Black piece was found
                             {
-                                if (string.IsNullOrEmpty(_rcBlackBits))
+                                if (string.IsNullOrEmpty(BlackBits))
                                 {
-                                    _rcBlackBits = $"{_pickBit1}, {_placeBit1}";
+                                    BlackBits = $"{PickBit1}, {PlaceBit1}";
                                 }
 
                                 else
                                 {
-                                    _rcBlackBits += $", {_pickBit1}, {_placeBit1}";
+                                    BlackBits += $", {PickBit1}, {PlaceBit1}";
                                 }
                             }                                          
                         }
@@ -5488,19 +5616,154 @@ namespace Chess_Project
             await _whiteRobot.HighSpeedAsync();
             await _blackRobot.HighSpeedAsync();
 
-            await _whiteRobot.SendDataAsync(_rcWhiteBits);
-            await _blackRobot.SendDataAsync(_rcBlackBits);
+            await _whiteRobot.SendDataAsync(WhiteBits);
+            await _blackRobot.SendDataAsync(BlackBits);
 
-            await _whiteRobot.HighSpeedAsync();
-            await _blackRobot.HighSpeedAsync();
-
-            _rcWhiteBits = "";
-            _rcBlackBits = "";
+            WhiteBits = "";
+            BlackBits = "";
         }
 
-        private void CognexCamera_Click(object sender, RoutedEventArgs e)
+        private async void QuitGame(object sender, EventArgs e)
         {
+            // Ensure the game doesn't auto-resume after inactivity timeout
+            _inactivityTimer.Stop();
 
+            // Hide quit game button
+            QuitButton.Visibility = Visibility.Collapsed;
+            QuitButton.IsEnabled = false;
+
+            if (_robotMotion)
+            {
+                ShowCleanupPopup(true);
+                await ClearBoard();
+                ShowCleanupPopup(false);
+            }
+
+            NewGameFunnel();
+        }
+
+        // Where ClearBoard (from CentralMoveHub) and QuitGame funnel together
+        private void NewGameFunnel()
+        {
+            if (!Dispatcher.CheckAccess())
+                Dispatcher.Invoke(() => _gameOver?.Close());
+            else
+                _gameOver?.Close();
+
+            ResumeButton.Visibility = Visibility.Collapsed;
+            ResumeButton.IsEnabled = false;
+            PauseButton.IsEnabled = false;
+
+            PlayButton.Visibility = Visibility.Visible;
+            PlayButton.IsEnabled = false;
+
+            Game_Start.Visibility = Visibility.Visible;
+            Game_Start.IsEnabled = true;
+            Chess_Board.IsHitTestVisible = false;
+
+            UvCorUvU.Visibility = Visibility.Visible;
+            UvCorUvU.IsEnabled = true;
+            CvC.Visibility = Visibility.Collapsed;
+            CvC.IsEnabled = false;
+            Play_Type.SelectedIndex = (int)GameMode.Blank;
+            Elo.SelectedItem = null;
+            Color.SelectedItem = null;
+
+            ConfigureNewGame();
+        }
+
+        private void ConfigureNewGame()
+        {
+            EraseAnnotations();
+            MoveCallout(9, 9, 9, 9);
+            ReinstantiateBoard();
+            ResetMoveTable();
+
+            Session.ResetGame();
+            UpdateEvalBar();
+
+            _inactivityTimer.Start();
+        }
+
+        public void ReinstantiateBoard()
+        {
+            if (_initialPieces is null) return;
+
+            // Remove any piece images currently on the board
+            var toRemove = Chess_Board.Children
+                .OfType<Image>()
+                .Where(i => Equals(i.Tag, "WhitePiece") || Equals(i.Tag, "BlackPiece"))
+                .ToList();
+
+            foreach (var img in toRemove)
+                Chess_Board.Children.Remove(img);
+
+            // Re-add and restore each original piece
+            foreach (var kv in _initialPieces)
+            {
+                var p = kv.Value;
+                var img = p.Img;
+
+                if (!Chess_Board.Children.Contains(img))
+                    Chess_Board.Children.Add(img);
+
+                // Restore original identity and placement
+                img.Name = p.Name;
+                img.Tag = p.Tag;
+                img.IsEnabled = p.Enabled;
+                Grid.SetRow(img, p.Row);
+                Grid.SetColumn(img, p.Col);
+                Panel.SetZIndex(img, p.Z);
+                img.Visibility = Visibility.Visible;
+
+                // Rewire handlers based on (restored) name
+                AttachClickHandlerByName(img);
+
+                // Refresh the bitmap from your theme/pieces folder
+                LoadImage(img, new RoutedEventArgs());
+            }
+
+            // Reset your session counters back to “starting set”
+            Session.NumWR = Session.NumWN = Session.NumWB = 2;
+            Session.NumBR = Session.NumBN = Session.NumBB = 2;
+            Session.NumWQ = Session.NumBQ = 1;
+            // Pawns are handled by name/placement; your other counters (if any) can be reset here too.
+        }
+
+        private void AttachClickHandlerByName(Image img)
+        {
+            // Remove all piece handlers first
+            img.MouseUp -= ChessPawn_Click;
+            img.MouseUp -= ChessRook_Click;
+            img.MouseUp -= ChessKnight_Click;
+            img.MouseUp -= ChessBishop_Click;
+            img.MouseUp -= ChessQueen_Click;
+            img.MouseUp -= ChessKing_Click;
+
+            string n = img.Name;
+            if (n.Contains("Pawn")) img.MouseUp += ChessPawn_Click;
+            else if (n.Contains("Rook")) img.MouseUp += ChessRook_Click;
+            else if (n.Contains("Knight")) img.MouseUp += ChessKnight_Click;
+            else if (n.Contains("Bishop")) img.MouseUp += ChessBishop_Click;
+            else if (n.Contains("Queen")) img.MouseUp += ChessQueen_Click;
+            else if (n.Contains("King")) img.MouseUp += ChessKing_Click;
+        }
+
+        private const int MovesHeaderRows = 1;
+
+        private void ResetMoveTable()
+        {
+            // Remove dynamic children
+            for (int i = Moves.Children.Count - 1; i >= 0; i--)
+            {
+                var el = Moves.Children[i];
+                if (Grid.GetRow(el) >= MovesHeaderRows)
+                    Moves.Children.RemoveAt(i);
+            }
+
+            // Trim extra body rows we added during the game
+            while (Moves.RowDefinitions.Count > MovesHeaderRows)
+                Moves.RowDefinitions.RemoveAt(Moves.RowDefinitions.Count - 1);
         }
     }
 }
