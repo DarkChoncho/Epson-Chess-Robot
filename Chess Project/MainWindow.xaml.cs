@@ -2749,6 +2749,8 @@ namespace Chess_Project
                 Elo.SelectedItem = null;
                 Color.SelectedItem = null;
 
+                await Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Render);
+
                 if (!IsPaused)
                 {
                     ChessLog.LogInformation("Inactivity timeout reached. Starting new game.");
