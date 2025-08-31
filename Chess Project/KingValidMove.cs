@@ -81,7 +81,7 @@ namespace Chess_Project
                     else if (endCol == 2 && (!kingCanCastle || !rook1CanCastle))  // Queenside
                         return false;
 
-                    while (r != endRow || c != endCol)
+                    while (r != endRow || c != (endCol + stepCol))
                     {
                         CheckVerification checkVerification = new(_board, _main);
                         bool outOfCheck = checkVerification.ValidatePosition(r, c, r, c, 9, 9, move);
@@ -93,9 +93,11 @@ namespace Chess_Project
                         c += stepCol;
                     }
 
-                    // Add the b1 square for queenside castling
+                    // Add the b1/b8 square for queenside castling
                     if (endCol == 2)
                         _path.Add((r, c - 1));
+
+                    _path.Remove((startRow, startCol));
 
                     bool collision = _path.Any(p => occupied.Any(o => o.Item1 == p.row && o.Item2 == p.col));
                     return !collision;

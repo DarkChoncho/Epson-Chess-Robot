@@ -31,6 +31,7 @@ namespace Chess_Project
     {
         public GameSession Session { get; } = new();
         private GameOver? _gameOver;
+        private TaskCompletionSource<bool>? _userMoveTcs;
 
         #region Epson Configuration (local)
 
@@ -240,6 +241,7 @@ namespace Chess_Project
         private Image? _clickedQueen = null;
         private Image? _clickedKing = null;
         private Image? _capturedPiece = null;
+        private Image? _selectedPiece = null;
 
         #endregion
 
@@ -260,7 +262,7 @@ namespace Chess_Project
         #region Working Coordinates & Notation Scratch (local)
 
         private int _oldRow;
-        private int _oldColumn;
+        private int _oldCol;
         private int _newRow;
         private int _newColumn;
 
@@ -276,9 +278,9 @@ namespace Chess_Project
         private string? _pgnMove;
 
         private int _whiteKingRow;
-        private int _whiteKingColumn;
+        private int _whiteKingCol;
         private int _blackKingRow;
-        private int _blackKingColumn;
+        private int _blackKingCol;
 
         #endregion
 
@@ -346,7 +348,7 @@ namespace Chess_Project
             if (!File.Exists(_stockfishPath))
             {
                 var msg = $"Stockfish executable not found at:\n{_stockfishPath}\n\n" +
-                    "The game cannot run without Stockfish.";
+                           "The game cannot run without Stockfish.";
                 ChessLog.LogFatal(msg);
                 MessageBox.Show(msg, "Fatal Error - Stockfish Missing", MessageBoxButton.OK, MessageBoxImage.Error);
 
@@ -391,6 +393,44 @@ namespace Chess_Project
                 }),
                 System.Windows.Threading.DispatcherPriority.Loaded
             );
+        }
+
+        /// <summary>
+        /// Captures the initial state of all chess piece <see cref="Image"/> elements
+        /// on the board and stores them in <see cref="_initialPieces"/> for later reset.
+        /// </summary>
+        /// <remarks>
+        /// This method iterates through <see cref="Chess_Board"/> children, filtering
+        /// only those tagged as "WhitePiece" or "BlackPiece". For each piece it records:
+        /// <list type="bullet">
+        ///     <item><description>Name</description></item>
+        ///     <item><description>Grid row and column</description></item>
+        ///     <item><description>Z-index</description></item>
+        ///     <item><description>Enabled state</description></item>
+        ///     <item><description>Tag</description></item>
+        /// </list>
+        /// These snapshots allow the board to be restored to its original setup
+        /// (e.g., after a game reset) without reloading from XAML.
+        /// Call this once after the UI has been fully initialized and pieces are loaded.
+        /// <para>✅ Written on 8/28/2025</para>
+        /// </remarks>
+        private void SnapshotInitialBoard()
+        {
+            _initialPieces = Chess_Board.Children
+                .OfType<Image>()
+                .Where(i => Equals(i.Tag, "WhitePiece") || Equals(i.Tag, "BlackPiece"))
+                .ToDictionary(
+                    i => i.Name,
+                    i => new PieceInit
+                    {
+                        Img = i,
+                        Name = i.Name,
+                        Row = Grid.GetRow(i),
+                        Col = Grid.GetColumn(i),
+                        Z = Panel.GetZIndex(i),
+                        Enabled = i.IsEnabled,
+                        Tag = i.Tag
+                    });
         }
 
         /// <summary>
@@ -565,12 +605,15 @@ namespace Chess_Project
         #region Theme and Preference Methods
 
         /// <summary>
-        /// Sets the image paths for each chess piece (white and black) based on the given theme directory.
-        /// Uses reflection to assign the resolved file paths to backing fields in the <see cref="MainWindow"/>
-        /// class. Logs a warning if any image asset is missing.
+        /// Resolves and assings the image paths for all chess pieces (white and black)
+        /// from the specified theme directory.
         /// </summary>
-        /// <param name="piecePath">The absolute path to the themed piece image directory.</param>
-        /// <remarks>✅ Updated on 6/11/2025</remarks>
+        /// <param name="piecePath">The absolute path to themed piece image directory.</param>
+        /// <remarks>
+        /// Uses reflection to set the corresponding private backing fields in <see cref="MainWindow"/>.
+        /// Logs a fatal error via <see cref="ChessLog"/> if any expected asset is missing.
+        /// <para>✅ Updated on 6/11/2025</para>
+        /// </remarks>
         private void SetPieceImagePaths(string piecePath)
         {
             string[] pieces = ["Pawn", "Knight", "Bishop", "Rook", "Queen", "King"];
@@ -581,44 +624,48 @@ namespace Chess_Project
                 string blackPath = System.IO.Path.Combine(piecePath, $"Black{piece}.png");
 
                 if (!File.Exists(whitePath))
-                    ChessLog.LogWarning($"Missing asset: {whitePath}");
+                {
+                    var msg = $"File path executable not found at:\n{whitePath}\n\n" +
+                               "The game cannot run without this file path.";
+                    ChessLog.LogFatal(msg);
+                    MessageBox.Show(msg, "Fatal Error - White Path Missing", MessageBoxButton.OK, MessageBoxImage.Error);
+
+                    Application.Current.Shutdown(-1);
+                    return;  // keep compiler happy; Shutdown tears down the app
+                }
 
                 if (!File.Exists(blackPath))
-                    ChessLog.LogWarning($"Missing asset: {blackPath}");
+                {
+                    var msg = $"File path executable not found at:\n{blackPath}\n\n" +
+                               "The game cannot run without this file path.";
+                    ChessLog.LogFatal(msg);
+                    MessageBox.Show(msg, "Fatal Error - Black Path Missing", MessageBoxButton.OK, MessageBoxImage.Error);
 
-                typeof(MainWindow).GetField($"white{piece}ImagePath", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                    Application.Current.Shutdown(-1);
+                    return;  // keep compiler happy; Shutdown tears down the app
+                }
+
+                typeof(MainWindow).GetField($"white{piece}ImagePath",
+                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
                     ?.SetValue(this, whitePath);
 
-                typeof(MainWindow).GetField($"black{piece}ImagePath", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                typeof(MainWindow).GetField($"black{piece}ImagePath",
+                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
                     ?.SetValue(this, blackPath);
             }
         }
 
-        private void SnapshotInitialBoard()
-        {
-            _initialPieces = Chess_Board.Children
-                .OfType<Image>()
-                // filter to only chess pieces if you have other images
-                .Where(i => Equals(i.Tag, "WhitePiece") || Equals(i.Tag, "BlackPiece"))
-                .ToDictionary(
-                    i => i.Name,
-                    i => new PieceInit
-                    {
-                        Img = i,
-                        Name = i.Name,
-                        Row = Grid.GetRow(i),
-                        Col = Grid.GetColumn(i),
-                        Z = Panel.GetZIndex(i),
-                        Enabled = i.IsEnabled,
-                        Tag = i.Tag
-                    });
-        }
-
         /// <summary>
-        /// Applies visual formatting to the background, piece, and board selection ComboBoxes
-        /// based on the currently loaded user preferences.
+        /// Applies visual theme preferences to the background, piece set, and board style
+        /// by updating the corresponding <see cref="ComboBox"/> selections in the UI.
         /// </summary>
-        /// <remarks>✅ Updated on 6/11/2025</remarks>
+        /// <remarks>
+        /// Reads the values from the loaded <see cref="_preferences"/> object and normalizes
+        /// them through <see cref="FormatThemeName"/> before applying with
+        /// <see cref="SetComboBoxSelection"/>. This ensures the UI accurately reflects the 
+        /// user's saved theme choices when the application starts or preferences are reloaded.
+        /// <para>✅ Updated on 6/11/2025</para>
+        /// </remarks>
         private void ApplyThemeFormatting()
         {
             SetComboBoxSelection(BackgroundSelection, FormatThemeName(_preferences.Background));
@@ -627,11 +674,16 @@ namespace Chess_Project
         }
 
         /// <summary>
-        /// Formats a theme name by inserting a space between lowercase and uppercase letters.
+        /// Normalizes a theme name into a human-readable format by inserting spaces
+        /// between lowercase and uppercase letter transitions (camel case splitting).
         /// </summary>
-        /// <param name="input">The theme name to format.</param>
-        /// <returns>The formatted theme name with spaces inserted between camel case transitions.</returns>
+        /// <param name="input">The raw theme name (may be <see langword="null"/> or empty).</param>
         /// <remarks>✅ Updated on 6/11/2025</remarks>
+        /// <returns>
+        /// A formatted string with spaces inserted between camel case segments.
+        /// Returns <see cref="string.Empty"/> if <paramref name="input"/> if <see langword="null"/>
+        /// or whitespace.
+        /// </returns>
         private static string FormatThemeName(string? input)
         {
             if (string.IsNullOrWhiteSpace(input))
@@ -655,12 +707,15 @@ namespace Chess_Project
         }
 
         /// <summary>
-        /// Loads and applies the user's selected background image to the given <see cref="Grid"/>.
-        /// Logs a warning and exits if the image path is invalid or the file is missing.
+        /// Applies the user's configured background image to a target <see cref="Grid"/> control.
         /// </summary>
-        /// <param name="sender">The <see cref="Grid"/> control receiving the background image.</param>
-        /// <param name="e">Optional routed event arguments.</param>
-        /// <remarks>✅ Updated on 6/11/2025</remarks>
+        /// <param name="sender">The <see cref="Grid"/> that should receive the background image.</param>
+        /// <param name="e">Optional routed event arguments (not used).</param>
+        /// <remarks>
+        /// Logs a warning and exits gracefully if the background path is unset or the file is missing.
+        /// Ensures the UI remains responsive even if the background asset cannot be found.
+        /// <para>✅ Updated on 6/11/2025</para>
+        /// </remarks>
         private void LoadBackground(object sender, RoutedEventArgs? e)
         {
             if (sender is not Grid background)
@@ -894,52 +949,162 @@ namespace Chess_Project
 
         #region Main Game Logic
 
+        // New and improved Game Loop!
         private async Task RunGameLoopAsync()
         {
-            switch (_gameMode)
+            try
             {
-                case GameMode.ComVsCom:
-                    Chess_Board.IsHitTestVisible = false;
-                    Image? selectedPiece = await ComputerMoveAsync();
-
-                    if (selectedPiece != null)
+                while (!EndGame)
+                {
+                    switch (_gameMode)
                     {
-                        ChessLog.LogError("No Active Piece.");
-                        return;
+                        case GameMode.ComVsCom:
+                            {
+                                Chess_Board.IsHitTestVisible = false;
+
+                                var piece = await ComputerMoveAsync();
+                                if (piece == null)
+                                {
+                                    ChessLog.LogError("No active piece returned.");
+                                    return;
+                                }
+                                _selectedPiece = piece;
+
+                                // Animate computer move
+                                Grid.SetRow(_selectedPiece, _oldRow);
+                                Grid.SetColumn(_selectedPiece, _oldCol);
+                                await MovePieceAsync(_selectedPiece, _newRow, _newColumn, _oldRow, _oldCol);
+
+                                if (KingCastle || QueenCastle)
+                                {
+                                    bool kingside = KingCastle;
+                                    bool blackJustMoved = (Move == 1);
+                                    await MoveCastleRookAsync(blackJustMoved, kingside);
+                                }
+                                break;
+                            }
+
+                        case GameMode.UserVsCom:
+                            {
+                                if (!UserTurn)
+                                {
+                                    Chess_Board.IsHitTestVisible = false;
+
+                                    var piece = await ComputerMoveAsync();
+                                    if (piece == null)
+                                    {
+                                        ChessLog.LogError("No active piece returned.");
+                                        return;
+                                    }
+                                    _selectedPiece = piece;
+
+                                    // Animate computer move
+                                    Grid.SetRow(_selectedPiece, _oldRow);
+                                    Grid.SetColumn(_selectedPiece, _oldCol);
+                                    await MovePieceAsync(_selectedPiece, _newRow, _newColumn, _oldRow, _oldCol);
+
+                                    if (KingCastle || QueenCastle)
+                                    {
+                                        bool kingside = KingCastle;
+                                        bool blackJustMoved = (Move == 1);
+                                        await MoveCastleRookAsync(blackJustMoved, kingside);
+                                    }
+                                }
+                                else
+                                {
+                                    Chess_Board.IsHitTestVisible = true;
+                                    EnableImagesWithTag("WhitePiece", Move == 1);
+                                    EnableImagesWithTag("BlackPiece", Move == 0);
+
+                                    _userMoveTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                                    await _userMoveTcs.Task;
+
+                                    if (!_moveConfirm)
+                                    {
+                                        // Animate computer move
+                                        Grid.SetRow(_selectedPiece, _oldRow);
+                                        Grid.SetColumn(_selectedPiece, _oldCol);
+                                        await MovePieceAsync(_selectedPiece, _newRow, _newColumn, _oldRow, _oldCol);
+
+                                        if (KingCastle || QueenCastle)
+                                        {
+                                            bool kingside = KingCastle;
+                                            bool blackJustMoved = (Move == 1);
+                                            await MoveCastleRookAsync(blackJustMoved, kingside);
+                                        }
+                                    }
+                                }
+
+                                UserTurn = !UserTurn;
+                                break;
+                            }
+
+                        case GameMode.UserVsUser:
+                            {
+                                Chess_Board.IsHitTestVisible = true;
+                                EnableImagesWithTag("WhitePiece", Move == 1);
+                                EnableImagesWithTag("BlackPiece", Move == 0);
+
+                                _userMoveTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                                await _userMoveTcs.Task;
+
+                                if (!_moveConfirm)
+                                {
+                                    // Animate computer move
+                                    Grid.SetRow(_selectedPiece, _oldRow);
+                                    Grid.SetColumn(_selectedPiece, _oldCol);
+                                    await MovePieceAsync(_selectedPiece, _newRow, _newColumn, _oldRow, _oldCol);
+
+                                    if (KingCastle || QueenCastle)
+                                    {
+                                        bool kingside = KingCastle;
+                                        bool blackJustMoved = (Move == 1);
+                                        await MoveCastleRookAsync(blackJustMoved, kingside);
+                                    }
+                                }
+                                break;
+                            }
                     }
 
-                    if (!UserTurn || _moveConfirm)
-                    {
-                        // Animate from old to new (board already updated by caller)
-                        Grid.SetRow(selectedPiece, _oldRow);
-                        Grid.SetColumn(selectedPiece, _oldColumn);
-                        await MovePieceAsync(selectedPiece, _newRow, _newColumn, _oldRow, _oldColumn);
+                    // Compute "to" for callout once
+                    int toRow = (KingCastle || QueenCastle) ? _oldRow : _newRow;
+                    int toCol = KingCastle ? 7 : QueenCastle ? 0 : _newColumn;
+                    MoveCallout(_oldRow, _oldCol, toRow, toCol);
 
-                        if (KingCastle || QueenCastle)
-                        {
-                            bool kingside = KingCastle;
-                            bool blackJustMoved = (Move == 1);
-
-                            await MoveCastleRookAsync(blackJustMoved, kingside);
-                        }  
-                    }
-
-                    MoveCallout(_oldRow, _oldColumn, KingCastle ? _oldRow : QueenCastle ? _oldRow : _newRow, KingCastle ? 7 : QueenCastle ? 0 : _newColumn);
                     await FinalizeMoveAsync();
                     await DocumentMoveAsync();
                     await CheckmateVerifierAsync();
                     UpdateEvalBar();
-                    if (_robotMotion) { ShowMoveInProgressPopup(true); }
                     DeselectPieces();
-                    break;
 
-                case GameMode.UserVsCom:
-                    if (!UserTurn)
-                        Chess_Board.IsHitTestVisible = false;
-                    break;
+                    if (_robotMotion)
+                    {
+                        await SendRobotBitsAsync();
 
-                case GameMode.UserVsUser:
-                    break;
+                        PrevWhiteBits = AppendToHistory(PrevWhiteBits, WhiteBits);
+                        PrevBlackBits = AppendToHistory(PrevBlackBits, BlackBits);
+                        WhiteBits = string.Empty;
+                        BlackBits = string.Empty;
+                    }
+
+                    if (EndGame)
+                    {
+                        if (_robotMotion)
+                        {
+                            ShowCleanupPopup(true);
+                            await ClearBoard();
+                            ShowCleanupPopup(false);
+                        }
+
+                        await Task.Delay(10000);
+                        NewGameFunnel();
+                        return;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ChessLog.LogError("Run Game Loop failed.", ex);
             }
         }
 
@@ -982,7 +1147,7 @@ namespace Chess_Project
             CreateFenCode();
             File.WriteAllText(_fenFilePath, string.Empty);
 
-            _mode = playType == "Com Vs. Com" ? 1 : playType == "User Vs. Com" ? 2 : 3;
+            _gameMode = playType == "Com Vs. Com" ? GameMode.ComVsCom : playType == "User Vs. Com" ? GameMode.UserVsCom : GameMode.UserVsUser;
             WritePGNFile();
 
             // Handle robot-controlled game setup
@@ -996,17 +1161,15 @@ namespace Chess_Project
             PauseButton.IsEnabled = true;
 
             // Determine game mode
-            switch (_mode)
+            switch (_gameMode)
             {
-                case 1:
-                    MoveInProgress = true;
+                case GameMode.ComVsCom:
                     UserTurn = false;
                     Chess_Board.IsHitTestVisible = false;
 
-                    await ComputerMoveAsync();
                     break;
 
-                case 2:
+                case GameMode.UserVsCom:
                     // Flip board if necessary
                     if ((_flip == 0 && playerColor == "Black") || (_flip == 1 && playerColor == "White"))
                     {
@@ -1016,9 +1179,7 @@ namespace Chess_Project
 
                     if (playerColor == "Black")
                     {
-                        MoveInProgress = true;
                         UserTurn = false;
-                        await ComputerMoveAsync();
                     }
                     else
                     {
@@ -1028,13 +1189,15 @@ namespace Chess_Project
                     }
                     break;
 
-                case 3:
+                case GameMode.UserVsUser:
                 default:
                     UserTurn = true;
                     EnableImagesWithTag("WhitePiece", true);
                     EnableImagesWithTag("BlackPiece", false);
                     break;
             }
+
+            await RunGameLoopAsync();
         }
 
         /// <summary>
@@ -1100,13 +1263,13 @@ namespace Chess_Project
             if (UserTurn && _moveConfirm)
             {
                 // Callout proposed move
-                SelectedPiece(_oldRow, _oldColumn);
+                SelectedPiece(_oldRow, _oldCol);
                 SelectedPiece(_newRow, _newColumn);
 
                 // Animate from old to new (board already updated by caller)
                 Grid.SetRow(activePawn, _oldRow);
-                Grid.SetColumn(activePawn, _oldColumn);
-                await MovePieceAsync(activePawn, _newRow, _newColumn, _oldRow, _oldColumn);
+                Grid.SetColumn(activePawn, _oldCol);
+                await MovePieceAsync(activePawn, _newRow, _newColumn, _oldRow, _oldCol);
 
                 bool confirmed = await WaitForConfirmationAsync();
                 EraseAnnotations();
@@ -1155,14 +1318,14 @@ namespace Chess_Project
                 }
                 else
                 {
-                    SelectedPiece(_oldRow, _oldColumn);
+                    SelectedPiece(_oldRow, _oldCol);
                     SelectedPiece(_newRow, _newColumn);
                 }
 
                 // Animate from old → new (board already updated by caller)
                 Grid.SetRow(activePiece, _oldRow);
-                Grid.SetColumn(activePiece, _oldColumn);
-                await MovePieceAsync(activePiece, _newRow, _newColumn, _oldRow, _oldColumn);
+                Grid.SetColumn(activePiece, _oldCol);
+                await MovePieceAsync(activePiece, _newRow, _newColumn, _oldRow, _oldCol);
 
                 bool confirmed = await WaitForConfirmationAsync();
                 EraseAnnotations();
@@ -1185,10 +1348,10 @@ namespace Chess_Project
         public void KingMoveManager(Image activePiece)
         {
             // Not a castling move unless the king shifts exactly two files.
-            if (Math.Abs(_oldColumn - _newColumn) != 2)
+            if (Math.Abs(_oldCol - _newColumn) != 2)
                 return;
 
-            bool isKingside = _oldColumn < _newColumn;
+            bool isKingside = _oldCol < _newColumn;
 
             // Determine which side (White/Black) from the active piece name.
             // Assumes _activePiece is set (e.g., in Square_ClickAsync) to the moving piece's name.
@@ -1263,7 +1426,7 @@ namespace Chess_Project
             }
 
             // Highlight king's start and rook's target squares for visual confirmation.
-            SelectedPiece(_oldRow, _oldColumn);
+            SelectedPiece(_oldRow, _oldCol);
             SelectedPiece(_newRow, rookColumn);
         }
 
@@ -1414,7 +1577,7 @@ namespace Chess_Project
             if (Move == 1) Fullmove++;
 
             // Record SAN/PGN start square; update FEN snapshot.
-            _startFile = (char)('a' + _oldColumn);
+            _startFile = (char)('a' + _oldCol);
             _startRank = (8 - _oldRow).ToString();
             _startPosition = $"{_startFile}{_startRank}";
             CreateFenCode();
@@ -1437,7 +1600,7 @@ namespace Chess_Project
 
             // Put the moved piece back
             Grid.SetRow(activePiece, _oldRow);
-            Grid.SetColumn(activePiece, _oldColumn);
+            Grid.SetColumn(activePiece, _oldCol);
 
             // Restore castling rights (defensive: ensure array shape)
             if (castlingRights is { Length: 6 })
@@ -1640,7 +1803,7 @@ namespace Chess_Project
 
             // Convert to grid coords
             _oldRow = 8 - int.Parse(_startPosition[1].ToString());
-            _oldColumn = _startPosition[0] - 'a';
+            _oldCol = _startPosition[0] - 'a';
             _newRow = 8 - int.Parse(_endPosition[1].ToString());
             _newColumn = _endPosition[0] - 'a';
 
@@ -1648,7 +1811,7 @@ namespace Chess_Project
             Image? selectedPiece = null;
             foreach (var img in Chess_Board.Children.OfType<Image>())
             {
-                if (Grid.GetRow(img) == _oldRow && Grid.GetColumn(img) == _oldColumn)
+                if (Grid.GetRow(img) == _oldRow && Grid.GetColumn(img) == _oldCol)
                 {
                     selectedPiece = img;
                     Grid.SetRow(selectedPiece, _newRow);
@@ -2261,6 +2424,41 @@ namespace Chess_Project
             return "";
         }
 
+        // Local helper
+        private async Task SendRobotBitsAsync()
+        {
+            ShowMoveInProgressPopup(true);
+            // When white just moved: prefer sending Black bits first if present, then White.
+            // When black just moved: mirror behavior.
+
+            // Since FinalizeMoveAsync flips Move by this state, now Move == 0 is if white is moving
+            if (Move == 0)
+            {
+                if (!string.IsNullOrEmpty(BlackBits))
+                    await _blackRobot.SendDataAsync(BlackBits);
+
+                await _whiteRobot.SendDataAsync(WhiteBits);
+            }
+            else
+            {
+                if (!string.IsNullOrEmpty(WhiteBits))
+                    await _whiteRobot.SendDataAsync(WhiteBits);
+
+                await _blackRobot.SendDataAsync(BlackBits);
+            }
+
+            ShowMoveInProgressPopup(true);
+        }
+
+        private static string? AppendToHistory(string history, string bits)
+        {
+            if (string.IsNullOrEmpty(bits)) return string.Empty;
+            if (string.IsNullOrEmpty(history)) history = bits;
+            else history += "\n" + bits;
+
+            return history;
+        }
+
         /// <summary>
         /// Central post-move orchestrator:
         /// <list type="bullet">
@@ -2278,49 +2476,11 @@ namespace Chess_Project
             MoveInProgress = false;
 
             // Local helper
-            async Task SendRobotBitsAsync(bool whiteJustMoved)
-            {
-                // When white just moved: prefer sending Black bits first if present, then White.
-                // When black just moved: mirror behavior.
-                if (whiteJustMoved)
-                {
-                    if (!string.IsNullOrEmpty(BlackBits))
-                        await _blackRobot.SendDataAsync(BlackBits);
-
-                    await _whiteRobot.SendDataAsync(WhiteBits);
-                }
-                else
-                {
-                    if (!string.IsNullOrEmpty(WhiteBits))
-                        await _whiteRobot.SendDataAsync(WhiteBits);
-
-                    await _blackRobot.SendDataAsync(BlackBits);
-                }
-            }
-
-            // Local helper
-            static string? AppendToHistory(string history, string bits)
-            {
-                if (string.IsNullOrEmpty(bits)) return string.Empty;
-                if (string.IsNullOrEmpty(history)) history = bits;
-                else history += "\n" + bits;
-
-                return history;
-            }
-
-            // Local helper
-            void HideMoveInProgressPopup()
-            {
-                InfoSymbol.Visibility = Visibility.Collapsed;
-                InProgressText.Visibility = Visibility.Collapsed;
-                MoveInProgRect.Visibility = Visibility.Collapsed;
-            }
 
             if (_robotMotion)
             {
                 // Convention in code: _move == 0 means White just moved; _move == 1 means Black just moved
-                await SendRobotBitsAsync(whiteJustMoved: Move == 0);
-                HideMoveInProgressPopup();
+                await SendRobotBitsAsync();
             }
 
             // Accumulate bit history and clear current buffers
@@ -2338,7 +2498,6 @@ namespace Chess_Project
                 {
                     // Com vs Com
                     case 1:
-                        MoveInProgress = true;
                         UserTurn = false;
                         await ComputerMoveAsync();
                         break;
@@ -2353,7 +2512,6 @@ namespace Chess_Project
 
                         if (cpuToMove)
                         {
-                            MoveInProgress = true;
                             UserTurn = false;
                             await ComputerMoveAsync();
                         }
@@ -2385,8 +2543,6 @@ namespace Chess_Project
             if (IsPaused && HoldResume)
             {
                 _inactivityTimer.Start();
-
-                HideMoveInProgressPopup();
 
                 HoldResume = false;
                 Play_Type.IsEnabled = true;
@@ -2752,8 +2908,6 @@ namespace Chess_Project
                 Elo.SelectedItem = null;
                 Color.SelectedItem = null;
 
-                await Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Render);
-
                 if (!IsPaused)
                 {
                     ChessLog.LogInformation("Inactivity timeout reached. Starting new game.");
@@ -2978,16 +3132,23 @@ namespace Chess_Project
             EraseAnnotations();
 
             // Require a selected piece and a square button
-            Image? selectedPiece =
+            _selectedPiece =
                 _clickedPawn ?? _clickedKnight ?? _clickedBishop ??
                 _clickedRook ?? _clickedQueen ?? _clickedKing;
 
-            if (selectedPiece == null) return;
+            if (_selectedPiece == null) return;
             if (sender is not Button clickedSquare) return;
 
+            // Prevent double-click races during this handler
+            var boardWasEnabled = Chess_Board.IsHitTestVisible;
+            Chess_Board.IsHitTestVisible = false;
+
+            // Snap TCS in case the loop replaces it mid-handler
+            var tcs = _userMoveTcs;
+
             // From & To grid coords
-            _oldRow = Grid.GetRow(selectedPiece);
-            _oldColumn = Grid.GetColumn(selectedPiece);
+            _oldRow = Grid.GetRow(_selectedPiece);
+            _oldCol = Grid.GetColumn(_selectedPiece);
             _newRow = Grid.GetRow(clickedSquare);
             _newColumn = Grid.GetColumn(clickedSquare);
 
@@ -2996,91 +3157,107 @@ namespace Chess_Project
             _endRank = (8 - _newRow).ToString();
             _endPosition = $"{_endFile}{_endRank}";
 
-            // Validate move based on piece type (avoid per-click dictionary allocation)
             bool IsValidMove()
             {
-                if (ReferenceEquals(selectedPiece, _clickedPawn))
+                if (ReferenceEquals(_selectedPiece, _clickedPawn))
                     return new PawnValidMove.PawnValidation(Chess_Board, this)
-                        .ValidateMove(_oldRow, _oldColumn, _newRow, _newColumn, Move);
+                        .ValidateMove(_oldRow, _oldCol, _newRow, _newColumn, Move);
 
-                if (ReferenceEquals(selectedPiece, _clickedKnight))
+                if (ReferenceEquals(_selectedPiece, _clickedKnight))
                     return new KnightValidMove.KnightValidation()
-                        .ValidateMove(_oldRow, _oldColumn, _newRow, _newColumn);
+                        .ValidateMove(_oldRow, _oldCol, _newRow, _newColumn);
 
-                if (ReferenceEquals(selectedPiece, _clickedBishop))
+                if (ReferenceEquals(_selectedPiece, _clickedBishop))
                     return new BishopValidMove.BishopValidation(Chess_Board, this)
-                        .ValidateMove(_oldRow, _oldColumn, _newRow, _newColumn);
+                        .ValidateMove(_oldRow, _oldCol, _newRow, _newColumn);
 
-                if (ReferenceEquals(selectedPiece, _clickedRook))
+                if (ReferenceEquals(_selectedPiece, _clickedRook))
                     return new RookValidMove.RookValidation(Chess_Board, this)
-                        .ValidateMove(_oldRow, _oldColumn, _newRow, _newColumn);
+                        .ValidateMove(_oldRow, _oldCol, _newRow, _newColumn);
 
-                if (ReferenceEquals(selectedPiece, _clickedQueen))
+                if (ReferenceEquals(_selectedPiece, _clickedQueen))
                     return new QueenValidMove.QueenValidation(Chess_Board, this)
-                        .ValidateMove(_oldRow, _oldColumn, _newRow, _newColumn);
+                        .ValidateMove(_oldRow, _oldCol, _newRow, _newColumn);
 
-                if (ReferenceEquals(selectedPiece, _clickedKing))
+                if (ReferenceEquals(_selectedPiece, _clickedKing))
                     return new KingValidMove.KingValidation(Chess_Board, this)
-                        .ValidateMove(_oldRow, _oldColumn, _newRow, _newColumn, Move,
+                        .ValidateMove(_oldRow, _oldCol, _newRow, _newColumn, Move,
                                       CWK, CBK, CWR1, CWR2, CBR1, CBR2);
 
                 return false;
             }
 
             if (!IsValidMove())
+            {
+                if (_pieceSounds) PlaySound("PieceIllegal");
+                Chess_Board.IsHitTestVisible = boardWasEnabled;
                 return;
+            }
 
-            // Apply tentative board change for check verification
-            Grid.SetRow(selectedPiece, _newRow);
-            Grid.SetColumn(selectedPiece, _newColumn);
+            // Tentative board change for check verification
+            Grid.SetRow(_selectedPiece, _newRow);
+            Grid.SetColumn(_selectedPiece, _newColumn);
 
             // Track king squares
-            if (selectedPiece.Name.StartsWith("WhiteKing", StringComparison.Ordinal))
+            int prevWhiteKingRow = _whiteKingRow, prevWhiteKingCol = _whiteKingCol;
+            int prevBlackKingRow = _blackKingRow, prevBlackKingCol = _blackKingCol;
+
+            if (_selectedPiece.Name.StartsWith("WhiteKing", StringComparison.Ordinal))
             {
                 _whiteKingRow = _newRow;
-                _whiteKingColumn = _newColumn;
+                _whiteKingCol = _newColumn;
             }
-            else if (selectedPiece.Name.StartsWith("BlackKing", StringComparison.Ordinal))
+            else if (_selectedPiece.Name.StartsWith("BlackKing", StringComparison.Ordinal))
             {
                 _blackKingRow = _newRow;
-                _blackKingColumn = _newColumn;
+                _blackKingCol = _newColumn;
             }
 
-            // Ensure the move does not leave your king in check
-            var checkVerification = new CheckVerification(Chess_Board, this);
-            bool positionOk = checkVerification.ValidatePosition(
-                _whiteKingRow, _whiteKingColumn, _blackKingRow, _blackKingColumn, _newRow, _newColumn, Move);
-
-            if (!positionOk)
+            try
             {
-                // Revert tentative move
-                Grid.SetRow(selectedPiece, _oldRow);
-                Grid.SetColumn(selectedPiece, _oldColumn);
+                // Ensure the move does not leave your king in check
+                var checkVerification = new CheckVerification(Chess_Board, this);
+                bool positionOk = checkVerification.ValidatePosition(
+                    _whiteKingRow, _whiteKingCol, _blackKingRow, _blackKingCol, _newRow, _newColumn, Move);
 
-                // Revert king tracking if we updated it
-                if (selectedPiece.Name.StartsWith("WhiteKing", StringComparison.Ordinal))
+                if (!positionOk)
                 {
-                    _whiteKingRow = _oldRow;
-                    _whiteKingColumn = _oldColumn;
-                }
-                else if (selectedPiece.Name.StartsWith("BlackKing", StringComparison.Ordinal))
-                {
-                    _blackKingRow = _oldRow;
-                    _blackKingColumn = _oldColumn;
+                    // Revert tentative move + king tracking
+                    Grid.SetRow(_selectedPiece, _oldRow);
+                    Grid.SetColumn(_selectedPiece, _oldCol);
+
+                    _whiteKingRow = prevWhiteKingRow; _whiteKingCol = prevWhiteKingCol;
+                    _blackKingRow = prevBlackKingRow; _blackKingCol = prevBlackKingCol;
+
+                    if (_pieceSounds) PlaySound("PieceIllegal");
+                    Chess_Board.IsHitTestVisible = boardWasEnabled;
+                    return;
                 }
 
-                if (_pieceSounds) PlaySound("PieceIllegal");
-                return;
+                ActivePiece = _selectedPiece.Name;
+
+                bool makeMove;
+                // Dispatch to the correct move manager
+                if (_selectedPiece.Name.Contains("Pawn", StringComparison.Ordinal))
+                    makeMove = await PawnMoveManagerAsync(_selectedPiece);
+                else
+                    makeMove = await MoveManagerAsync(_selectedPiece);
+
+                // Complete the user turn
+                if (makeMove)
+                    tcs?.TrySetResult(true);
             }
+            catch (Exception ex)
+            {
+                // Revert tentative move on any failure
+                Grid.SetRow(_selectedPiece, _oldRow);
+                Grid.SetColumn(_selectedPiece, _oldCol);
 
-            Chess_Board.IsHitTestVisible = false;
-            ActivePiece = selectedPiece.Name;
+                _whiteKingRow = prevWhiteKingRow; _whiteKingCol = prevWhiteKingCol;
+                _blackKingRow = prevBlackKingRow; _blackKingCol = prevBlackKingCol;
 
-            // Dispatch to the correct move manager
-            if (selectedPiece.Name.Contains("Pawn", StringComparison.Ordinal))
-                await PawnMoveManagerAsync(selectedPiece);
-            else
-                await MoveManagerAsync(selectedPiece);
+                ChessLog.LogError("Failed to complete move.", ex);
+            }
         }
 
         #endregion
@@ -3766,12 +3943,12 @@ namespace Chess_Project
                 if (image.Name.StartsWith("WhiteKing"))
                 {
                     _whiteKingRow = row;
-                    _whiteKingColumn = column;
+                    _whiteKingCol = column;
                 }
                 else if (image.Name.StartsWith("BlackKing"))
                 {
                     _blackKingRow = row;
-                    _blackKingColumn = column;
+                    _blackKingCol = column;
                 }
             }
         }
@@ -3976,13 +4153,13 @@ namespace Chess_Project
             File.AppendAllText(_pgnFilePath, $"[Date \"{DateTime.Now:yyyy.MM.dd}\"]\n");
             File.AppendAllText(_pgnFilePath, "[Round \"1\"]\n");
 
-            switch (_mode)
+            switch (_gameMode)
             {
-                case 1:  // Com Vs. Com
+                case GameMode.ComVsCom:  // Com Vs. Com
                     File.AppendAllText(_pgnFilePath, $"[White \"Bot\"]\n[Black \"Bot\"]\n[Result \"*\"]\n[WhiteElo \"{_selectedWhiteElo?.Content}\"]\n[BlackElo \"{_selectedBlackElo?.Content}\"]\n\n");
                     break;
 
-                case 2:  // User Vs. Com
+                case GameMode.UserVsCom:  // User Vs. Com
                     if (_selectedColor?.Content.ToString() == "White")
                     {
                         File.AppendAllText(_pgnFilePath, $"[White \"User\"]\n[Black \"Bot\"]\n[Result \"*\"]\n[BlackElo \"{_selectedElo?.Content}\"]\n\n");
@@ -3993,7 +4170,7 @@ namespace Chess_Project
                     }
                     break;
 
-                case 3:  // User Vs. User
+                case GameMode.UserVsUser:  // User Vs. User
                 default:
                     File.AppendAllText(_pgnFilePath, $"[White \"User\"]\n[Black \"User\"]\n[Result \"*\"]\n\n");
                     break;
@@ -4023,7 +4200,7 @@ namespace Chess_Project
                 goto finalize_and_log;
 
             // Files/ranks are 1-based in bit mapping
-            int file1 = _oldColumn + 1;
+            int file1 = _oldCol + 1;
             int file2 = _newColumn + 1;
             int rank1 = 8 - _oldRow;
             int rank2 = 8 - _newRow;
@@ -4238,6 +4415,7 @@ namespace Chess_Project
             // Reset transient flags (exact same set/order)
             Capture = false;
             _capturedPiece = null;
+            _selectedPiece = null;
             EnPassantCreated = false;
             EnPassant = false;
             Promoted = false;
@@ -4614,9 +4792,6 @@ namespace Chess_Project
                 MoveInProgress = true;
                 UserTurn = false;
                 Chess_Board.IsHitTestVisible = false;
-
-                //SetEloValues(selectedWhiteElo.Content.ToString(), true);
-                //SetEloValues(selectedBlackElo.Content.ToString(), false);
 
                 await ComputerMoveAsync();
             }
