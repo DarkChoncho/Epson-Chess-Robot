@@ -190,7 +190,7 @@ namespace Chess_Project
         private int Fullmove { get => Session.Fullmove; set => Session.Fullmove = value; }
 
         private bool UserTurn { get => Session.UserTurn; set => Session.UserTurn = value; }
-        private bool Moving { get => Session.Moving; set => Session.Moving = value; }
+        private bool MoveInProgress { get => Session.MoveInProgress; set => Session.MoveInProgress = value; }
         private bool HoldResume { get => Session.HoldResume; set => Session.HoldResume = value; }
         private bool WasPlayable { get => Session.WasPlayable; set => Session.WasPlayable = value; }
         private bool WasResumable { get => Session.WasResumable; set => Session.WasResumable = value; }
@@ -246,6 +246,7 @@ namespace Chess_Project
         #region Game Settings Counters/Flags (local)
 
         private int _mode;
+        private GameMode _gameMode;
 
         private bool _pieceSounds;
         private bool _moveConfirm;
@@ -895,7 +896,51 @@ namespace Chess_Project
 
         private async Task RunGameLoopAsync()
         {
+            switch (_gameMode)
+            {
+                case GameMode.ComVsCom:
+                    Chess_Board.IsHitTestVisible = false;
+                    Image? selectedPiece = await ComputerMoveAsync();
 
+                    if (selectedPiece != null)
+                    {
+                        ChessLog.LogError("No Active Piece.");
+                        return;
+                    }
+
+                    if (!UserTurn || _moveConfirm)
+                    {
+                        // Animate from old to new (board already updated by caller)
+                        Grid.SetRow(selectedPiece, _oldRow);
+                        Grid.SetColumn(selectedPiece, _oldColumn);
+                        await MovePieceAsync(selectedPiece, _newRow, _newColumn, _oldRow, _oldColumn);
+
+                        if (KingCastle || QueenCastle)
+                        {
+                            bool kingside = KingCastle;
+                            bool blackJustMoved = (Move == 1);
+
+                            await MoveCastleRookAsync(blackJustMoved, kingside);
+                        }  
+                    }
+
+                    MoveCallout(_oldRow, _oldColumn, KingCastle ? _oldRow : QueenCastle ? _oldRow : _newRow, KingCastle ? 7 : QueenCastle ? 0 : _newColumn);
+                    await FinalizeMoveAsync();
+                    await DocumentMoveAsync();
+                    await CheckmateVerifierAsync();
+                    UpdateEvalBar();
+                    if (_robotMotion) { ShowMoveInProgressPopup(true); }
+                    DeselectPieces();
+                    break;
+
+                case GameMode.UserVsCom:
+                    if (!UserTurn)
+                        Chess_Board.IsHitTestVisible = false;
+                    break;
+
+                case GameMode.UserVsUser:
+                    break;
+            }
         }
 
         /// <summary>
@@ -954,7 +999,7 @@ namespace Chess_Project
             switch (_mode)
             {
                 case 1:
-                    Moving = true;
+                    MoveInProgress = true;
                     UserTurn = false;
                     Chess_Board.IsHitTestVisible = false;
 
@@ -971,7 +1016,7 @@ namespace Chess_Project
 
                     if (playerColor == "Black")
                     {
-                        Moving = true;
+                        MoveInProgress = true;
                         UserTurn = false;
                         await ComputerMoveAsync();
                     }
@@ -1008,7 +1053,7 @@ namespace Chess_Project
         ///     <item>Otherwise finalize immediately (update FEN, verify checkmate, clear selection).</item>
         /// </list>
         /// <para>✅ Updated on 8/18/2025</para></remarks>
-        public async Task PawnMoveManagerAsync(Image activePawn)
+        public async Task<bool> PawnMoveManagerAsync(Image activePawn)
         {
             // Snapshot board state & castling rights for potential undo.
             PiecePositions();
@@ -1066,26 +1111,14 @@ namespace Chess_Project
                 bool confirmed = await WaitForConfirmationAsync();
                 EraseAnnotations();
 
-                if (confirmed)
-                {
-                    MoveCallout(_oldRow, _oldColumn, _newRow, _newColumn);
-                    await FinalizeMoveAsync(activePawn);
-                    await DocumentMoveAsync();
-                    await CheckmateVerifierAsync();
-                    DeselectPieces();
-                }
-                else
+                if (!confirmed)
                 {
                     UndoMove(activePawn, castlingRightsSnapshot);
+                    return false;
                 }
-                return;
             }
 
-            // Immediate finalize path
-            await FinalizeMoveAsync(activePawn);
-            await DocumentMoveAsync();
-            await CheckmateVerifierAsync();
-            DeselectPieces();
+            return true;
         }
 
         /// <summary>
@@ -1094,7 +1127,7 @@ namespace Chess_Project
         /// </summary>
         /// <param name="activePiece">The piece being moved. Must be a valid piece Image on the board.</param>
         /// <remarks>✅ Updated on 8/18/2025</remarks>>
-        public async Task MoveManagerAsync(Image activePiece)
+        public async Task<bool> MoveManagerAsync(Image activePiece)
         {
             // Snapshot board state & castling rights for potential undo.
             PiecePositions();
@@ -1134,26 +1167,14 @@ namespace Chess_Project
                 bool confirmed = await WaitForConfirmationAsync();
                 EraseAnnotations();
 
-                if (confirmed)
-                {
-                    MoveCallout(_oldRow, _oldColumn, KingCastle ? _oldRow : QueenCastle ? _oldRow : _newRow, KingCastle ? 7 : QueenCastle ? 0 : _newColumn);
-                    await FinalizeMoveAsync(activePiece);
-                    await DocumentMoveAsync();
-                    await CheckmateVerifierAsync();
-                    DeselectPieces();
-                }
-                else
+                if (!confirmed)
                 {
                     UndoMove(activePiece, castlingRightsSnapshot);
+                    return false;
                 }
-                return;
             }
 
-            // Immediate finalize path
-            await FinalizeMoveAsync(activePiece);
-            await DocumentMoveAsync();
-            await CheckmateVerifierAsync();
-            DeselectPieces();
+            return true;
         }
 
         /// <summary>
@@ -1378,7 +1399,7 @@ namespace Chess_Project
         /// </summary>
         /// <param name="activePiece">The piece that completed the move.</param>
         /// <remarks>✅ Updated on 8/19/2025</remarks>
-        private async Task FinalizeMoveAsync(Image activePiece)
+        private Task FinalizeMoveAsync()
         {
             // Switch side to move
             Move = 1 - Move;
@@ -1397,30 +1418,7 @@ namespace Chess_Project
             _startRank = (8 - _oldRow).ToString();
             _startPosition = $"{_startFile}{_startRank}";
             CreateFenCode();
-
-            // If the user isn't moving or the user isn't confirming moves, animate & callout now
-            if (!UserTurn || !_moveConfirm)
-            {
-                // Animate the piece to its destination
-                Grid.SetRow(activePiece, _oldRow);
-                Grid.SetColumn(activePiece, _oldColumn);
-                await MovePieceAsync(activePiece, _newRow, _newColumn, _oldRow, _oldColumn);
-
-                if (KingCastle || QueenCastle)
-                {
-                    bool kingside = KingCastle;
-                    bool blackJustMoved = (Move == 1);
-
-                    // Callout uses rook file for castle visualization
-                    MoveCallout(_oldRow, _oldColumn, _oldRow, kingside ? 7 : 0);
-
-                    await MoveCastleRookAsync(blackJustMoved, kingside);
-                }
-                else
-                {
-                    MoveCallout(_oldRow, _oldColumn, _newRow, _newColumn);
-                }
-            }
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -1537,7 +1535,7 @@ namespace Chess_Project
         /// </list>
         /// ✅ Updated on 8/19/2025
         /// </remarks>
-        private async Task ComputerMoveAsync()
+        private async Task<Image?> ComputerMoveAsync()
         {
             // Lock out user input while the engine is thinking
             EnableImagesWithTag("WhitePiece", false);
@@ -1546,13 +1544,9 @@ namespace Chess_Project
             // Small human-ish delay
             await Task.Delay(Random.Shared.Next(1000, 4501));
 
-            if (EndGame) return;
-
-            Moving = true;
-
             // Resolve ELO / difficulty
             int cpuElo =
-                _mode == 2
+                _gameMode == GameMode.UserVsCom
                     ? int.Parse(_selectedElo.Content.ToString()!)
                     : (Move == 1
                         ? int.Parse(_selectedWhiteElo.Content.ToString()!)
@@ -1573,7 +1567,7 @@ namespace Chess_Project
                 primary.AddRange(reserve);
                 reserve.Clear();
             }
-            if (primary.Count == 0) return;  // Safety
+            if (primary.Count == 0) return null;  // Safety
 
             // Sort "best to worst" by CP, with mate for/against at extremes
             var sorted = primary.OrderByDescending(m =>
@@ -1639,8 +1633,10 @@ namespace Chess_Project
             else
             {
                 System.Diagnostics.Debug.WriteLine("Move string not recognized.");
-                return;
+                return null;
             }
+
+            MoveInProgress = true;
 
             // Convert to grid coords
             _oldRow = 8 - int.Parse(_startPosition[1].ToString());
@@ -1660,7 +1656,7 @@ namespace Chess_Project
                     break;
                 }
             }
-            if (selectedPiece is null) return;
+            if (selectedPiece is null) return null;
 
             // Route to pawn/non-pawn manager
             if (selectedPiece.Name.Contains("Pawn"))
@@ -1678,6 +1674,8 @@ namespace Chess_Project
 
                 await MoveManagerAsync(selectedPiece);
             }
+
+            return selectedPiece;
         }
 
         /// <summary>
@@ -2277,7 +2275,7 @@ namespace Chess_Project
         /// <remarks>✅ Updated on 8/20/2025</remarks>
         private async Task CentralMoveHub()
         {
-            Moving = false;
+            MoveInProgress = false;
 
             // Local helper
             async Task SendRobotBitsAsync(bool whiteJustMoved)
@@ -2340,7 +2338,7 @@ namespace Chess_Project
                 {
                     // Com vs Com
                     case 1:
-                        Moving = true;
+                        MoveInProgress = true;
                         UserTurn = false;
                         await ComputerMoveAsync();
                         break;
@@ -2355,7 +2353,7 @@ namespace Chess_Project
 
                         if (cpuToMove)
                         {
-                            Moving = true;
+                            MoveInProgress = true;
                             UserTurn = false;
                             await ComputerMoveAsync();
                         }
@@ -4019,7 +4017,7 @@ namespace Chess_Project
 
             // Local helpers
             static int ParseDigitAt(string s, int index) => int.Parse(s[index].ToString());
-            int SquareToBitIndex(int file1to8, int rank1to8) => (file1to8 - 1) + ((rank1to8 - 1) * 8);
+            static int SquareToBitIndex(int file1to8, int rank1to8) => (file1to8 - 1) + ((rank1to8 - 1) * 8);
 
             if (string.IsNullOrEmpty(_startPosition))
                 goto finalize_and_log;
@@ -4525,7 +4523,7 @@ namespace Chess_Project
             if (isUserVsUserOrCom)
             {
                 UvCorUvU.Visibility = Visibility.Visible;
-                if (!Moving)
+                if (!MoveInProgress)
                 {
                     UvCorUvU.IsEnabled = true;
                     Play_Type.IsEnabled = true;
@@ -4534,7 +4532,7 @@ namespace Chess_Project
             else
             {
                 CvC.Visibility = Visibility.Visible;
-                if (!Moving)
+                if (!MoveInProgress)
                 {
                     CvC.IsEnabled = true;
                     Play_Type.IsEnabled = true;
@@ -4544,7 +4542,7 @@ namespace Chess_Project
             IsPaused = true;
             PauseButton.IsEnabled = false;
             
-            if (!Moving)   // If CPU is not currently moving
+            if (!MoveInProgress)   // If CPU is not currently moving
             {
                 _inactivityTimer.Start();
                 ResumeButton.IsEnabled = true;
@@ -4613,7 +4611,7 @@ namespace Chess_Project
             if (_selectedPlayType.Content.ToString() == "Com Vs. Com")
             {
                 _mode = 1;
-                Moving = true;
+                MoveInProgress = true;
                 UserTurn = false;
                 Chess_Board.IsHitTestVisible = false;
 
@@ -4640,7 +4638,7 @@ namespace Chess_Project
                 if ((Move == 1 && _selectedColor.Content.ToString() == "Black") ||
                     (Move == 0 && _selectedColor.Content.ToString() == "White"))
                 {
-                    Moving = true;
+                    MoveInProgress = true;
                     UserTurn = false;
                     Chess_Board.IsHitTestVisible = false;
                     await ComputerMoveAsync();
@@ -5000,26 +4998,14 @@ namespace Chess_Project
         /// </summary>
         public async Task CheckmateVerifierAsync()
         {
-            if (_robotMotion)
-            {
-                EnableImagesWithTag("WhitePiece", false);
-                EnableImagesWithTag("BlackPiece", false);
-                PauseButton.IsEnabled = false;
-                EpsonMotion.IsEnabled = false;
-
-                InfoSymbol.Visibility = Visibility.Visible;   // Show "Move in progress" popup
-                InProgressText.Visibility = Visibility.Visible;
-                MoveInProgRect.Visibility = Visibility.Visible;
-            }
-
             using StockfishCall stockfishResponse = new(_stockfishPath!);
             string stockfishFEN = await Task.Run(() => stockfishResponse.GetStockfishResponse(Fen));
-            string[] lines = stockfishFEN.Split('\n').Skip(2).ToArray();
+            string[] lines = [.. stockfishFEN.Split('\n').Skip(2)];
             string[] infoLines = lines.Where(line => line.TrimStart().StartsWith("info")).ToArray();
             string accurateEvaluationLine = infoLines.LastOrDefault() ?? "Most accurate evaluation line not found";
             string[] accurateEvaluation = accurateEvaluationLine.Split(' ');
 
-            if (accurateEvaluation[5].StartsWith("0"))   // If game has been won
+            if (accurateEvaluation[5].StartsWith('0'))   // If game has been won
             {
                 DisplayedAdvantage = "1-0";
 
@@ -5027,20 +5013,17 @@ namespace Chess_Project
                 {
                     QuantifiedEvaluation = 0;
                 }
-
                 else
                 {
                     QuantifiedEvaluation = 20;
                 }
             }
-
             else if (accurateEvaluation[8].StartsWith("mate") && accurateEvaluation.Length > 9)   // If there is a mating sequence present
             {
                 if (accurateEvaluation[9].StartsWith('-'))
                 {
                     DisplayedAdvantage = $"M{accurateEvaluation[9][1..]}";
                 }
-
                 else
                 {
                     DisplayedAdvantage = $"M{accurateEvaluation[9]}";
@@ -5052,27 +5035,23 @@ namespace Chess_Project
                     {
                         QuantifiedEvaluation = 0;
                     }
-
                     else
                     {
                         QuantifiedEvaluation = 20;
                     }
                 }
-
                 else   // Black just moved
                 {
                     if (accurateEvaluation[9].StartsWith('-'))
                     {
                         QuantifiedEvaluation = 20;
                     }
-
                     else
                     {
                         QuantifiedEvaluation = 0;
                     }
                 }
             }
-
             else
             {
                 QuantifiedEvaluation = double.Parse(accurateEvaluation[9].ToString()) / 100;
@@ -5086,13 +5065,11 @@ namespace Chess_Project
                     {
                         QuantifiedEvaluation = 1;
                     }
-
                     else if (QuantifiedEvaluation > 19)
                     {
                         QuantifiedEvaluation = 19;
                     }
                 }
-
                 else   // Black just moved
                 {
                     QuantifiedEvaluation = 10 - QuantifiedEvaluation;
@@ -5101,7 +5078,6 @@ namespace Chess_Project
                     {
                         QuantifiedEvaluation = 1;
                     }
-
                     else if (QuantifiedEvaluation > 19)
                     {
                         QuantifiedEvaluation = 19;
@@ -5109,13 +5085,13 @@ namespace Chess_Project
                 }
             }
 
-            UpdateEvalBar();
-
             string bestMoveLine = lines.FirstOrDefault(line => line.TrimStart().StartsWith("bestmove")) ?? "Bestmove line not found";
             string[] parts = bestMoveLine.Split(' ');
 
             if (parts[1].StartsWith("(none)"))   // If there are no best moves then game is over
             {
+                EndGame = true;
+
                 string outcomeLine = lines[^2];
                 string[] partsOutcome = outcomeLine.Split(' ');
 
@@ -5128,9 +5104,8 @@ namespace Chess_Project
                         _gameOver.Owner = this;
                         _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
                         _gameOver.Show();
-                        System.Diagnostics.Debug.WriteLine("White wins by checkmate");
+                        Debug.WriteLine("White wins by checkmate");
                     }
-
                     else   // Checkmate for black
                     {
                         _gameOver = new();
@@ -5138,10 +5113,9 @@ namespace Chess_Project
                         _gameOver.Owner = this;
                         _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
                         _gameOver.Show();
-                        System.Diagnostics.Debug.WriteLine("Black wins by checkmate");
+                        Debug.WriteLine("Black wins by checkmate");
                     }
                 }
-
                 else if (infoLines.Any(line => line.Contains("cp")))   // If Stockfish calculates a stalemate
                 {
                     DisplayedAdvantage = ".5 - .5";
@@ -5154,7 +5128,7 @@ namespace Chess_Project
                         _gameOver.Owner = this;
                         _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
                         _gameOver.Show();
-                        System.Diagnostics.Debug.WriteLine("Stalemate");
+                        Debug.WriteLine("Stalemate");
                     }
 
                     else
@@ -5164,18 +5138,14 @@ namespace Chess_Project
                         _gameOver.Owner = this;
                         _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
                         _gameOver.Show();
-                        System.Diagnostics.Debug.WriteLine("Stalemate");
+                        Debug.WriteLine("Stalemate");
                     }
                 }
-
-                EndGame = true;
-                EnableImagesWithTag("WhitePiece", false);
-                EnableImagesWithTag("BlackPiece", false);
-                UpdateEvalBar();
             }
-
             else if (Halfmove == 100)   // If fifty-move rule occurs
             {
+                EndGame = true;
+
                 DisplayedAdvantage = ".5 - .5";
                 QuantifiedEvaluation = 10;
 
@@ -5186,16 +5156,12 @@ namespace Chess_Project
                 _gameOver.Owner = this;
                 _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
                 _gameOver.Show();
-                System.Diagnostics.Debug.WriteLine("Draw due to fifty-move rule");
-
-                EndGame = true;
-                EnableImagesWithTag("WhitePiece", false);
-                EnableImagesWithTag("BlackPiece", false);
-                UpdateEvalBar();
+                Debug.WriteLine("Draw due to fifty-move rule");
             }
-
             else if (ThreefoldRepetition)   // If threefold repetition occurs
             {
+                EndGame = true;
+
                 DisplayedAdvantage = ".5 - .5";
                 QuantifiedEvaluation = 10;
 
@@ -5206,14 +5172,8 @@ namespace Chess_Project
                 _gameOver.Owner = this;
                 _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
                 _gameOver.Show();
-                System.Diagnostics.Debug.WriteLine("Draw due to threefold repetition");
-
-                EndGame = true;
-                EnableImagesWithTag("WhitePiece", false);
-                EnableImagesWithTag("BlackPiece", false);
-                UpdateEvalBar();
+                Debug.WriteLine("Draw due to threefold repetition");
             }
-
             else
             {
                 bool insufficient = true;
@@ -5304,6 +5264,8 @@ namespace Chess_Project
 
                 if (insufficient)   // If there is insufficient checkmating material
                 {
+                    EndGame = true;
+
                     DisplayedAdvantage = ".5 - .5";
                     QuantifiedEvaluation = 10;
 
@@ -5314,16 +5276,10 @@ namespace Chess_Project
                     _gameOver.Owner = this;
                     _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
                     _gameOver.Show();
-                    System.Diagnostics.Debug.WriteLine("Draw due to insufficient material");
-
-                    EndGame = true;
-                    EnableImagesWithTag("WhitePiece", false);
-                    EnableImagesWithTag("BlackPiece", false);
-                    UpdateEvalBar();
+                    Debug.WriteLine("Draw due to insufficient material");
+                    return;
                 }
             }
-
-            await CentralMoveHub();
         }
 
 
