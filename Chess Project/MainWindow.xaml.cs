@@ -4664,7 +4664,7 @@ namespace Chess_Project
         /// </list>
         /// Resets transient flags at the end (capture/promotion/castling/en passant).
         /// </summary>
-        /// <remarks>✅ Updating... on 8/20/2025</remarks>
+        /// <remarks>✅ Updated on 8/20/2025</remarks>
         private async Task DocumentMoveAsync()
         {
             using StreamWriter writer = new(_fenFilePath, append: true);
