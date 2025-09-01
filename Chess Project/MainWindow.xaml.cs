@@ -184,7 +184,7 @@ namespace Chess_Project
         private bool EnPassantCreated { get => Session.EnPassantCreated; set => Session.EnPassantCreated = value; }
         private bool EnPassant { get => Session.EnPassant; set => Session.EnPassant = value; }
         private bool Promoted { get => Session.Promoted; set => Session.Promoted = value; }
-        private char? PromotionPiece { get => Session.PromotionPiece; set => Session.PromotionPiece = value; }
+        private char PromotionPiece { get => Session.PromotionPiece; set => Session.PromotionPiece = value; }
 
         #endregion
 
@@ -267,7 +267,7 @@ namespace Chess_Project
         private int _oldRow;
         private int _oldCol;
         private int _newRow;
-        private int _newColumn;
+        private int _newCol;
 
         private string _clickedButtonName;
         private string _pawnName;
@@ -1439,7 +1439,7 @@ namespace Chess_Project
                                 // Animate computer move
                                 Grid.SetRow(_selectedPiece, _oldRow);
                                 Grid.SetColumn(_selectedPiece, _oldCol);
-                                await MovePieceAsync(_selectedPiece, _newRow, _newColumn, _oldRow, _oldCol);
+                                await MovePieceAsync(_selectedPiece, _newRow, _newCol, _oldRow, _oldCol);
                                 break;
                             }
 
@@ -1465,7 +1465,7 @@ namespace Chess_Project
                                     // Animate computer move
                                     Grid.SetRow(_selectedPiece, _oldRow);
                                     Grid.SetColumn(_selectedPiece, _oldCol);
-                                    await MovePieceAsync(_selectedPiece, _newRow, _newColumn, _oldRow, _oldCol);
+                                    await MovePieceAsync(_selectedPiece, _newRow, _newCol, _oldRow, _oldCol);
                                 }
                                 else
                                 {
@@ -1481,7 +1481,7 @@ namespace Chess_Project
                                         // Animate computer move
                                         Grid.SetRow(_selectedPiece, _oldRow);
                                         Grid.SetColumn(_selectedPiece, _oldCol);
-                                        await MovePieceAsync(_selectedPiece, _newRow, _newColumn, _oldRow, _oldCol);
+                                        await MovePieceAsync(_selectedPiece, _newRow, _newCol, _oldRow, _oldCol);
                                     }
                                 }
 
@@ -1503,16 +1503,11 @@ namespace Chess_Project
                                     // Animate computer move
                                     Grid.SetRow(_selectedPiece, _oldRow);
                                     Grid.SetColumn(_selectedPiece, _oldCol);
-                                    await MovePieceAsync(_selectedPiece, _newRow, _newColumn, _oldRow, _oldCol);
+                                    await MovePieceAsync(_selectedPiece, _newRow, _newCol, _oldRow, _oldCol);
                                 }
                                 break;
                             }
                     }
-
-                    // Compute "to" for callout once
-                    int toRow = (KingCastle || QueenCastle) ? _oldRow : _newRow;
-                    int toCol = KingCastle ? 7 : QueenCastle ? 0 : _newColumn;
-                    MoveCallout(_oldRow, _oldCol, toRow, toCol);
 
                     await FinalizeMoveAsync();
                     await DocumentMoveAsync();
@@ -1564,494 +1559,15 @@ namespace Chess_Project
         }
 
         /// <summary>
-        /// Manages a pawn move end-to-end: applies captures (including en passant),
-        /// updates castling rights, handles promotion, optionally animates and confirms
-        /// the move with the user, and finalizes game state (FEN, checkmate check, selection).
-        /// </summary>
-        /// <param name="activePawn">The pawn being moved. Must be a valid piece <see cref="Image"/> on the board.</param>
-        /// <remarks>
-        /// Steps:
-        /// <list type="number">
-        ///     <item>Snapshot state (positions, castling rights), resolve captures.</item>
-        ///     <item>Apply en passant capture and eligibility when applicable.</item>
-        ///     <item>Handle promotion if the pawn reaches its last rank.</item>
-        ///     <item>If confirm moves is enabled, animate → confirm → finalize or undo.</item>
-        ///     <item>Otherwise finalize immediately (update FEN, verify checkmate, clear selection).</item>
-        /// </list>
-        /// <para>✅ Updated on 8/31/2025</para>
-        /// </remarks>
-        /// <returns>
-        /// <see langword="true"/> if the move is finalized successfully; <see langword="false"/> if the move was undone
-        /// (e.g. user rejected the configuration).
-        /// </returns>
-        public async Task<bool> PawnMoveManagerAsync(Image activePawn)
-        {
-            // Snapshot board state & castling rights for potential undo.
-            await PiecePositions();
-            int[] castlingRightsSnapshot = [CWR1, CWK, CWR2, CBR1, CBK, CBR2];
-
-            _pawnName = activePawn.Name;
-
-            // Captures & castling rights
-            await HandlePieceCapture(activePawn);  // sets _capturedPiece if any
-            await HandleEnPassantCapture();  // resolves en passant capture if applicable
-            await DisableCastlingRights(activePawn, _capturedPiece);
-
-            // En passant eligibility & promotion
-            EnPassantCreated = false;
-
-            if (Move == 1)  // white just moved
-            {
-                if (_oldRow - _newRow == 2)
-                {
-                    EnPassantSquare.Clear();
-                    EnPassantSquare.Add(Tuple.Create(_newRow + 1, _newColumn));
-                    EnPassantCreated = true;
-                }
-                else if (_newRow == 0)  // promotion
-                {
-                    await PawnPromote(activePawn, Move);
-                }
-            }
-            else  // black just moved
-            {
-                if (_newRow - _oldRow == 2)
-                {
-                    EnPassantSquare.Clear();
-                    EnPassantSquare.Add(Tuple.Create(_newRow - 1, _newColumn));
-                    EnPassantCreated = true;
-                }
-                else if (_newRow == 7)  // promotion
-                {
-                    await PawnPromote(activePawn, Move);
-                }
-            }
-
-            // Optional user confirmation path
-            if (UserTurn && _moveConfirm)
-            {
-                // Callout proposed move
-                SelectedPiece(_oldRow, _oldCol);
-                SelectedPiece(_newRow, _newColumn);
-
-                // Animate from old to new (board already updated by caller)
-                Grid.SetRow(activePawn, _oldRow);
-                Grid.SetColumn(activePawn, _oldCol);
-                await MovePieceAsync(activePawn, _newRow, _newColumn, _oldRow, _oldCol);
-
-                bool confirmed = await WaitForConfirmationAsync();
-                EraseAnnotations();
-
-                if (!confirmed)
-                {
-                    UndoMove(activePawn, castlingRightsSnapshot);
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Orchestrates a non-pawn move: updates positions, applies captures/castling constraints,
-        /// optionally shows/animates a proposed move for user confirmation, and then finalizes or reverts.
-        /// </summary>
-        /// <param name="activePiece">The piece being moved. Must be a valid piece Image on the board.</param>
-        /// <remarks>✅ Updated on 8/18/2025</remarks>>
-        public async Task<bool> MoveManagerAsync(Image activePiece)
-        {
-            // Snapshot board state & castling rights for potential undo.
-            await PiecePositions();
-            int[] castlingRightsSnapshot = [CWR1, CWK, CWR2, CBR1, CBK, CBR2];
-
-            // King-specific pre-processing (e.g., castling)
-            if (activePiece.Name.Contains("King"))
-                KingMoveManager(activePiece);
-
-            // Captures and castling rights
-            await HandlePieceCapture(activePiece);
-            await DisableCastlingRights(activePiece, _capturedPiece);
-
-            // Optional user confirmation path
-            if (UserTurn && _moveConfirm)
-            {
-                // Callout proposed move
-                if (KingCastle || QueenCastle)
-                {
-                    // Highlight king's start and rook's target squares for visual confirmation.
-                    SelectedPiece(_oldRow, _oldCol);
-                    SelectedPiece(_newRow, KingCastle ? 7 : 0);
-                }
-                else
-                {
-                    SelectedPiece(_oldRow, _oldCol);
-                    SelectedPiece(_newRow, _newColumn);
-                }
-
-                // Animate from old → new (board already updated by caller)
-                Grid.SetRow(activePiece, _oldRow);
-                Grid.SetColumn(activePiece, _oldCol);
-                await MovePieceAsync(activePiece, _newRow, _newColumn, _oldRow, _oldCol);
-
-                bool confirmed = await WaitForConfirmationAsync();
-                EraseAnnotations();
-
-                if (!confirmed)
-                {
-                    UndoMove(activePiece, castlingRightsSnapshot);
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// If the current king move is a castle (2-column shift), updates the corresponding rook's grid
-        /// position to its castled square and sets the appropriate castling flag.
-        /// </summary>
-        /// <remarks>✅ Updated on 8/18/2025</remarks>
-        public async void KingMoveManager(Image activePiece)
-        {
-            // Not a castling move unless the king shifts exactly two files.
-            if (Math.Abs(_oldCol - _newColumn) != 2)
-                return;
-
-            // Mark which castle type occurred for downstream logic/visuals.
-            bool isKingside = _oldCol < _newColumn;
-            if (isKingside)
-                KingCastle = true;
-            else
-                QueenCastle = true;
-
-            // Determine which side (White/Black) from the active piece name.
-            // Assumes _activePiece is set (e.g., in Square_ClickAsync) to the moving piece's name.
-            bool isWhite = activePiece.Name.StartsWith("White") == true;
-
-            // Pick rook name based on side and castle direction.
-            // By convention: Rook1 = queenside rook (col 0), Rook2 = kingside rook (col 7).
-            string rookName =
-                isWhite
-                    ? (isKingside ? "WhiteRook2" : "WhiteRook1")
-                    : (isKingside ? "BlackRook2" : "BlackRook1");
-
-            // Rook ends adjacent to the king's destination square:
-            // kingside → to the left of the king; queenside → to the right of the king.
-            int rookEndColumn = isKingside ? _newColumn - 1 : _newColumn + 1;
-
-            var rook = Chess_Board.Children
-                .OfType<Image>()
-                .FirstOrDefault(img => img.Name == rookName);
-
-            if (rook != null)
-            {
-                Grid.SetRow(rook, _newRow);
-                Grid.SetColumn(rook, rookEndColumn);
-                await MovePieceAsync(rook, _newRow, rookEndColumn, _oldRow, isKingside ? 7 : 0);
-            }
-
-            
-        }
-
-        /// <summary>
-        /// Handles a castling move by animating the appropriate rook to its castled square
-        /// (adjacent to the king's destination) and highlighting the king's start and rook target.
-        /// </summary>
-        /// <param name="side">"King" for kingside, "Queen" for queenside.</param>
-        /// <remarks>✅ Updated on 8/18/2025</remarks>
-        private async Task HandleCastlingMoveAsync(Image activePiece, string side)
-        {
-            if (string.IsNullOrWhiteSpace(side))
-                return;
-
-            bool isKingside = side.Equals("King", StringComparison.OrdinalIgnoreCase);
-            bool isQueenside = side.Equals("Queen", StringComparison.OrdinalIgnoreCase);
-            if (!isKingside && !isQueenside)
-                return;
-
-            // Determine color from the active moving piece (e.g., "WhiteKing", "BlackKing")
-            //bool isWhite = activePiece?.Name?.StartsWith("White", StringComparison.Ordinal) == true;
-            bool isWhite = Move == 1;
-
-            // By naming convention: Rook1 = queenside (col 0), Rook2 = kingside (col 7)
-            string rookName =
-                isWhite
-                    ? (isKingside ? "WhiteRook2" : "WhiteRook1")
-                    : (isKingside ? "BlackRook2" : "BlackRook1");
-
-            int rookColumn = (side == "King") ? 7 : 0;
-            int rookTargetColumn = (side == "King") ? _newColumn - 1 : _newColumn + 1;
-
-            // Try to get rook by name
-            var rook = Chess_Board.Children.OfType<Image>()
-                .FirstOrDefault(img => img.Name == rookName);
-
-            // Animate from old → new (board already updated by caller)
-            if (rook != null)
-            {
-                Grid.SetRow(rook, _oldRow);
-                Grid.SetColumn(rook, rookColumn);
-                await MovePieceAsync(rook, _newRow, rookTargetColumn, _oldRow, rookColumn);
-            }
-
-            // Highlight king's start and rook's target squares for visual confirmation.
-            SelectedPiece(_oldRow, _oldCol);
-            SelectedPiece(_newRow, rookColumn);
-        }
-
-        /// <summary>
-        /// Resets the rook to its original square if a castling move is undone,
-        /// then clears the castling flag.
-        /// </summary>
-        /// <remarks>✅ Updated on 8/18/2025</remarks>
-        private void HandleRookReset()
-        {
-            // Only applicable if a castle was in effect
-            if ((!KingCastle && !QueenCastle))
-                return;
-
-            string rookName = (Move == 1) ?
-                (KingCastle ? "WhiteRook2" : "WhiteRook1") :
-                (KingCastle ? "BlackRook2" : "BlackRook1");
-
-            var rook = Chess_Board.Children.OfType<Image>().FirstOrDefault(img => img.Name == rookName);
-            if (rook != null)
-            {
-                Grid.SetRow(rook, _oldRow);
-                Grid.SetColumn(rook, KingCastle ? 7 : 0);
-            }
-        }
-
-        /// <summary>
-        /// Checks if an opposing piece exists at the destination square (if any).
-        /// </summary>
-        /// <param name="activePiece">The piece being moved.</param>
-        /// <remarks>
-        /// If an enemy piece is on (<see cref="_newRow"/>, <see cref="_newColumn"/>), it's recorded,
-        /// removed from the board, and <see cref="Capture"/> is set. The moving piece is untouched.
-        /// <para>✅ Updated on 8/19/2025</para>
-        /// </remarks>
-        private Task HandlePieceCapture(Image activePiece)
-        {
-            // Fast check: does any image currently sit on the destination square?
-            bool occupied = ImageCoordinates.Any(coord => coord.Item1 == _newRow && coord.Item2 == _newColumn);
-            if (!occupied) return Task.CompletedTask;
-
-            // Locate the captured piece
-            var captured = Chess_Board.Children
-                .OfType<Image>()
-                .FirstOrDefault(img => img != activePiece && Grid.GetRow(img) == _newRow && Grid.GetColumn(img) == _newColumn);
-
-            if (captured is null) return Task.CompletedTask;
- 
-            TakenPiece = captured.Name;
-            _capturedPiece = captured;
-
-            // Remove visually & logically
-            _capturedPiece.Visibility = Visibility.Collapsed;
-            _capturedPiece.IsHitTestVisible = false;
-            _capturedPiece.IsEnabled = false;
-            Chess_Board.Children.Remove(_capturedPiece);
-
-            Capture = true;
-            return Task.CompletedTask;
-        }
-
-        /// <summary>
-        /// Executes en en passant capture when a pawn moves onto the designated en passant square.
-        /// </summary>
-        /// <remarks>
-        /// If the move qualifies as en passant, the opposing pawn directly adjacent to the destination
-        /// is identified, recorded as captured, and removed from the board, and the en passant state is cleared.
-        /// <para>✅ Updated on 8/19/2025</para>
-        /// </remarks>
-        private Task HandleEnPassantCapture()
-        {
-            // Is the destination square currently flagged as en passant?
-            bool isEnPassant = EnPassantSquare.Any(coord => coord.Item1 == _newRow && coord.Item2 == _newColumn);
-            if (!isEnPassant) return Task.CompletedTask;
-
-            // Determine the row of the pawn to capture (the pawn that advanced two squares last move)
-            int capturedRow = (Move == 1) ? _newRow + 1 : _newRow - 1;
-
-            // Locate the captured pawn
-            var capturedPawn = Chess_Board.Children
-                .OfType<Image>()
-                .FirstOrDefault(img => Grid.GetRow(img) == capturedRow && Grid.GetColumn(img) == _newColumn);
-
-            if (capturedPawn != null)
-            {
-                TakenPiece = capturedPawn.Name;
-                _capturedPiece = capturedPawn;
-
-                // Remove visually & logically
-                _capturedPiece.Visibility = Visibility.Collapsed;
-                _capturedPiece.IsHitTestVisible = false;
-                _capturedPiece.IsEnabled = false;
-                Chess_Board.Children.Remove(_capturedPiece);
-
-                EnPassant = true;
-            }
-
-            return Task.CompletedTask;
-        }
-
-        /// <summary>
-        /// Disables castling rights when a king or rook moves or is captured.
-        /// Once the relevant king/rook has moved (or that rook is captured),
-        /// its corresponding castling right is permanently cleared.
-        /// </summary>
-        /// <param name="activePiece">The piece that moved.</param>
-        /// <param name="capturedPiece">The piece that was captured (if any).</param>
-        /// <remarks>✅ Updated on 8/19/2025</remarks>
-        private Task DisableCastlingRights(Image? activePiece, Image? capturedPiece)
-        {
-            if (activePiece == null) return Task.CompletedTask;
-
-            // Local helper: map a piece name to its castling flag and set it.
-            void DisableByName(string name)
-            {
-                if (name.StartsWith("WhiteKing")) { CWK = 1; return; }
-                if (name.StartsWith("BlackKing")) { CBK = 1; return; }
-                if (name.StartsWith("WhiteRook1")) { CWR1 = 1; return; }
-                if (name.StartsWith("WhiteRook2")) { CWR2 = 1; return; }
-                if (name.StartsWith("BlackRook1")) { CBR1 = 1; return; }
-                if (name.StartsWith("BlackRook2")) { CBR2 = 1; return; }
-            }
-
-            // Disable because the moving piece is a king/rook.
-            DisableByName(activePiece.Name);
-
-            // Disable because a rook got captured.
-            if (capturedPiece is not null)
-                DisableByName(capturedPiece.Name);
-
-            return Task.CompletedTask;
-        }
-
-        /// <summary>
-        /// Finalizes a move: flips the side-to-move, updates clocks/FEN, animates the move,
-        /// and (if castling) animates the rook as well. Also clears en passant unless created this move
-        /// and highlights the move with a callout.
-        /// </summary>
-        /// <param name="activePiece">The piece that completed the move.</param>
-        /// <remarks>✅ Updated on 8/19/2025</remarks>
-        private Task FinalizeMoveAsync()
-        {
-            // Switch side to move
-            Move = 1 - Move;
-
-            // Clear en passant square unless one was created by a double pawn push
-            if (!EnPassantCreated) EnPassantSquare.Clear();
-
-            // Halfmove clock: reset on capture or pawn move; otherwise increment
-            Halfmove = (Capture || _clickedPawn != null) ? 0 : Halfmove + 1;
-
-            // Fullmove number increases after Black completes a move
-            if (Move == 1) Fullmove++;
-
-            // Record SAN/PGN start square; update FEN snapshot.
-            _startFile = (char)('a' + _oldCol);
-            _startRank = (8 - _oldRow).ToString();
-            _startPosition = $"{_startFile}{_startRank}";
-            CreateFenCode();
-            return Task.CompletedTask;
-        }
-
-        /// <summary>
-        /// Reverts a tentative move (after user rejection).
-        /// Restores piece locations, castling rights, captured pieces, and promotion state.
-        /// </summary>
-        /// <param name="activePiece">The piece that was moved.</param>
-        /// <param name="castlingRights">Previous castling rights in order: WR1, WK, WR2, BR1, BK, BR2.</param>
-        /// <remarks>✅ Updated on 8/19/2025</remarks>
-        private void UndoMove(Image activePiece, int[] castlingRights)
-        {
-            if (activePiece is null) return;
-
-            // Re-enable board interaction
-            Chess_Board.IsHitTestVisible = true;
-
-            // Put the moved piece back
-            Grid.SetRow(activePiece, _oldRow);
-            Grid.SetColumn(activePiece, _oldCol);
-
-            // Restore castling rights (defensive: ensure array shape)
-            if (castlingRights is { Length: 6 })
-            {
-                CWR1 = castlingRights[0];
-                CWK = castlingRights[1];
-                CWR2 = castlingRights[2];
-                CBR1 = castlingRights[3];
-                CBK = castlingRights[4];
-                CBR2 = castlingRights[5];
-            }
-
-            // If the move was a castle attempt, put the rook back
-            if (KingCastle || QueenCastle)
-                HandleRookReset();
-
-            // If a capture or en passant was undone, restore the captured piece
-            if (Capture || EnPassant)
-            {
-                _capturedPiece.Visibility = Visibility.Visible;
-                _capturedPiece.IsHitTestVisible = true;
-                _capturedPiece.IsEnabled = true;
-                Chess_Board.Children.Add(_capturedPiece);
-            }
-
-            // If a promotion was undone, restore the pawn's sprite, name, events, and counts
-            if (Promoted)
-            {
-                bool whiteToMove = (Move == 1);
-
-                string pawnImagePath = System.IO.Path.Combine(
-                    _executableDirectory, "Assets", "Pieces",
-                    _preferences.Pieces, $"{(whiteToMove ? "White" : "Black")}Pawn.png");
-                _clickedPawn.Source = new BitmapImage(new Uri(pawnImagePath));
-                _clickedPawn.Name = _pawnName;
-
-                // Restore handlers: pawn regains Pawn handler, remove promoted-piece handler
-                _clickedPawn.MouseUp += ChessPawn_Click;
-
-                if (_clickedButtonName.StartsWith("Queen", StringComparison.Ordinal))
-                {
-                    _clickedPawn.MouseUp -= ChessQueen_Click;
-                    if (whiteToMove) NumWQ--; else NumBQ--;
-                }
-                else if (_clickedButtonName.StartsWith("Knight", StringComparison.Ordinal))
-                {
-                    _clickedPawn.MouseUp -= ChessKnight_Click;
-                    if (whiteToMove) NumWN--; else NumBN--;
-                }
-                else if (_clickedButtonName.StartsWith("Rook", StringComparison.Ordinal))
-                {
-                    _clickedPawn.MouseUp -= ChessRook_Click;
-                    if (whiteToMove) NumWR--; else NumBR--;
-                }
-                else
-                {
-                    _clickedPawn.MouseUp -= ChessBishop_Click;
-                    if (whiteToMove) NumWB--; else NumBB--;
-                }
-            }
-
-            // Clear selection and transient flags
-            DeselectPieces();
-            _capturedPiece = null;
-            Capture = false;
-            EnPassant = false;
-            Promoted = false;
-            KingCastle = false;
-            QueenCastle = false;
-        }
-
-        /// <summary>
         /// Chooses and executes the engine's move using Stockfish, scaled by the configured ELO.
         /// Temporarily disables user interaction, queries Stockfish, filters candidate moves by a
         /// mistake window, optionally forces mating lines, then applies the selected move (including
         /// promotions) to the board and routes it through the normal move managers.
         /// </summary>
+        /// <param name="ct">
+        /// An optional <see cref="CancellationToken"/> used to cancel the move computation early
+        /// (e.g., when the game is paused).
+        /// </param>
         /// <remarks>
         /// Pipeline:
         /// <list type="number">
@@ -2070,8 +1586,12 @@ namespace Chess_Project
         ///     <item><description>Does not block the UI thread; Stockfish work is awaited.</description></item>
         ///     <item><description>Respects cached "clicked piece" fields to keep downstream logic unchanged.</description></item>
         /// </list>
-        /// ✅ Updated on 8/19/2025
+        /// ✅ Updated on 8/31/2025
         /// </remarks>
+        /// <returns>
+        /// The <see cref="Image"/> representing the moved piece, or <see langword="null"/> if no move was made
+        /// (e.g., pause, cancel, or engine failure).
+        /// </returns>
         private async Task<Image?> ComputerMoveAsync(CancellationToken ct = default)
         {
             // Lock out user input while the engine is thinking
@@ -2190,7 +1710,7 @@ namespace Chess_Project
                 _oldRow = 8 - int.Parse(_startPosition[1].ToString());
                 _oldCol = _startPosition[0] - 'a';
                 _newRow = 8 - int.Parse(_endPosition[1].ToString());
-                _newColumn = _endPosition[0] - 'a';
+                _newCol = _endPosition[0] - 'a';
 
                 // Find the piece and “virtually” place it on destination
                 Image? selectedPiece = null;
@@ -2200,7 +1720,7 @@ namespace Chess_Project
                     {
                         selectedPiece = img;
                         Grid.SetRow(selectedPiece, _newRow);
-                        Grid.SetColumn(selectedPiece, _newColumn);
+                        Grid.SetColumn(selectedPiece, _newCol);
                         break;
                     }
                 }
@@ -2233,101 +1753,826 @@ namespace Chess_Project
         }
 
         /// <summary>
-        /// Selects a move string from the engine's candidate moves.
-        /// <list type="bullet">
-        ///     <item><description>If there is only one move or <paramref name="topEngineMove"/> is true, always returns the best move.</description></item>
-        ///     <item><description>Otherwise, checks the top 2-3 moves for a "critical moment" (≥ 300 cp gap):</description></item>
-        ///     <item><description>If found, trims the move list based on <paramref name="criticalMoveConversion"/> (best only, best two, or fall to #3-end)</description></item>
-        ///     <item><description>If not found, keeps the full candidate set.</description></item>
-        ///     <item><description>The final move is chosen using a Gaussian distribution biased by <paramref name="bellCurvePercentile"/>, favoring stronger moves while still allowing weaker ones occasionally.</description></item>
-        /// </list>
+        /// Returns a probabilistic decision on whether the engine should force a mating
+        /// continuation (i.e., pick the top "mate in N" move) based on the current
+        /// strength setting (<paramref name="elo"/>) and the detected mate length
+        /// (<paramref name="mateIn"/>).
         /// </summary>
-        /// <param name="moves">Filtered candidate moves (best to worst) within a CP window).</param>
-        /// <param name="sorted">Primary move list sorted strictly best to worst; index 0 is the engine's top move.</param>
-        /// <param name="topEngineMove">Forces picking the engine's top move (e.g., in mating sequences).</param>
-        /// <param name="bellCurvePercentile">0-100: higher biases toward stronger (lower index) choices. 90 means "hug the top moves".</param>
-        /// <param name="criticalMoveConversion">0-100: chance to "convert" a critical moment and keep only the best; otherwise "miss" it and degrade to a worse move among the top few.</param>
-        /// <returns>UCI move string like "e2e4" ot "a7a8q".</returns>
-        /// <remarks>✅ Updated on 8/19/2025</remarks>
-        private static string SelectMoveString(
-            List<(string cp, string cpValue, string possibleMove)> moves,
-            List<(string cp, string cpValue, string possibleMove)> sorted,
-            bool topEngineMove,
-            double bellCurvePercentile,
-            int criticalMoveConversion)
+        /// <param name="elo">Engine strength used to pick a probability table (e.g., 1200, 2000, 3000).</param>
+        /// <param name="mateIn">Positive mate length (M1, M2, …). Values &lt;= 0 are clamped to 1.</param>
+        /// <returns>
+        /// <see langword="true"/> if a random draw falls under the configured probability for the
+        /// (<paramref name="elo"/>, <paramref name="mateIn"/>) pair; otherwise <see langword="false"/>.
+        /// </returns>
+        /// <remarks>
+        /// Uses a tiered table by ELO threshold and piecewise probabilities by mate length.
+        /// Randomness uses <see cref="Random.Shared"/> to avoid per-call allocations.
+        /// <para>✅ Updated on 8/19/2025</para>
+        /// </remarks>
+        private static bool ShouldPlayMatingMove(int elo, int mateIn)
         {
-            // Safety checks
-            if (sorted.Count == 0) return string.Empty;
-            if (moves.Count == 0) return sorted[0].possibleMove.TrimEnd('\r');
-
-            // Forced top line or single option, pick best immediately
-            if (moves.Count == 1 || topEngineMove)
-                return sorted[0].possibleMove.TrimEnd('\r');
-
-            // “Critical moment” gating among top 2–3 moves
-            const int criticalCpThreshold = 300;
-            var top3 = moves.Take(3).ToList();
-
-            if (top3.Count >= 2 &&
-                int.TryParse(top3[0].cpValue, out int cp1) &&
-                int.TryParse(top3[1].cpValue, out int cp2))
+            Dictionary<int, double> mateChances = new()
             {
-                int diff12 = Math.Abs(cp1 - cp2);
-                if (diff12 >= criticalCpThreshold)
+                { 3700, 1.00 },
+                { 3000, mateIn <= 7 ? 1.00 : (mateIn == 8 ? 0.9999 : (mateIn == 9 ? 0.9995 : (mateIn == 10 ? 0.999 : (mateIn == 11 ? 0.997 : (mateIn == 12 ? 0.995 : (mateIn == 13 ? 0.99 : (mateIn == 14 ? 0.97 : (mateIn == 15 ? 0.95 : 0.90)))))))) },
+                { 2800, mateIn == 1 ? 1.00 : (mateIn == 2 ? 1.00 : (mateIn == 3 ? 1.00 : (mateIn == 4 ? 1.00 : (mateIn == 5 ? 0.9999 : (mateIn == 6 ? 0.9995 : (mateIn == 7 ? 0.999 : (mateIn == 8 ? 0.995 : (mateIn == 9 ? 0.98 : (mateIn == 10 ? 0.95 : (mateIn == 11 ? 0.92 : (mateIn == 12 ? 0.88 : 0.80))))))))))) },
+                { 2600, mateIn == 1 ? 1.00 : (mateIn == 2 ? 0.9999 : (mateIn == 3 ? 0.9998 : (mateIn == 4 ? 0.9995 : (mateIn == 5 ? 0.999 : (mateIn == 6 ? 0.995 : (mateIn == 7 ? 0.98 : (mateIn == 8 ? 0.95 : (mateIn == 9 ? 0.92 : (mateIn == 10 ? 0.88 : (mateIn == 11 ? 0.80 : (mateIn == 12 ? 0.72 : 0.65))))))))))) },
+                { 2400, mateIn == 1 ? 0.9999 : (mateIn == 2 ? 0.9995 : (mateIn == 3 ? 0.999 : (mateIn == 4 ? 0.995 : (mateIn == 5 ? 0.98 : (mateIn == 6 ? 0.96 : (mateIn == 7 ? 0.92 : (mateIn == 8 ? 0.85 : (mateIn == 9 ? 0.75 : 0.65)))))))) },
+                { 2200, mateIn == 1 ? 0.999 : (mateIn == 2 ? 0.998 : (mateIn == 3 ? 0.995 : (mateIn == 4 ? 0.985 : (mateIn == 5 ? 0.96 : (mateIn == 6 ? 0.92 : (mateIn == 7 ? 0.85 : 0.75)))))) },
+                { 2000, mateIn == 1 ? 0.998 : (mateIn == 2 ? 0.995 : (mateIn == 3 ? 0.98 : (mateIn == 4 ? 0.95 : (mateIn == 5 ? 0.90 : 0.75)))) },
+                { 1800, mateIn == 1 ? 0.995 : (mateIn == 2 ? 0.98 : (mateIn == 3 ? 0.95 : (mateIn == 4 ? 0.90 : (mateIn == 5 ? 0.80 : 0.60)))) },
+                { 1600, mateIn == 1 ? 0.99 : (mateIn == 2 ? 0.95 : (mateIn == 3 ? 0.90 : (mateIn == 4 ? 0.80 : (mateIn == 5 ? 0.70 : 0.50)))) },
+                { 1400, mateIn == 1 ? 0.97 : (mateIn == 2 ? 0.90 : (mateIn == 3 ? 0.80 : (mateIn == 4 ? 0.65 : (mateIn == 5 ? 0.50 : 0.30)))) },
+                { 1200, mateIn == 1 ? 0.90 : (mateIn == 2 ? 0.80 : (mateIn == 3 ? 0.65 : (mateIn == 4 ? 0.50 : 0.25))) },
+                { 1000, mateIn == 1 ? 0.80 : (mateIn == 2 ? 0.65 : (mateIn == 3 ? 0.50 : (mateIn == 4 ? 0.35 : 0.15))) },
+                { 900, mateIn == 1 ? 0.72 : (mateIn == 2 ? 0.52 : (mateIn == 3 ? 0.42 : (mateIn == 4 ? 0.28 : 0.10))) },
+                { 800, mateIn == 1 ? 0.58 : (mateIn == 2 ? 0.43 : (mateIn == 3 ? 0.32 : (mateIn == 4 ? 0.18 : 0.06))) },
+                { 700, mateIn == 1 ? 0.38 : (mateIn == 2 ? 0.17 : (mateIn == 3 ? 0.06 : 0.00)) },
+            };
+
+            foreach (var (eloThreshold, probability) in mateChances.OrderByDescending(x => x.Key))
+            {
+                if (elo >= eloThreshold)
                 {
-                    // Flip a coin against conversion chance
-                    if (Random.Shared.Next(101) > criticalMoveConversion)
-                    {
-                        // Missed the moment, drop the best (fall to #2+)
-                        if (moves.Count > 1) moves.RemoveAt(0);
-                    }
-                    else
-                    {
-                        // Converted the moment, keep only the best
-                        moves.RemoveRange(1, Math.Max(0, moves.Count - 1));
-                    }
-                }
-                else if (top3.Count == 3 && int.TryParse(top3[2].cpValue, out int cp3))
-                {
-                    int diff23 = Math.Abs(cp2 - cp3);
-                    if (diff23 >= criticalCpThreshold)
-                    {
-                        if (Random.Shared.Next(101) > criticalMoveConversion)
-                        {
-                            // Missed between #2 and #3, fall to #3+
-                            if (moves.Count > 2) moves.RemoveRange(0, 2);
-                        }
-                        else
-                        {
-                            // Converted the moment, keep only the two best moves
-                            moves.RemoveRange(2, Math.Max(0, moves.Count - 2));
-                        }
-                    }
+                    return new Random().NextDouble() < probability;
                 }
             }
 
-            // Gaussian pick biased by bellCurvePercentile (higher = more conservative)
-            int count = moves.Count;
-            if (count == 1)
-                return moves[0].possibleMove.TrimEnd('\r');
-
-            // Higher percentile, mean closer to the top (index 0)
-            double meanIndex = Math.Round((1 - (bellCurvePercentile / 100.0)) * (count - 1));
-            double stdDev = Math.Max(1.0, count / 4.0);
-
-            int idx;
-            do
-            {
-                // Box–Muller
-                double u1 = 1.0 - Random.Shared.NextDouble();
-                double u2 = 1.0 - Random.Shared.NextDouble();
-                double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-                double sample = meanIndex + stdDev * z;
-                idx = (int)Math.Round(sample);
-            } while (idx < 0 || idx >= count);
-
-            return moves[idx].possibleMove.TrimEnd('\r');
+            return false;
         }
+
+        /// <summary>
+        /// Manages a pawn move end-to-end: applies captures (including en passant),
+        /// updates castling rights, handles promotion, optionally animates and confirms
+        /// the move with the user, and finalizes game state (FEN, checkmate check, selection).
+        /// </summary>
+        /// <param name="activePawn">The pawn being moved. Must be a valid piece <see cref="Image"/> on the board.</param>
+        /// <remarks>
+        /// Steps:
+        /// <list type="number">
+        ///     <item>Snapshot state (positions, castling rights), resolve captures.</item>
+        ///     <item>Apply en passant capture and eligibility when applicable.</item>
+        ///     <item>Handle promotion if the pawn reaches its last rank.</item>
+        ///     <item>If confirm moves is enabled, animate → confirm → finalize or undo.</item>
+        ///     <item>Otherwise finalize immediately (update FEN, verify checkmate, clear selection).</item>
+        /// </list>
+        /// <para>✅ Updated on 8/31/2025</para>
+        /// </remarks>
+        /// <returns>
+        /// <see langword="true"/> if the move is finalized successfully; <see langword="false"/> if the move was undone
+        /// (e.g. user rejected the configuration).
+        /// </returns>
+        public async Task<bool> PawnMoveManagerAsync(Image activePawn)
+        {
+            // Snapshot board state & castling rights for potential undo.
+            await PiecePositions();
+            int[] castlingRightsSnapshot = [CWR1, CWK, CWR2, CBR1, CBK, CBR2];
+
+            _pawnName = activePawn.Name;
+
+            // Captures & castling rights
+            await HandlePieceCapture(activePawn);  // sets _capturedPiece if any
+            await HandleEnPassantCapture();  // resolves en passant capture if applicable
+            await DisableCastlingRights(activePawn, _capturedPiece);
+
+            // En passant eligibility & promotion
+            EnPassantCreated = false;
+
+            if (Move == 1)  // white just moved
+            {
+                if (_oldRow - _newRow == 2)
+                {
+                    EnPassantSquare.Clear();
+                    EnPassantSquare.Add(Tuple.Create(_newRow + 1, _newCol));
+                    EnPassantCreated = true;
+                }
+                else if (_newRow == 0)  // promotion
+                {
+                    await PawnPromote(activePawn, Move);
+                }
+            }
+            else  // black just moved
+            {
+                if (_newRow - _oldRow == 2)
+                {
+                    EnPassantSquare.Clear();
+                    EnPassantSquare.Add(Tuple.Create(_newRow - 1, _newCol));
+                    EnPassantCreated = true;
+                }
+                else if (_newRow == 7)  // promotion
+                {
+                    await PawnPromote(activePawn, Move);
+                }
+            }
+
+            // Optional user confirmation path
+            if (UserTurn && _moveConfirm)
+            {
+                // Callout proposed move
+                SelectedPiece(_oldRow, _oldCol);
+                SelectedPiece(_newRow, _newCol);
+
+                // Animate from old to new (board already updated by caller)
+                Grid.SetRow(activePawn, _oldRow);
+                Grid.SetColumn(activePawn, _oldCol);
+                await MovePieceAsync(activePawn, _newRow, _newCol, _oldRow, _oldCol);
+
+                bool confirmed = await WaitForConfirmationAsync();
+                EraseAnnotations();
+
+                if (!confirmed)
+                {
+                    UndoMove(activePawn, castlingRightsSnapshot);
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Orchestrates a non-pawn move: updates position, applies captures/castling constraints,
+        /// optionally shows and animates a proposed move for user confirmation, and then
+        /// finalizes or reverts the move.
+        /// </summary>
+        /// <param name="activePiece">The piece being moved. Must be a valid piece <see cref="Image"/> on the board.</param>
+        /// <remarks>
+        /// <list type="number">
+        ///     <item>Snapshot state (positions, castling rights), resolve captures.</item>
+        ///     <item>Apply king-specific pre-processing (e.g., castling logic).</item>
+        ///     <item>Resolve captures and disable castling rights if needed.</item>
+        ///     <item>If confirm moves is enabled, animate → confirm → finalize or undo.</item>
+        ///     <item>Otherwise finalize immediately (update FEN, verify checkmate, clear selection).</item>
+        /// </list>
+        /// <para>✅ Updated on 8/31/2025</para>
+        /// </remarks>
+        /// <returns>
+        /// <see langword="true"/> if the move is finalized successfully; <see langword="false"/> if the move was undone
+        /// (e.g. user rejected the configuration).
+        /// </returns>
+        public async Task<bool> MoveManagerAsync(Image activePiece)
+        {
+            // Snapshot board state & castling rights for potential undo.
+            await PiecePositions();
+            int[] castlingRightsSnapshot = [CWR1, CWK, CWR2, CBR1, CBK, CBR2];
+
+            // King-specific pre-processing (e.g., castling)
+            if (activePiece.Name.Contains("King"))
+                KingMoveManagerAsync(activePiece);
+
+            // Captures and castling rights
+            await HandlePieceCapture(activePiece);
+            await DisableCastlingRights(activePiece, _capturedPiece);
+
+            // Optional user confirmation path
+            if (UserTurn && _moveConfirm)
+            {
+                // Callout proposed move
+                if (KingCastle || QueenCastle)
+                {
+                    SelectedPiece(_oldRow, _oldCol);
+                    SelectedPiece(_newRow, KingCastle ? 7 : 0);
+                }
+                else
+                {
+                    SelectedPiece(_oldRow, _oldCol);
+                    SelectedPiece(_newRow, _newCol);
+                }
+
+                // Animate from old to new (board already updated by caller)
+                Grid.SetRow(activePiece, _oldRow);
+                Grid.SetColumn(activePiece, _oldCol);
+                await MovePieceAsync(activePiece, _newRow, _newCol, _oldRow, _oldCol);
+
+                bool confirmed = await WaitForConfirmationAsync();
+                EraseAnnotations();
+
+                if (!confirmed)
+                {
+                    UndoMove(activePiece, castlingRightsSnapshot);
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Handles castling moves: if the king shifts exactly two files, relocates the rook
+        /// to its castled square and sets the appropriate castling flag for downstream logic.
+        /// </summary>
+        /// <param name="activePiece">
+        /// The king piece being moved. Must be valid <see cref="Image"/> on the board.
+        /// </param>
+        /// <remarks>
+        /// <list type="bullet">
+        ///     <item><description>Assumes the move has already been validated as legal castling.</description></item>
+        ///     <item><description>By convention, Rook1 = queenside rook (file a), Rook2 = kingside rook (file h).</description></item>
+        ///     <item>Relocates the rook to the correct square adjacent to the king's new position.</item>
+        /// </list>
+        /// <para>✅ Updated on 9/1/2025</para>
+        /// </remarks>
+        public async void KingMoveManagerAsync(Image activePiece)
+        {
+            // Not a castling move unless the king shifts exactly two files
+            if (Math.Abs(_oldCol - _newCol) != 2)
+                return;
+
+            // Mark which castle type occurred for downstream logic/visuals
+            bool isKingside = _oldCol < _newCol;
+            if (isKingside)
+                KingCastle = true;
+            else
+                QueenCastle = true;
+
+            // Determine which side (White/Black) from the active piece name
+            bool isWhite = activePiece.Name.StartsWith("White") == true;
+
+            // Pick rook name based on side and castle direction
+            string rookName =
+                isWhite
+                    ? (isKingside ? "WhiteRook2" : "WhiteRook1")
+                    : (isKingside ? "BlackRook2" : "BlackRook1");
+
+            // Kingside → to the left of the king; queenside → to the right of the king
+            int rookEndColumn = isKingside ? _newCol - 1 : _newCol + 1;
+
+            var rook = Chess_Board.Children
+                .OfType<Image>()
+                .FirstOrDefault(img => img.Name == rookName);
+
+            if (rook != null)
+            {
+                Grid.SetRow(rook, _newRow);
+                Grid.SetColumn(rook, rookEndColumn);
+                await MovePieceAsync(rook, _newRow, rookEndColumn, _oldRow, isKingside ? 7 : 0);
+            }
+        }
+
+        /// <summary>
+        /// Handles capture logic when the moving piece's destination square
+        /// contains an opposing piece.
+        /// </summary>
+        /// <param name="activePiece">
+        /// The piece being moved (remains untouched if a capture occurs).
+        /// </param>
+        /// <remarks>
+        /// <list type="bullet">
+        ///     <item><description>If an opposing piece occupies (<see cref="_newRow"/>, <see cref="_newCol"/>), it is recorded as <see cref="TakenPiece"/> and removed from the board.</description></item>
+        ///     <item><description><see cref="_capturedPiece"/> is updated and <see cref="Capture"/> is set to <see langword="true"/>.</description></item>
+        ///     <item><description>The method itself does not alter the moving piece, only the target square.</description></item>
+        ///     <item><description>Always returns a completed <see cref="Task"/> to fit into async workflows.</description></item>
+        /// </list>
+        /// <para>✅ Updated on 9/1/2025</para>
+        /// </remarks>
+        private Task HandlePieceCapture(Image activePiece)
+        {
+            // Does any image currently sit on the destination square
+            bool occupied = ImageCoordinates.Any(coord => coord.Item1 == _newRow && coord.Item2 == _newCol);
+            if (!occupied) return Task.CompletedTask;
+
+            // Locate the captured piece
+            var captured = Chess_Board.Children
+                .OfType<Image>()
+                .FirstOrDefault(img => img != activePiece && Grid.GetRow(img) == _newRow && Grid.GetColumn(img) == _newCol);
+
+            if (captured is null) return Task.CompletedTask;
+
+            // Store captured piece name and image
+            TakenPiece = captured.Name;
+            _capturedPiece = captured;
+
+            // Remove visually & logically
+            _capturedPiece.Visibility = Visibility.Collapsed;
+            _capturedPiece.IsHitTestVisible = false;
+            _capturedPiece.IsEnabled = false;
+            Chess_Board.Children.Remove(_capturedPiece);
+
+            Capture = true;
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Executes an en passant capture when a pawn moves onto the designated en passant square.
+        /// </summary>
+        /// <remarks>
+        /// <list type="bullet">
+        ///     <item><description>Checks if (<see cref="_newRow"/>, <see cref="_newCol"/>) matches the current <see cref="EnPassantSquare"/>.</description></item>
+        ///     <item><description>If valid, identifies the opposing pawn that advanced two squares last move and removes it from the board.</description></item>
+        ///     <item><description>Records the captured pawn in <see cref="TakenPiece"/> and <see cref="_capturedPiece"/>, and sets <see cref="EnPassant"/> to <see langword="true"/>.</description></item>
+        ///     <item><description>Clears the en passant state after the capture.</description></item>
+        ///     <item><description>Always returns a completed <see cref="Task"/> to integrate into async workflows.</description></item>
+        /// </list>
+        /// <para>✅ Updated on 9/1/2025</para>
+        /// </remarks>
+        private Task HandleEnPassantCapture()
+        {
+            // Is the destination square currently flagged as en passant
+            bool isEnPassant = EnPassantSquare.Any(coord => coord.Item1 == _newRow && coord.Item2 == _newCol);
+            if (!isEnPassant) return Task.CompletedTask;
+
+            // Determine the row of the pawn to capture (the pawn that advanced two squares last move)
+            int capturedRow = (Move == 1) ? _newRow + 1 : _newRow - 1;
+
+            // Locate the captured pawn
+            var capturedPawn = Chess_Board.Children
+                .OfType<Image>()
+                .FirstOrDefault(img => Grid.GetRow(img) == capturedRow && Grid.GetColumn(img) == _newCol);
+
+            if (capturedPawn != null)
+            {
+                // Store captured piece name and image
+                TakenPiece = capturedPawn.Name;
+                _capturedPiece = capturedPawn;
+
+                // Remove visually & logically
+                _capturedPiece.Visibility = Visibility.Collapsed;
+                _capturedPiece.IsHitTestVisible = false;
+                _capturedPiece.IsEnabled = false;
+                Chess_Board.Children.Remove(_capturedPiece);
+
+                EnPassant = true;
+            }
+
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Clears castling rights when the relevant king or rook moves, or when that rook is captured.
+        /// </summary>
+        /// <param name="activePiece">The piece that just moved (may be <see langword="null"/> for capture-only flows).</param>
+        /// <param name="capturedPiece">The piece that was captured, if any.</param>
+        /// <remarks>
+        /// Sets the following flags permanently when triggered:
+        /// <list type="bullet">
+        ///     <item><description><see cref="CKW"/> if white king has moved.</description></item>
+        ///     <item><description><see cref="CWR1"/> if white queenside rook has been moved/been captured.</description></item>
+        ///     <item><description><see cref="CWR2"/> if white kingside rook has been moved/been captured.</description></item>
+        ///     <item><description><see cref="CKW"/> if black king has moved.</description></item>
+        ///     <item><description><see cref="CWR1"/> if black queenside rook has been moved/been captured.</description></item>
+        ///     <item><description><see cref="CWR2"/> if black kingside rook has been moved/been captured.</description></item>
+        /// </list>
+        /// <para>
+        /// Assumes starting rooks are named <c>WhiteRook1</c>/<c>WhiteRook2</c> and
+        /// <c>BlackRook1</c>/<c>BlackRook2</c>. Promoted rooks should not use these names.
+        /// </para>
+        /// <para>✅ Updated on 9/1/2025</para>
+        /// </remarks>
+        /// <returns></returns>
+        private Task DisableCastlingRights(Image? activePiece, Image? capturedPiece)
+        {
+            if (activePiece == null) return Task.CompletedTask;
+
+            // Local helper: map a piece name to its castling flag and set it
+             void DisableByName(string name)
+            {
+                if (name.StartsWith("WhiteKing")) { CWK = 1; return; }
+                if (name.StartsWith("BlackKing")) { CBK = 1; return; }
+                if (name.StartsWith("WhiteRook1")) { CWR1 = 1; return; }
+                if (name.StartsWith("WhiteRook2")) { CWR2 = 1; return; }
+                if (name.StartsWith("BlackRook1")) { CBR1 = 1; return; }
+                if (name.StartsWith("BlackRook2")) { CBR2 = 1; return; }
+            }
+
+            // Disable because the moving piece is a king/rook
+            DisableByName(activePiece.Name);
+
+            // Disable because a rook got captured
+            if (capturedPiece is not null)
+                DisableByName(capturedPiece.Name);
+
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Handles pawn promotion for user or engine:
+        /// updates the pawn's image, logical name, input handler, and per-side counters.
+        /// Show a modal chooser when it's the user's turn; the engine uses the preselected.
+        /// <see cref="PromotionPiece"/> value (r/n/b/q).
+        /// </summary>
+        /// <param name="activePawn">The pawn being promoted.</param>
+        /// <param name="move">Side to move: 1 = White, 0 = Black.</param>
+        /// <remarks>
+        /// Side effects:
+        /// <list type="bullet">
+        ///     <item><description>Sets <see cref="Promoted"/> and <see cref="PromotedPawn"/>.</description></item>
+        ///     <item><description>Replaces the pawn's image and name (e.g., <c>WhiteQueen3</c>), rebinds MouseUp to the new piece handler.</description></item>
+        ///     <item><description>Increments the corresponding piece counter (e.g., <c>NumWQ</c>).</description></item>
+        ///     <item><description>On user turns, blocks on a modal promotion dialog; on engine turns, uses <see cref="PromotionPiece"/>.</description></item>
+        /// </list>
+        /// <para>✅ Updated on 9/1/2025</para>
+        /// </remarks>
+        /// <returns></returns>
+        public Task PawnPromote(Image activePawn, int move)
+        {
+            // Build theme-dependent image paths once
+            string[] promotionPieces = ["Rook", "Knight", "Bishop", "Queen"];
+            List<string> imagePaths = [];
+
+            foreach (string piece in promotionPieces)
+            {
+                // White version
+                imagePaths.Add(System.IO.Path.Combine(
+                    _executableDirectory, "Assets", "Pieces",
+                    _preferences.Pieces, $"White{piece}.png"));
+
+                // Black version
+                imagePaths.Add(System.IO.Path.Combine(
+                    _executableDirectory, "Assets", "Pieces",
+                    _preferences.Pieces, $"Black{piece}.png"));
+            }
+
+            bool isWhite = move == 1;
+            Promoted = true;
+            PromotedPawn = activePawn.Name;
+
+            // Decide the promotion choice
+            char choice;
+            if (UserTurn)
+            {
+                // Show chooser restricted to the current side
+                var dialog = new Promotion(imagePaths)
+                {
+                    Owner = this,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner
+                };
+
+                // Toggle visibility by side
+                dialog.WhiteQueen.Visibility = isWhite ? Visibility.Visible : Visibility.Collapsed;
+                dialog.WhiteKnight.Visibility = isWhite ? Visibility.Visible : Visibility.Collapsed;
+                dialog.WhiteRook.Visibility = isWhite ? Visibility.Visible : Visibility.Collapsed;
+                dialog.WhiteBishop.Visibility = isWhite ? Visibility.Visible : Visibility.Collapsed;
+                dialog.BlackQueen.Visibility = isWhite ? Visibility.Collapsed : Visibility.Visible;
+                dialog.BlackKnight.Visibility = isWhite ? Visibility.Collapsed : Visibility.Visible;
+                dialog.BlackRook.Visibility = isWhite ? Visibility.Collapsed : Visibility.Visible;
+                dialog.BlackBishop.Visibility = isWhite ? Visibility.Collapsed : Visibility.Visible;
+
+                dialog.ShowDialog();
+
+                var btn = dialog.ClickedButtonName ?? string.Empty;
+                if (btn.StartsWith("Rook", StringComparison.Ordinal)) choice = 'r';
+                else if (btn.StartsWith("Knight", StringComparison.Ordinal)) choice = 'n';
+                else if (btn.StartsWith("Bishop", StringComparison.Ordinal)) choice = 'b';
+                else if (btn.StartsWith("Queen", StringComparison.Ordinal)) choice = 'q';
+                else
+                {
+                    // No selection (dialog dismissed) — keep queen as a sane default or abort.
+                    choice = 'q';
+                }
+
+                PromotionPiece = choice; // keep in sync for downstream logic/PGN if you use it
+            }
+            else
+            {
+                // Engine path: PromotionPiece must be preset ('q' default is typical)
+                choice = PromotionPiece != '\0' ? PromotionPiece : 'q';
+            }
+
+            ApplyPromotion(activePawn, isWhite, choice, imagePaths);
+            ActivePiece = activePawn.Name;
+            return Task.CompletedTask;
+
+            // Local helper
+            static int ImageIndex(bool white, char kind)
+            {
+                // imagePaths layout (even = white, odd = black):
+                // 0 W Rook, 1 B Rook, 2 W Knight, 3 B Knight, 4 W Bishop, 5 B Bishop, 6 W Queen, 7 B Queen
+                int baseIdx = white ? 0 : 1;
+                int offset = kind switch
+                {
+                    'r' => 0,
+                    'n' => 2,
+                    'b' => 4,
+                    _ => 6 // 'q' or anything else → queen
+                };
+                return baseIdx + offset;
+            }
+
+            // Local helper
+            void ApplyPromotion(Image pawn, bool white, char kind, List<string> paths)
+            {
+                int idx = ImageIndex(white, kind);
+                if (idx < 0 || idx >= paths.Count)
+                    ChessLog.LogWarning($"Promotion image index {idx} out of range (paths count {paths.Count}).");
+
+                string imgPath = (idx >= 0 && idx < paths.Count) ? paths[idx] : string.Empty;
+                if (!string.IsNullOrEmpty(imgPath) && File.Exists(imgPath))
+                    pawn.Source = new BitmapImage(new Uri(imgPath, UriKind.Absolute));
+                else
+                    ChessLog.LogWarning($"Promotion image missing: {imgPath}");
+
+                if (white)
+                {
+                    switch (kind)
+                    {
+                        case 'r':
+                            pawn.Name = $"WhiteRook{NumWR++}";
+                            pawn.MouseUp -= ChessPawn_Click; pawn.MouseUp += ChessRook_Click; break;
+                        case 'n':
+                            pawn.Name = $"WhiteKnight{NumWN++}";
+                            pawn.MouseUp -= ChessPawn_Click; pawn.MouseUp += ChessKnight_Click; break;
+                        case 'b':
+                            pawn.Name = $"WhiteBishop{NumWB++}";
+                            pawn.MouseUp -= ChessPawn_Click; pawn.MouseUp += ChessBishop_Click; break;
+                        default: // 'q'
+                            pawn.Name = $"WhiteQueen{NumWQ++}";
+                            pawn.MouseUp -= ChessPawn_Click; pawn.MouseUp += ChessQueen_Click; break;
+                    }
+                }
+                else
+                {
+                    switch (kind)
+                    {
+                        case 'r':
+                            pawn.Name = $"BlackRook{NumBR++}";
+                            pawn.MouseUp -= ChessPawn_Click; pawn.MouseUp += ChessRook_Click; break;
+                        case 'n':
+                            pawn.Name = $"BlackKnight{NumBN++}";
+                            pawn.MouseUp -= ChessPawn_Click; pawn.MouseUp += ChessKnight_Click; break;
+                        case 'b':
+                            pawn.Name = $"BlackBishop{NumBB++}";
+                            pawn.MouseUp -= ChessPawn_Click; pawn.MouseUp += ChessBishop_Click; break;
+                        default: // 'q'
+                            pawn.Name = $"BlackQueen{NumBQ++}";
+                            pawn.MouseUp -= ChessPawn_Click; pawn.MouseUp += ChessQueen_Click; break;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Reverts a tentative move after a user rejection.
+        /// Restores the moved piece's location, castling rights, any captured piece,
+        /// and promotion state (sprite, name, handlers, counters).
+        /// </summary>
+        /// <param name="activePiece">The piece that was moved.</param>
+        /// <param name="castlingRights">Prior castling flags in order: WR1, WK, WR2, BR1, BK, BR2.</param>
+        /// <remarks>✅ Updated on 9/1/2025</remarks>
+        private void UndoMove(Image activePiece, int[] castlingRights)
+        {
+            if (activePiece is null) return;
+
+            // Re-enable board interaction
+            Chess_Board.IsHitTestVisible = true;
+
+            // Put the moved piece back
+            Grid.SetRow(activePiece, _oldRow);
+            Grid.SetColumn(activePiece, _oldCol);
+
+            // Restore castling rights (defensive: ensure array shape)
+            if (castlingRights is { Length: 6 })
+            {
+                CWR1 = castlingRights[0];
+                CWK  = castlingRights[1];
+                CWR2 = castlingRights[2];
+                CBR1 = castlingRights[3];
+                CBK  = castlingRights[4];
+                CBR2 = castlingRights[5];
+            }
+
+            // If the move was a castle attempt, put the rook back
+            if (KingCastle || QueenCastle)
+                HandleRookReset();
+
+            // If a capture or en passant was undone, restore the captured piece
+            if ((Capture || EnPassant) && _capturedPiece is not null)
+            {
+                _capturedPiece.Visibility = Visibility.Visible;
+                _capturedPiece.IsHitTestVisible = true;
+                _capturedPiece.IsEnabled = true;
+
+                if (!Chess_Board.Children.Contains(_capturedPiece))
+                    Chess_Board.Children.Add(_capturedPiece);
+            }
+
+            // If a promotion was undone, restore the pawn's sprite, name, events, and counts
+            if (Promoted)
+            {
+                bool whiteToMove = (Move == 1);
+
+                string pawnImagePath = System.IO.Path.Combine(
+                    _executableDirectory, "Assets", "Pieces",
+                    _preferences.Pieces, $"{(whiteToMove ? "White" : "Black")}Pawn.png");
+
+                if (File.Exists(pawnImagePath))
+                    _clickedPawn.Source = new BitmapImage(new Uri(pawnImagePath));
+
+                // Restore name
+                _clickedPawn.Name = _pawnName;
+
+                // Restore handlers: pawn regains Pawn handler, remove promoted-piece handler
+                _clickedPawn.MouseUp += ChessPawn_Click;
+
+                if (_clickedButtonName.StartsWith("Queen", StringComparison.Ordinal))
+                {
+                    _clickedPawn.MouseUp -= ChessQueen_Click;
+                    if (whiteToMove) NumWQ--; else NumBQ--;
+                }
+                else if (_clickedButtonName.StartsWith("Knight", StringComparison.Ordinal))
+                {
+                    _clickedPawn.MouseUp -= ChessKnight_Click;
+                    if (whiteToMove) NumWN--; else NumBN--;
+                }
+                else if (_clickedButtonName.StartsWith("Rook", StringComparison.Ordinal))
+                {
+                    _clickedPawn.MouseUp -= ChessRook_Click;
+                    if (whiteToMove) NumWR--; else NumBR--;
+                }
+                else if (_clickedButtonName.StartsWith("Bishop", StringComparison.Ordinal))
+                {
+                    _clickedPawn.MouseUp -= ChessBishop_Click;
+                    if (whiteToMove) NumWB--; else NumBB--;
+                }
+            }
+
+            // Clear selection and transient flags
+            DeselectPieces();
+            _capturedPiece = null;
+            Capture = false;
+            EnPassant = false;
+            Promoted = false;
+            KingCastle = false;
+            QueenCastle = false;
+        }
+
+        /// <summary>
+        /// Resets the rook to its original square if a castling move is undone,
+        /// then clears the castling flags.
+        /// </summary>
+        /// <remarks>✅ Updated on 9/1/2025</remarks>
+        private void HandleRookReset()
+        {
+            // Only applicable if a castle was in effect
+            if ((!KingCastle && !QueenCastle))
+                return;
+
+            string rookName = (Move == 1) ?
+                (KingCastle ? "WhiteRook2" : "WhiteRook1") :
+                (KingCastle ? "BlackRook2" : "BlackRook1");
+
+            var rook = Chess_Board.Children.OfType<Image>().FirstOrDefault(img => img.Name == rookName);
+            if (rook != null)
+            {
+                Grid.SetRow(rook, _oldRow);
+                Grid.SetColumn(rook, KingCastle ? 7 : 0);
+            }
+        }
+
+        /// <summary>
+        /// Finalizes a move: flips the side to move, updates clocks and FEN,
+        /// and clears the en passant square unless one was created this move.
+        /// </summary>
+        /// <remarks>✅ Updated on 9/1/2025</remarks>
+        private Task FinalizeMoveAsync()
+        {
+            // Switch side to move
+            Move = 1 - Move;
+
+            // Compute "to" for callout once
+            int toRow = (KingCastle || QueenCastle) ? _oldRow : _newRow;
+            int toCol = KingCastle ? 7 : QueenCastle ? 0 : _newCol;
+            MoveCallout(_oldRow, _oldCol, toRow, toCol);
+
+            // Clear en passant square unless one was created by a double pawn push
+            if (!EnPassantCreated) EnPassantSquare.Clear();
+
+            // Halfmove clock: reset on capture or pawn move; otherwise increment
+            Halfmove = (Capture || _clickedPawn != null) ? 0 : Halfmove + 1;
+
+            // Fullmove number increases after Black completes a move
+            if (Move == 1) Fullmove++;
+
+            // Record SAN/PGN start square; update FEN snapshot.
+            _startFile = (char)('a' + _oldCol);
+            _startRank = (8 - _oldRow).ToString();
+            _startPosition = $"{_startFile}{_startRank}";
+            CreateFenCode();
+            return Task.CompletedTask;
+        }
+        
+        /// <summary>
+        /// Rebuilds the FEN string (<see cref="Fen"/>) for the current UI board state and updates
+        /// material counts. The method:
+        /// <list type="bullet">
+        ///     <item><description>Scans all pieces (<see cref="Image"/>s) once to build an 8x8 map.</description></item>
+        ///     <item><description>Compresses empty runs per rank to produce the piece-placement field.</description></item>
+        ///     <item><description>Appends side-to-move from <see cref="Move"/> (<c>w</c> when <see cref="Move"/> == 1, else <c>b</c>).</description></item>
+        ///     <item><description>Derives castling rights from <see cref="CWK"/>, <see cref="CWR1"/>, <see cref="CWR2"/>, <see cref="CBK"/>, <see cref="CBR1"/>, and <see cref="CBR2"/> order KQkq; <c>-</c> if none).</description></item>
+        ///     <item><description>Emits the en passant target square from <see cref="EnPassantSquare"/> (or <c>-</c>).</description></item>
+        ///     <item><description>Appends the halfmove clock <see cref="Halfmove"/> and fullmove number <see cref="Fullmove"/>.</description></item>
+        /// </list>
+        /// </summary>
+        /// <remarks>
+        /// Also sets <see cref="PreviousFen"/> (old value) and recomputes <see cref="WhiteMaterial"/>/<see cref="BlackMaterial"/>.
+        /// <para>✅ Updated on 8/20/2025</para>
+        /// </remarks>
+        private void CreateFenCode()
+        {
+            PreviousFen = Fen;
+            WhiteMaterial = 0;
+            BlackMaterial = 0;
+
+            // Build a quick lookup of what occupies each grid cell
+            int rows = Chess_Board.RowDefinitions.Count;
+            int cols = Chess_Board.ColumnDefinitions.Count;
+            var board = new char[rows, cols];
+
+            foreach (var img in Chess_Board.Children.OfType<Image>())
+            {
+                int r = Grid.GetRow(img);
+                int c = Grid.GetColumn(img);
+
+                // Map image name to FEN char, and accumulate material
+                char ch = MapNameToFenAndAccumulate(img.Name);
+                if (ch != '\0') board[r, c] = ch;
+            }
+
+            // Piece placement (rank 8 to 1 corresponds to grid rows 0..7 in the layout)
+            var sb = new StringBuilder(64);
+            for (int r = 0; r < rows; r++)
+            {
+                int empty = 0;
+                for (int c = 0; c < cols; c++)
+                {
+                    char ch = board[r, c];
+                    if (ch == '\0')
+                    {
+                        empty++;
+                    }
+                    else
+                    {
+                        if (empty > 0) { sb.Append(empty); empty = 0; }
+                        sb.Append(ch);
+                    }
+                }
+                if (empty > 0) sb.Append(empty);
+                if (r != rows - 1) sb.Append('/');
+            }
+
+            // Side to move
+            sb.Append(Move == 1 ? " w " : " b ");
+
+            // Castling rights (KQkq order; '-' if none)
+            int startLen = sb.Length;
+            if (CWK == 0)
+            {
+                if (CWR2 == 0) sb.Append('K');
+                if (CWR1 == 0) sb.Append('Q');
+            }
+            if (CBK == 0)
+            {
+                if (CBR2 == 0) sb.Append('k');
+                if (CBR1 == 0) sb.Append('q');
+            }
+            if (sb.Length == startLen) sb.Append('-');
+
+            // En passant target
+            if (EnPassantSquare.Count == 1)
+            {
+                sb.Append(' ');
+                sb.Append((char)('a' + _newCol));
+                sb.Append(Move == 1 ? (_newRow + 3).ToString() : (_newRow - 1).ToString());
+            }
+            else
+            {
+                sb.Append(" -");
+            }
+
+            // Halfmove and fullmove
+            sb.Append(' ').Append(Halfmove).Append(' ').Append(Fullmove);
+
+            Fen = sb.ToString();
+            System.Diagnostics.Debug.WriteLine($"\n\nFEN: {Fen}");
+
+            // Local helper
+            char MapNameToFenAndAccumulate(string name)
+            {
+                // Expect names like "WhitePawn1", "BlackQueen2", etc.
+                if (name.StartsWith("White"))
+                {
+                    if (name.Contains("Pawn")) { WhiteMaterial += 1; return 'P'; }
+                    if (name.Contains("Knight")) { WhiteMaterial += 3; return 'N'; }
+                    if (name.Contains("Bishop")) { WhiteMaterial += 3; return 'B'; }
+                    if (name.Contains("Rook")) { WhiteMaterial += 5; return 'R'; }
+                    if (name.Contains("Queen")) { WhiteMaterial += 9; return 'Q'; }
+                    if (name.Contains("King")) { return 'K'; }
+                }
+                else if (name.StartsWith("Black"))
+                {
+                    if (name.Contains("Pawn")) { BlackMaterial += 1; return 'p'; }
+                    if (name.Contains("Knight")) { BlackMaterial += 3; return 'n'; }
+                    if (name.Contains("Bishop")) { BlackMaterial += 3; return 'b'; }
+                    if (name.Contains("Rook")) { BlackMaterial += 5; return 'r'; }
+                    if (name.Contains("Queen")) { BlackMaterial += 9; return 'q'; }
+                    if (name.Contains("King")) { return 'k'; }
+                }
+                return '\0';
+            }
+        }
+
+        #endregion
+
+        #region Stockfish Querying & Parsing
 
         /// <summary>
         /// Runs Stockfish with the given FEN and depth, parses its output, 
@@ -2337,13 +2582,13 @@ namespace Chess_Project
         /// <param name="depth">Search depth to request from Stockfish.</param>
         /// <param name="stockfishPath">Filesystem path to the Stockfish engine executable.</param>
         /// <returns>
-        /// A tuple containing:
+        /// A tuple of:
         /// <list type="bullet">
-        ///     <item><description>A list of evaluated moves at the requested depth (centipawn label, centipawn value, move string).</description></item>
-        ///     <item><description>A reserve list of fallback moves (typically at shallow depth = 1).</description></item>
-        ///     <item><description>All raw output lines from Stockfish (post-split).</description></item>
+        ///     <item><description><c>main</c>: Moves evaluated at or beyond the requested depth (tuple of score label <c>("cp" | "mate")</c>, score value, UCI move).</description></item>
+        ///     <item><description><c>reserve</c>: Fallback moves (typically from shallow depth = 1).</description></item>
+        ///     <item><description><c>lines</c>: All raw Stockfish output lines after header trimming.</description></item>
         /// </list>
-        /// ✅ Updating...
+        /// <para>✅ Updated on 8/31/2025</para>
         /// </returns>
         private static async Task<(List<(string cp, string cpValue, string possibleMove)>, List<(string cp, string cpValue, string possibleMove)>, string[])> ParseStockfishOutputAsync(string fen, int depth, string stockfishPath, CancellationToken ct = default)
         {
@@ -2433,175 +2678,6 @@ namespace Chess_Project
         }
 
         /// <summary>
-        /// Returns a probabilistic decision on whether the engine should force a mating
-        /// continuation (i.e., pick the top "mate in N" move) based on the current
-        /// strength setting (<paramref name="elo"/>) and the detected mate length
-        /// (<paramref name="mateIn"/>).
-        /// </summary>
-        /// <param name="elo">Engine strength used to pick a probability table (e.g., 1200, 2000, 3000).</param>
-        /// <param name="mateIn">Positive mate length (M1, M2, …). Values &lt;= 0 are clamped to 1.</param>
-        /// <returns>
-        /// <see langword="true"/> if a random draw falls under the configured probability for the
-        /// (<paramref name="elo"/>, <paramref name="mateIn"/>) pair; otherwise <see langword="false"/>.
-        /// </returns>
-        /// <remarks>
-        /// Uses a tiered table by ELO threshold and piecewise probabilities by mate length.
-        /// Randomness uses <see cref="Random.Shared"/> to avoid per-call allocations.
-        /// <para>✅ Updated on 8/19/2025</para>
-        /// </remarks>
-        private static bool ShouldPlayMatingMove(int elo, int mateIn)
-        {
-            Dictionary<int, double> mateChances = new()
-            {
-                { 3700, 1.00 },
-                { 3000, mateIn <= 7 ? 1.00 : (mateIn == 8 ? 0.9999 : (mateIn == 9 ? 0.9995 : (mateIn == 10 ? 0.999 : (mateIn == 11 ? 0.997 : (mateIn == 12 ? 0.995 : (mateIn == 13 ? 0.99 : (mateIn == 14 ? 0.97 : (mateIn == 15 ? 0.95 : 0.90)))))))) },
-                { 2800, mateIn == 1 ? 1.00 : (mateIn == 2 ? 1.00 : (mateIn == 3 ? 1.00 : (mateIn == 4 ? 1.00 : (mateIn == 5 ? 0.9999 : (mateIn == 6 ? 0.9995 : (mateIn == 7 ? 0.999 : (mateIn == 8 ? 0.995 : (mateIn == 9 ? 0.98 : (mateIn == 10 ? 0.95 : (mateIn == 11 ? 0.92 : (mateIn == 12 ? 0.88 : 0.80))))))))))) },
-                { 2600, mateIn == 1 ? 1.00 : (mateIn == 2 ? 0.9999 : (mateIn == 3 ? 0.9998 : (mateIn == 4 ? 0.9995 : (mateIn == 5 ? 0.999 : (mateIn == 6 ? 0.995 : (mateIn == 7 ? 0.98 : (mateIn == 8 ? 0.95 : (mateIn == 9 ? 0.92 : (mateIn == 10 ? 0.88 : (mateIn == 11 ? 0.80 : (mateIn == 12 ? 0.72 : 0.65))))))))))) },
-                { 2400, mateIn == 1 ? 0.9999 : (mateIn == 2 ? 0.9995 : (mateIn == 3 ? 0.999 : (mateIn == 4 ? 0.995 : (mateIn == 5 ? 0.98 : (mateIn == 6 ? 0.96 : (mateIn == 7 ? 0.92 : (mateIn == 8 ? 0.85 : (mateIn == 9 ? 0.75 : 0.65)))))))) },
-                { 2200, mateIn == 1 ? 0.999 : (mateIn == 2 ? 0.998 : (mateIn == 3 ? 0.995 : (mateIn == 4 ? 0.985 : (mateIn == 5 ? 0.96 : (mateIn == 6 ? 0.92 : (mateIn == 7 ? 0.85 : 0.75)))))) },
-                { 2000, mateIn == 1 ? 0.998 : (mateIn == 2 ? 0.995 : (mateIn == 3 ? 0.98 : (mateIn == 4 ? 0.95 : (mateIn == 5 ? 0.90 : 0.75)))) },
-                { 1800, mateIn == 1 ? 0.995 : (mateIn == 2 ? 0.98 : (mateIn == 3 ? 0.95 : (mateIn == 4 ? 0.90 : (mateIn == 5 ? 0.80 : 0.60)))) },
-                { 1600, mateIn == 1 ? 0.99 : (mateIn == 2 ? 0.95 : (mateIn == 3 ? 0.90 : (mateIn == 4 ? 0.80 : (mateIn == 5 ? 0.70 : 0.50)))) },
-                { 1400, mateIn == 1 ? 0.97 : (mateIn == 2 ? 0.90 : (mateIn == 3 ? 0.80 : (mateIn == 4 ? 0.65 : (mateIn == 5 ? 0.50 : 0.30)))) },
-                { 1200, mateIn == 1 ? 0.90 : (mateIn == 2 ? 0.80 : (mateIn == 3 ? 0.65 : (mateIn == 4 ? 0.50 : 0.25))) },
-                { 1000, mateIn == 1 ? 0.80 : (mateIn == 2 ? 0.65 : (mateIn == 3 ? 0.50 : (mateIn == 4 ? 0.35 : 0.15))) },
-                { 900, mateIn == 1 ? 0.72 : (mateIn == 2 ? 0.52 : (mateIn == 3 ? 0.42 : (mateIn == 4 ? 0.28 : 0.10))) },
-                { 800, mateIn == 1 ? 0.58 : (mateIn == 2 ? 0.43 : (mateIn == 3 ? 0.32 : (mateIn == 4 ? 0.18 : 0.06))) },
-                { 700, mateIn == 1 ? 0.38 : (mateIn == 2 ? 0.17 : (mateIn == 3 ? 0.06 : 0.00)) },
-            };
-
-            foreach (var (eloThreshold, probability) in mateChances.OrderByDescending(x => x.Key))
-            {
-                if (elo >= eloThreshold)
-                {
-                    return new Random().NextDouble() < probability;
-                }
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Rebuilds the FEN string (<see cref="Fen"/>) for the current UI board state and updates
-        /// material counts. The method:
-        /// <list type="bullet">
-        ///     <item><description>Scans all pieces (<see cref="Image"/>s) once to build an 8x8 map.</description></item>
-        ///     <item><description>Compresses empty runs per rank to produce the piece-placement field.</description></item>
-        ///     <item><description>Appends side-to-move from <see cref="Move"/> (<c>w</c> when <see cref="Move"/> == 1, else <c>b</c>).</description></item>
-        ///     <item><description>Derives castling rights from <see cref="CWK"/>, <see cref="CWR1"/>, <see cref="CWR2"/>, <see cref="CBK"/>, <see cref="CBR1"/>, and <see cref="CBR2"/> order KQkq; <c>-</c> if none).</description></item>
-        ///     <item><description>Emits the en passant target square from <see cref="EnPassantSquare"/> (or <c>-</c>).</description></item>
-        ///     <item><description>Appends the halfmove clock <see cref="Halfmove"/> and fullmove number <see cref="Fullmove"/>.</description></item>
-        /// </list>
-        /// </summary>
-        /// <remarks>
-        /// Also sets <see cref="PreviousFen"/> (old value) and recomputes <see cref="WhiteMaterial"/>/<see cref="BlackMaterial"/>.
-        /// <para>✅ Updated on 8/20/2025</para>
-        /// </remarks>
-        private void CreateFenCode()
-        {
-            PreviousFen = Fen;
-            WhiteMaterial = 0;
-            BlackMaterial = 0;
-
-            // Build a quick lookup of what occupies each grid cell
-            int rows = Chess_Board.RowDefinitions.Count;
-            int cols = Chess_Board.ColumnDefinitions.Count;
-            var board = new char[rows, cols];
-
-            foreach (var img in Chess_Board.Children.OfType<Image>())
-            {
-                int r = Grid.GetRow(img);
-                int c = Grid.GetColumn(img);
-
-                // Map image name to FEN char, and accumulate material
-                char ch = MapNameToFenAndAccumulate(img.Name);
-                if (ch != '\0') board[r, c] = ch;
-            }
-
-            // Piece placement (rank 8 to 1 corresponds to grid rows 0..7 in the layout)
-            var sb = new StringBuilder(64);
-            for (int r = 0; r < rows; r++)
-            {
-                int empty = 0;
-                for (int c = 0; c < cols; c++)
-                {
-                    char ch = board[r, c];
-                    if (ch == '\0')
-                    {
-                        empty++;
-                    }
-                    else
-                    {
-                        if (empty > 0) { sb.Append(empty); empty = 0; }
-                        sb.Append(ch);
-                    }
-                }
-                if (empty > 0) sb.Append(empty);
-                if (r != rows - 1) sb.Append('/');
-            }
-
-            // Side to move
-            sb.Append(Move == 1 ? " w " : " b ");
-
-            // Castling rights (KQkq order; '-' if none)
-            int startLen = sb.Length;
-            if (CWK == 0)
-            {
-                if (CWR2 == 0) sb.Append('K');
-                if (CWR1 == 0) sb.Append('Q');
-            }
-            if (CBK == 0)
-            {
-                if (CBR2 == 0) sb.Append('k');
-                if (CBR1 == 0) sb.Append('q');
-            }
-            if (sb.Length == startLen) sb.Append('-');
-
-            // En passant target
-            if (EnPassantSquare.Count == 1)
-            {
-                sb.Append(' ');
-                sb.Append((char)('a' + _newColumn));
-                sb.Append(Move == 1 ? (_newRow + 3).ToString() : (_newRow - 1).ToString());
-            }
-            else
-            {
-                sb.Append(" -");
-            }
-
-            // Halfmove and fullmove
-            sb.Append(' ').Append(Halfmove).Append(' ').Append(Fullmove);
-
-            Fen = sb.ToString();
-            System.Diagnostics.Debug.WriteLine($"\n\nFEN: {Fen}");
-
-            // Local helper
-            char MapNameToFenAndAccumulate(string name)
-            {
-                // Expect names like "WhitePawn1", "BlackQueen2", etc.
-                if (name.StartsWith("White"))
-                {
-                    if (name.Contains("Pawn")) { WhiteMaterial += 1; return 'P'; }
-                    if (name.Contains("Knight")) { WhiteMaterial += 3; return 'N'; }
-                    if (name.Contains("Bishop")) { WhiteMaterial += 3; return 'B'; }
-                    if (name.Contains("Rook")) { WhiteMaterial += 5; return 'R'; }
-                    if (name.Contains("Queen")) { WhiteMaterial += 9; return 'Q'; }
-                    if (name.Contains("King")) { return 'K'; }
-                }
-                else if (name.StartsWith("Black"))
-                {
-                    if (name.Contains("Pawn")) { BlackMaterial += 1; return 'p'; }
-                    if (name.Contains("Knight")) { BlackMaterial += 3; return 'n'; }
-                    if (name.Contains("Bishop")) { BlackMaterial += 3; return 'b'; }
-                    if (name.Contains("Rook")) { BlackMaterial += 5; return 'r'; }
-                    if (name.Contains("Queen")) { BlackMaterial += 9; return 'q'; }
-                    if (name.Contains("King")) { return 'k'; }
-                }
-                return '\0';
-            }
-        }
-
-        /// <summary>
         /// Runs a single UCI analysis with Stockfish and returns the engine's full stdout.
         /// Sends:
         /// <list type="bullet">
@@ -2617,8 +2693,8 @@ namespace Chess_Project
         /// <param name="stockfishPath">Absolute path to the Stockfish executable.</param>
         /// <param name="multiPV">Number of principal variations to request (default 40).</param>
         /// <param name="ct">Optional token to cancel the run.</param>
+        /// <remarks>✅ Updated on 8/31/2025</remarks>
         /// <returns>The complete stdout captured from Stockfish for this query.</returns>
-        /// <remarks>✅ Updating...</remarks>
         private static async Task<string> StockfishMovesAnalysisAsync(string fen, int depth, string stockfishPath, int multiPV = 40, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(stockfishPath) || !File.Exists(stockfishPath))
@@ -2848,39 +2924,96 @@ namespace Chess_Project
             return "";
         }
 
-        // Local helper
-        private async Task SendRobotBitsAsync()
+        /// <summary>
+        /// Selects a UCI move from the engine's candidates.
+        /// <list type="bullet">
+        ///     <item><description>If there is only one move or <paramref name="topEngineMove"/> is true, always returns the best move.</description></item>
+        ///     <item><description>Otherwise, checks the top 2-3 moves for a "critical moment" (≥ 300 cp gap).</description></item>
+        ///     <item><description>If found, trims the move list based on <paramref name="criticalMoveConversion"/> (best only, best two, or fall to #3-end)</description></item>
+        ///     <item><description>If not found, keeps the full candidate set.</description></item>
+        ///     <item><description>The final move is chosen using a Gaussian distribution biased by <paramref name="bellCurvePercentile"/>, favoring stronger moves while still allowing weaker ones occasionally.</description></item>
+        /// </list>
+        /// </summary>
+        /// <param name="moves">Filtered candidate moves (best to worst) within a CP window).</param>
+        /// <param name="sorted">Primary move list sorted strictly best to worst; index 0 is the engine's top move.</param>
+        /// <param name="topEngineMove">Forces picking the engine's top move (e.g., in mating sequences).</param>
+        /// <param name="bellCurvePercentile">0-100: higher biases toward stronger (lower index) choices. 90 means "hug the top moves".</param>
+        /// <param name="criticalMoveConversion">0-100: chance to "convert" a critical moment and keep only the best; otherwise "miss" it and degrade to a worse move among the top few.</param>
+        /// <remarks>✅ Updated on 8/19/2025</remarks>
+        /// <returns>UCI move string like "e2e4" ot "a7a8q".</returns>
+        private static string SelectMoveString(List<(string cp, string cpValue, string possibleMove)> moves, List<(string cp, string cpValue, string possibleMove)> sorted, bool topEngineMove, double bellCurvePercentile, int criticalMoveConversion)
         {
-            ShowMoveInProgressPopup(true);
-            // When white just moved: prefer sending Black bits first if present, then White.
-            // When black just moved: mirror behavior.
+            // Safety checks
+            if (sorted.Count == 0) return string.Empty;
+            if (moves.Count == 0) return sorted[0].possibleMove.TrimEnd('\r');
 
-            // Since FinalizeMoveAsync flips Move by this state, now Move == 0 is if white is moving
-            if (Move == 0)
+            // Forced top line or single option, pick best immediately
+            if (moves.Count == 1 || topEngineMove)
+                return sorted[0].possibleMove.TrimEnd('\r');
+
+            // “Critical moment” gating among top 2–3 moves
+            const int criticalCpThreshold = 300;
+            var top3 = moves.Take(3).ToList();
+
+            if (top3.Count >= 2 &&
+                int.TryParse(top3[0].cpValue, out int cp1) &&
+                int.TryParse(top3[1].cpValue, out int cp2))
             {
-                if (!string.IsNullOrEmpty(BlackBits))
-                    await _blackRobot.SendDataAsync(BlackBits);
-
-                await _whiteRobot.SendDataAsync(WhiteBits);
+                int diff12 = Math.Abs(cp1 - cp2);
+                if (diff12 >= criticalCpThreshold)
+                {
+                    // Flip a coin against conversion chance
+                    if (Random.Shared.Next(101) > criticalMoveConversion)
+                    {
+                        // Missed the moment, drop the best (fall to #2+)
+                        if (moves.Count > 1) moves.RemoveAt(0);
+                    }
+                    else
+                    {
+                        // Converted the moment, keep only the best
+                        moves.RemoveRange(1, Math.Max(0, moves.Count - 1));
+                    }
+                }
+                else if (top3.Count == 3 && int.TryParse(top3[2].cpValue, out int cp3))
+                {
+                    int diff23 = Math.Abs(cp2 - cp3);
+                    if (diff23 >= criticalCpThreshold)
+                    {
+                        if (Random.Shared.Next(101) > criticalMoveConversion)
+                        {
+                            // Missed between #2 and #3, fall to #3+
+                            if (moves.Count > 2) moves.RemoveRange(0, 2);
+                        }
+                        else
+                        {
+                            // Converted the moment, keep only the two best moves
+                            moves.RemoveRange(2, Math.Max(0, moves.Count - 2));
+                        }
+                    }
+                }
             }
-            else
+
+            // Gaussian pick biased by bellCurvePercentile (higher = more conservative)
+            int count = moves.Count;
+            if (count == 1)
+                return moves[0].possibleMove.TrimEnd('\r');
+
+            // Higher percentile, mean closer to the top (index 0)
+            double meanIndex = Math.Round((1 - (bellCurvePercentile / 100.0)) * (count - 1));
+            double stdDev = Math.Max(1.0, count / 4.0);
+
+            int idx;
+            do
             {
-                if (!string.IsNullOrEmpty(WhiteBits))
-                    await _whiteRobot.SendDataAsync(WhiteBits);
+                // Box–Muller
+                double u1 = 1.0 - Random.Shared.NextDouble();
+                double u2 = 1.0 - Random.Shared.NextDouble();
+                double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+                double sample = meanIndex + stdDev * z;
+                idx = (int)Math.Round(sample);
+            } while (idx < 0 || idx >= count);
 
-                await _blackRobot.SendDataAsync(BlackBits);
-            }
-
-            ShowMoveInProgressPopup(true);
-        }
-
-        private static string? AppendToHistory(string history, string bits)
-        {
-            if (string.IsNullOrEmpty(bits)) return string.Empty;
-            if (string.IsNullOrEmpty(history)) history = bits;
-            else history += "\n" + bits;
-
-            return history;
+            return moves[idx].possibleMove.TrimEnd('\r');
         }
 
         #endregion
@@ -2969,7 +3102,7 @@ namespace Chess_Project
         /// </summary>
         /// <param name="isWhite">True if Black made the king move; otherwise White did.</param>
         /// <param name="kingside">True for kingside castling, false for queenside.</param>
-        /// <remarks>✅ Written on 8/19/2025</remarks>
+        /// <remarks>✅ Updated on 8/31/2025</remarks>
         private async Task MoveCastleRookAsync(bool isWhite, bool kingside)
         {
             string rookName = isWhite
@@ -2977,7 +3110,7 @@ namespace Chess_Project
                 : (kingside ? "BlackRook2" : "BlackRook1");
 
             int rookStartCol = kingside ? 7 : 0;
-            int rookTargetCol = kingside ? _newColumn - 1 : _newColumn + 1;
+            int rookTargetCol = kingside ? _newCol - 1 : _newCol + 1;
 
             var rook = Chess_Board.Children.OfType<Image>().FirstOrDefault(img => img.Name == rookName);
             if (rook is null) return;
@@ -2996,7 +3129,7 @@ namespace Chess_Project
         /// </summary>
         /// <param name="sender">The UI element that triggered the event.</param>
         /// <param name="e">Teh routed event arguments.</param>
-        /// <remarks>✅ Verified on 6/11/2025</remarks>
+        /// <remarks>✅ Updated on 6/11/2025</remarks>
         private void Fullscreen(object sender, RoutedEventArgs e)
         {
             mainWindow.WindowStyle = WindowStyle.None;
@@ -3014,7 +3147,7 @@ namespace Chess_Project
         /// </summary>
         /// <param name="sender">The UI element that triggered the event.</param>
         /// <param name="e">The routed event arguments.</param>
-        /// <remarks>✅ Verified on 6/11/2025</remarks>
+        /// <remarks>✅ Updated on 6/11/2025</remarks>
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Escape)
@@ -3032,7 +3165,7 @@ namespace Chess_Project
         /// </summary>
         /// <param name="sender">The UI element that triggered the event.</param>
         /// <param name="e">The routed event arguments.</param>
-        /// <remarks>✅ Verified on 6/11/2025</remarks>
+        /// <remarks>✅ Updated on 6/11/2025</remarks>
         private void Windowed(object sender, RoutedEventArgs e)
         {
             // Restore window border
@@ -3203,13 +3336,13 @@ namespace Chess_Project
         /// <remarks>
         /// This method is triggered when the inactivity timer elapses.
         /// It prepares the game for autonomous play and ensures the UI reflects the new state.
-        /// <para>✅ Verified on 8/22/2025</para>
+        /// <para>✅ Updated on 8/31/2025</para>
         /// </remarks>
         private async void InactivityTimer_Tick(object? sender, EventArgs e)
         {
             _inactivityTimer.Stop();
 
-            // This is good, keep this
+            // If both Epson robots are not already connected
             if (!GlobalState.WhiteEpsonConnected || !GlobalState.BlackEpsonConnected)
             {
                 await EpsonConnectAsync(EpsonMotion);
@@ -3470,10 +3603,10 @@ namespace Chess_Project
             _oldRow = Grid.GetRow(_selectedPiece);
             _oldCol = Grid.GetColumn(_selectedPiece);
             _newRow = Grid.GetRow(clickedSquare);
-            _newColumn = Grid.GetColumn(clickedSquare);
+            _newCol = Grid.GetColumn(clickedSquare);
 
             // Human-readable (e.g., "e4")
-            _endFile = (char)(_newColumn + 'a');
+            _endFile = (char)(_newCol + 'a');
             _endRank = (8 - _newRow).ToString();
             _endPosition = $"{_endFile}{_endRank}";
 
@@ -3481,27 +3614,27 @@ namespace Chess_Project
             {
                 if (ReferenceEquals(_selectedPiece, _clickedPawn))
                     return new PawnValidMove.PawnValidation(Chess_Board, this)
-                        .ValidateMove(_oldRow, _oldCol, _newRow, _newColumn, Move);
+                        .ValidateMove(_oldRow, _oldCol, _newRow, _newCol, Move);
 
                 if (ReferenceEquals(_selectedPiece, _clickedKnight))
                     return new KnightValidMove.KnightValidation()
-                        .ValidateMove(_oldRow, _oldCol, _newRow, _newColumn);
+                        .ValidateMove(_oldRow, _oldCol, _newRow, _newCol);
 
                 if (ReferenceEquals(_selectedPiece, _clickedBishop))
                     return new BishopValidMove.BishopValidation(Chess_Board, this)
-                        .ValidateMove(_oldRow, _oldCol, _newRow, _newColumn);
+                        .ValidateMove(_oldRow, _oldCol, _newRow, _newCol);
 
                 if (ReferenceEquals(_selectedPiece, _clickedRook))
                     return new RookValidMove.RookValidation(Chess_Board, this)
-                        .ValidateMove(_oldRow, _oldCol, _newRow, _newColumn);
+                        .ValidateMove(_oldRow, _oldCol, _newRow, _newCol);
 
                 if (ReferenceEquals(_selectedPiece, _clickedQueen))
                     return new QueenValidMove.QueenValidation(Chess_Board, this)
-                        .ValidateMove(_oldRow, _oldCol, _newRow, _newColumn);
+                        .ValidateMove(_oldRow, _oldCol, _newRow, _newCol);
 
                 if (ReferenceEquals(_selectedPiece, _clickedKing))
                     return new KingValidMove.KingValidation(Chess_Board, this)
-                        .ValidateMove(_oldRow, _oldCol, _newRow, _newColumn, Move,
+                        .ValidateMove(_oldRow, _oldCol, _newRow, _newCol, Move,
                                       CWK, CBK, CWR1, CWR2, CBR1, CBR2);
 
                 return false;
@@ -3516,7 +3649,7 @@ namespace Chess_Project
 
             // Tentative board change for check verification
             Grid.SetRow(_selectedPiece, _newRow);
-            Grid.SetColumn(_selectedPiece, _newColumn);
+            Grid.SetColumn(_selectedPiece, _newCol);
 
             // Track king squares
             int prevWhiteKingRow = _whiteKingRow, prevWhiteKingCol = _whiteKingCol;
@@ -3525,12 +3658,12 @@ namespace Chess_Project
             if (_selectedPiece.Name.StartsWith("WhiteKing", StringComparison.Ordinal))
             {
                 _whiteKingRow = _newRow;
-                _whiteKingCol = _newColumn;
+                _whiteKingCol = _newCol;
             }
             else if (_selectedPiece.Name.StartsWith("BlackKing", StringComparison.Ordinal))
             {
                 _blackKingRow = _newRow;
-                _blackKingCol = _newColumn;
+                _blackKingCol = _newCol;
             }
 
             try
@@ -3538,7 +3671,7 @@ namespace Chess_Project
                 // Ensure the move does not leave your king in check
                 var checkVerification = new CheckVerification(Chess_Board, this);
                 bool positionOk = checkVerification.ValidatePosition(
-                    _whiteKingRow, _whiteKingCol, _blackKingRow, _blackKingCol, _newRow, _newColumn, Move);
+                    _whiteKingRow, _whiteKingCol, _blackKingRow, _blackKingCol, _newRow, _newCol, Move);
 
                 if (!positionOk)
                 {
@@ -3714,10 +3847,10 @@ namespace Chess_Project
         }
 
         /// <summary>
-        /// Sets the fill color of both robot status indicators to reflect connection state.
+        /// Sets the fill color of one robot status indicator to reflect connection state.
         /// </summary>
-        /// <param name="whiteStatus">The brush color to apply to the white robot's status light.</param>
-        /// <param name="statusColor">The brush color ro apply to the black robot's status light.</param>
+        /// <param name="color">The respective robot color.</param>
+        /// <param name="statusColor">The brush color to apply to the robot's status light.</param>
         /// <remarks>
         /// <list type="bullet">
         ///     <item><c>Green</c>: Connected</item>
@@ -3728,14 +3861,27 @@ namespace Chess_Project
         /// </remarks>
         private void SetEpsonStatusLight(ChessColor color, Brush statusColor)
         {
-            if (color == Chess_Project.ChessColor.White) { WhiteEpsonStatus.Fill = statusColor; }
-            if (color == Chess_Project.ChessColor.Black) { BlackEpsonStatus.Fill = statusColor; }
+            if (color == ChessColor.White) { WhiteEpsonStatus.Fill = statusColor; }
+            if (color == ChessColor.Black) { BlackEpsonStatus.Fill = statusColor; }
         }
 
+        /// <summary>
+        /// Sets the fill color of one camera status indicator to reflect connection state.
+        /// </summary>
+        /// <param name="color">The respective camera color.</param>
+        /// <param name="statusColor">The brush color to apply to the camera's status light.</param>
+        /// <remarks>
+        /// <list type="bullet">
+        ///     <item><c>Green</c>: Connected</item>
+        ///     <item><c>Red</c>: Disconnected</item>
+        ///     <item><c>Yellow</c>: Attempting connection</item>
+        /// </list>
+        /// <para>✅ Updated on 8/29/2025</para>
+        /// </remarks>
         private void SetCognexStatusLight(ChessColor color, Brush statusColor)
         {
-            if (color == Chess_Project.ChessColor.White) { WhiteCognexStatus.Fill = statusColor; }
-            if (color == Chess_Project.ChessColor.Black) { BlackCognexStatus.Fill = statusColor; }
+            if (color == ChessColor.White) { WhiteCognexStatus.Fill = statusColor; }
+            if (color == ChessColor.Black) { BlackCognexStatus.Fill = statusColor; }
         }
 
         /// <summary>
@@ -3751,6 +3897,10 @@ namespace Chess_Project
             TogglePlayTypeUI(false);
         }
 
+        /// <summary>
+        /// Disables key UI elements during a Cognex connection attempt.
+        /// </summary>
+        /// <remarks>✅ Updated on 8/29/2025</remarks>
         private void DisableCognexElements()
         {
             CognexVision.IsChecked = false;
@@ -3771,12 +3921,16 @@ namespace Chess_Project
         }
 
         /// <summary>
-        /// Updates the clipping geometry of the <see cref="ConnectionRect"/> rectangle to support smooth animation effects.
+        /// Updates the clipping geometry of the <see cref="ConnectionRect"/> rectangle 
+        /// to maintain smooth animation effects during connection state transitions.
         /// </summary>
+        /// <param name="rectHeight">The new height to apply to <see cref="ConnectionRect"/>.</param>
+        /// <param name="visibility">The visibility state to apply to <see cref="AttemptingConnection"/>.</param>
+        /// <param name="clipHeight">The height of the clipping rectangle geometry.</param>
         /// <remarks>
-        /// Modifies the clip region's dimensions and corner radius for consistent visual behavior
-        /// during connection state transitions.
-        /// <para>✅ Updated on 7/18/2025</para>
+        /// Adjusts both the visual size of <see cref="ConnectionRect"/> and the clipping region's
+        /// dimensions/corner radius to ensure consistent animations when showing or hiding connection UI.
+        /// <para>✅ Updated on 8/29/2025</para>
         /// </remarks>
         private void UpdateRectangleClip(int rectHeight, Visibility visibility, int clipHeight)
         {
@@ -4462,10 +4616,11 @@ namespace Chess_Project
 
         #endregion
 
-        #region Writers
+        #region Writers & Senders
 
         /// <summary>
-        /// Writes the PGN file header with metadata based on the selected play mode and players.
+        /// Writes the PGN file header with metadata based on the selected game mode and players.
+        /// Includes event name, site, date, round, player names, result placeholder, and ELOs when applicable.
         /// </summary>
         /// <remarks>✅ Updated on 7/18/2025</remarks>
         private void WritePGNFile()
@@ -4509,7 +4664,7 @@ namespace Chess_Project
         /// </list>
         /// Resets transient flags at the end (capture/promotion/castling/en passant).
         /// </summary>
-        /// <remarks>✅ Updated on 8/20/2025</remarks>
+        /// <remarks>✅ Updating... on 8/20/2025</remarks>
         private async Task DocumentMoveAsync()
         {
             using StreamWriter writer = new(_fenFilePath, append: true);
@@ -4523,7 +4678,7 @@ namespace Chess_Project
 
             // Files/ranks are 1-based in bit mapping
             int file1 = _oldCol + 1;
-            int file2 = _newColumn + 1;
+            int file2 = _newCol + 1;
             int rank1 = 8 - _oldRow;
             int rank2 = 8 - _newRow;
 
@@ -4715,6 +4870,8 @@ namespace Chess_Project
             string checkModifier = await StockfishCheckAnalysisAsync(Fen, _stockfishPath!);
             _pgnMove = UCItoPGNConverter.Convert(PreviousFen, _executedMove, KingCastle, QueenCastle, EnPassant, Promoted, PromotedTo, checkModifier);
 
+
+            bool isComputer = _gameMode == GameMode.ComVsCom ? true : _gameMode == GameMode.UserVsCom ? (_selectedColor.Content.ToString() == "White" && Move == 0 || _selectedColor.Content.ToString() == "Black" && Move == 1 ? true : false) : false;
             if (_pieceSounds)
             {
                 string sound =
@@ -4723,11 +4880,7 @@ namespace Chess_Project
                     _pgnMove.Contains('=') ? "PiecePromote" :
                     _pgnMove.Contains('x') ? "PieceCapture" :
                     _pgnMove.Contains('-') ? "PieceCastle" :
-                    ((int)_gameMode == 1 || ((int)_gameMode == 2 &&
-                        ((_selectedColor.Content.ToString() == "White" && Move == 0) ||
-                        (_selectedColor.Content.ToString() == "Black" && Move == 1))))
-                        ? "PieceOpponent"
-                        : "PieceMove";
+                    isComputer ? "PieceOpponent" : "PieceMove";
 
                 PlaySound(sound);
             }
@@ -4835,6 +4988,61 @@ namespace Chess_Project
 
                 File.AppendAllText(_pgnFilePath, $"{_pgnMove} ");
             }
+        }
+
+        /// <summary>
+        /// Sends the accumulated robot command bits to the appropriate robots,
+        /// sequencing by which side just moved.
+        /// </summary>
+        /// <remarks>
+        /// <list type="bullet">
+        ///     <item><description>When White just moved (<c><see cref="Move"/> == 0</c> after <see cref="FinalizeMoveAsync"/>), sends Black’s bits first (if any), then White’s.</description></item>
+        ///     <item><description>When Black just moved (<c><see cref="Move"/> == 1</c>), sends White’s bits first (if any), then Black’s.</description></item>
+        ///     <item><description>Shows a “move in progress” popup before and after transmission.</description></item>
+        /// </list>
+        /// </remarks>
+        /// <para>✅ Updated on 8/29/2025</para>
+        /// <returns></returns>
+        private async Task SendRobotBitsAsync()
+        {
+            ShowMoveInProgressPopup(true);
+
+            // Since FinalizeMoveAsync flips Move by this state, now Move == 0 is if white is moving
+            if (Move == 0)
+            {
+                if (!string.IsNullOrEmpty(BlackBits))
+                    await _blackRobot.SendDataAsync(BlackBits);
+
+                await _whiteRobot.SendDataAsync(WhiteBits);
+            }
+            else
+            {
+                if (!string.IsNullOrEmpty(WhiteBits))
+                    await _whiteRobot.SendDataAsync(WhiteBits);
+
+                await _blackRobot.SendDataAsync(BlackBits);
+            }
+
+            ShowMoveInProgressPopup(false);
+        }
+
+        /// <summary>
+        /// Appends a new set of robot command bits to the existing history string.
+        /// </summary>
+        /// <param name="history">The current history string (may be empty).</param>
+        /// <param name="bits">The new command bits to append.</param>
+        /// <remarks>✅ Updated on 7/14/2025</remarks>
+        /// <returns>
+        /// The updated history string with <paramref name="bits"/> appended on a new line,
+        /// or <see cref="string.Empty"/> if <paramref name="bits"/> was null or empty.
+        /// </returns>
+        private static string? AppendToHistory(string history, string bits)
+        {
+            if (string.IsNullOrEmpty(bits)) return string.Empty;
+            if (string.IsNullOrEmpty(history)) history = bits;
+            else history += "\n" + bits;
+
+            return history;
         }
 
         #endregion
@@ -5098,252 +5306,7 @@ namespace Chess_Project
 
         
 
-        /// <summary>
-        /// Handles pawn promotion for user or CPU, updating the piece image, name, handlers, and counters.
-        /// Shows the promotion dialog when it's the user's turn.
-        /// </summary>
-        /// <param name="activePawn">The pawn being moved.</param>
-        /// <param name="move">The moving color. 1 for White and 0 for Black</param>
-        /// <remarks>✅ Updating...</remarks>
-        public Task PawnPromote(Image activePawn, int move)
-        {
-            string[] promotionPieces = ["Rook", "Knight", "Bishop", "Queen"];
-            List<string> imagePaths = [];
-
-            foreach (string piece in promotionPieces)
-            {
-                // White version
-                imagePaths.Add(System.IO.Path.Combine(
-                    _executableDirectory, "Assets", "Pieces",
-                    _preferences.Pieces, $"White{piece}.png"));
-
-                // Black version
-                imagePaths.Add(System.IO.Path.Combine(
-                    _executableDirectory, "Assets", "Pieces",
-                    _preferences.Pieces, $"Black{piece}.png"));
-            }
-
-            if (move == 1)
-            {
-                Promoted = true;
-                PromotedPawn = activePawn.Name;
-
-                if (UserTurn)
-                {
-                    Promotion promotion = new(imagePaths);
-                    promotion.WhiteQueen.Visibility = Visibility.Visible;
-                    promotion.WhiteKnight.Visibility = Visibility.Visible;
-                    promotion.WhiteRook.Visibility = Visibility.Visible;
-                    promotion.WhiteBishop.Visibility = Visibility.Visible;
-                    promotion.BlackQueen.Visibility = Visibility.Collapsed;
-                    promotion.BlackKnight.Visibility = Visibility.Collapsed;
-                    promotion.BlackRook.Visibility = Visibility.Collapsed;
-                    promotion.BlackBishop.Visibility = Visibility.Collapsed;
-                    promotion.Owner = this;
-                    promotion.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-                    promotion.ShowDialog();
-
-                    _clickedButtonName = promotion.ClickedButtonName;
-
-                    if (_clickedButtonName.StartsWith("Rook"))  // If user promoted to a rook
-                    {
-                        _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[0]));
-                        _clickedPawn.Name = $"WhiteRook{NumWR}";
-                        _clickedPawn.MouseUp -= ChessPawn_Click;
-                        _clickedPawn.MouseUp += ChessRook_Click;
-
-                        PromotionPiece = 'r';
-                        NumWR++;
-                    }
-                    else if (_clickedButtonName.StartsWith("Knight"))  // If user promoted to a knight
-                    {
-                        _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[2]));
-                        _clickedPawn.Name = $"WhiteKnight{NumWN}";
-                        _clickedPawn.MouseUp -= ChessPawn_Click;
-                        _clickedPawn.MouseUp += ChessKnight_Click;
-
-                        PromotionPiece = 'n';
-                        NumWN++;
-                    }
-                    else if (_clickedButtonName.StartsWith("Bishop"))  // If user promoted to a bishop
-                    {
-                        _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[4]));
-                        _clickedPawn.Name = $"WhiteBishop{NumWB}";
-                        _clickedPawn.MouseUp -= ChessPawn_Click;
-                        _clickedPawn.MouseUp += ChessBishop_Click;
-
-                        PromotionPiece = 'b';
-                        NumWB++;
-                    }
-                    else if (_clickedButtonName.StartsWith("Queen"))  // If user promoted to a queen
-                    {
-                        _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[6]));
-                        _clickedPawn.Name = $"WhiteQueen{NumWQ}";
-                        _clickedPawn.MouseUp -= ChessPawn_Click;
-                        _clickedPawn.MouseUp += ChessQueen_Click;
-
-                        PromotionPiece = 'q';
-                        NumWQ++;
-                    }
-                }
-                else
-                {
-                    if (PromotionPiece == 'r')  // If CPU promoted to a rook
-                    {
-                        _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[0]));
-                        _clickedPawn.Name = $"WhiteRook{NumWR}";
-                        _clickedPawn.MouseUp -= ChessPawn_Click;
-                        _clickedPawn.MouseUp += ChessRook_Click;
-
-                        Promoted = true;
-                        NumWR++;
-                    }
-                    else if (PromotionPiece == 'n')  // If CPU promoted to a knight
-                    {
-                        _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[2]));
-                        _clickedPawn.Name = $"WhiteKnight{NumWN}";
-                        _clickedPawn.MouseUp -= ChessPawn_Click;
-                        _clickedPawn.MouseUp += ChessKnight_Click;
-
-                        Promoted = true;
-                        NumWN++;
-                    }
-                    else if (PromotionPiece == 'b')  // If CPU promoted to a bishop
-                    {
-                        _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[4]));
-                        _clickedPawn.Name = $"WhiteBishop{NumWB}";
-                        _clickedPawn.MouseUp -= ChessPawn_Click;
-                        _clickedPawn.MouseUp += ChessBishop_Click;
-
-                        Promoted = true;
-                        NumWB++;
-                    }
-                    else if (PromotionPiece == 'q')  // If CPU promoted to a queen
-                    {
-                        _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[6]));
-                        _clickedPawn.Name = $"WhiteQueen{NumWQ}";
-                        _clickedPawn.MouseUp -= ChessPawn_Click;
-                        _clickedPawn.MouseUp += ChessQueen_Click;
-
-                        Promoted = true;
-                        NumWQ++;
-                    }
-                }
-
-                ActivePiece = activePawn.Name;
-            }
-            else if (move == 0)
-            {
-                Promoted = true;
-                PromotedPawn = activePawn.Name;
-
-                if (UserTurn)
-                {
-                    Promotion promotion = new(imagePaths);
-                    promotion.WhiteQueen.Visibility = Visibility.Collapsed;
-                    promotion.WhiteKnight.Visibility = Visibility.Collapsed;
-                    promotion.WhiteRook.Visibility = Visibility.Collapsed;
-                    promotion.WhiteBishop.Visibility = Visibility.Collapsed;
-                    promotion.BlackQueen.Visibility = Visibility.Visible;
-                    promotion.BlackKnight.Visibility = Visibility.Visible;
-                    promotion.BlackRook.Visibility = Visibility.Visible;
-                    promotion.BlackBishop.Visibility = Visibility.Visible;
-                    promotion.Owner = this;
-                    promotion.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-                    promotion.ShowDialog();
-
-                    _clickedButtonName = promotion.ClickedButtonName;
-
-                    if (_clickedButtonName.StartsWith("Rook"))  // If user promoted to a rook
-                    {
-                        _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[1]));
-                        _clickedPawn.Name = $"BlackRook{NumBR}";
-                        _clickedPawn.MouseUp -= ChessPawn_Click;
-                        _clickedPawn.MouseUp += ChessRook_Click;
-
-                        PromotionPiece = 'r';
-                        NumBR++;
-                    }
-                    else if (_clickedButtonName.StartsWith("Knight"))  // If user promoted to a knight
-                    {
-                        _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[3]));
-                        _clickedPawn.Name = $"BlackKnight{NumBN}";
-                        _clickedPawn.MouseUp -= ChessPawn_Click;
-                        _clickedPawn.MouseUp += ChessKnight_Click;
-
-                        PromotionPiece = 'n';
-                        NumBN++;
-                    }
-                    else if (_clickedButtonName.StartsWith("Bishop"))  // If user promoted to a bishop
-                    {
-                        _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[5]));
-                        _clickedPawn.Name = $"BlackBishop{NumBB}";
-                        _clickedPawn.MouseUp -= ChessPawn_Click;
-                        _clickedPawn.MouseUp += ChessBishop_Click;
-
-                        PromotionPiece = 'b';
-                        NumBB++;
-                    }
-                    else if (_clickedButtonName.StartsWith("Queen"))  // If user promoted to a queen
-                    {
-                        _clickedPawn.Source = new BitmapImage(new Uri(imagePaths[7]));
-                        _clickedPawn.Name = $"BlackQueen{NumBQ}";
-                        _clickedPawn.MouseUp -= ChessPawn_Click;
-                        _clickedPawn.MouseUp += ChessQueen_Click;
-
-                        PromotionPiece = 'q';
-                        NumBQ++;
-                    } 
-                }
-                else
-                {
-                    if (PromotionPiece == 'r')  // If CPU promoted to a rook
-                    {
-                        activePawn.Source = new BitmapImage(new Uri(imagePaths[1]));
-                        activePawn.Name = $"BlackRook{NumBR}";
-                        activePawn.MouseUp -= ChessPawn_Click;
-                        activePawn.MouseUp += ChessRook_Click;
-
-                        Promoted = true;
-                        NumBR++;
-                    }
-                    else if (PromotionPiece == 'n')  // If CPU promoted to a knight
-                    {
-                        activePawn.Source = new BitmapImage(new Uri(imagePaths[3]));
-                        activePawn.Name = $"BlackKnight{NumBN}";
-                        activePawn.MouseUp -= ChessPawn_Click;
-                        activePawn.MouseUp += ChessKnight_Click;
-
-                        Promoted = true;
-                        NumBN++;
-                    }
-                    else if (PromotionPiece == 'b')  // If CPU promoted to a bishop
-                    {
-                        activePawn.Source = new BitmapImage(new Uri(imagePaths[5]));
-                        activePawn.Name = $"BlackBishop{NumBB}";
-                        activePawn.MouseUp -= ChessPawn_Click;
-                        activePawn.MouseUp += ChessBishop_Click;
-
-                        Promoted = true;
-                        NumBB++;
-                    }
-                    else if (PromotionPiece == 'q')  // If CPU promoted to a queen
-                    {
-                        activePawn.Source = new BitmapImage(new Uri(imagePaths[7]));
-                        activePawn.Name = $"BlackQueen{NumBQ}";
-                        activePawn.MouseUp -= ChessPawn_Click;
-                        activePawn.MouseUp += ChessQueen_Click;
-
-                        Promoted = true;
-                        NumBQ++;
-                    }
-                }
-
-                ActivePiece = activePawn.Name;
-            }
-
-            return Task.CompletedTask;
-        }
+        
 
 
 

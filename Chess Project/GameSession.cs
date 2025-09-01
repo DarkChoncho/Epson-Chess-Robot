@@ -102,7 +102,7 @@ namespace Chess_Project
         private bool _enPassantCreated = false;
         private bool _enPassant = false;
         private bool _promoted = false;
-        private char? _promotionPiece = null;
+        private char _promotionPiece;
 
         public int NumWN { get => _numWN; set => Set(ref _numWN, value); }
         public int NumWB { get => _numWB; set => Set(ref _numWB, value); }
@@ -117,7 +117,7 @@ namespace Chess_Project
         public bool EnPassantCreated { get => _enPassantCreated; set => Set(ref _enPassantCreated, value); }
         public bool EnPassant { get => _enPassant; set => Set(ref _enPassant, value); }
         public bool Promoted { get => _promoted; set => Set(ref _promoted, value); }
-        public char? PromotionPiece { get => _promotionPiece; set => Set(ref _promotionPiece, value); }
+        public char PromotionPiece { get => _promotionPiece; set => Set(ref _promotionPiece, value); }
 
         #endregion
 
@@ -196,7 +196,6 @@ namespace Chess_Project
             NumWQ = NumBQ = 2;
 
             Capture = EnPassantCreated = EnPassant = Promoted = false;
-            PromotionPiece = null;
 
             TopEngineMove = false;
 
