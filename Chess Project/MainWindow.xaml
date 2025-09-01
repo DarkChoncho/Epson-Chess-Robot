@@ -803,7 +803,7 @@
 
         <Grid Name ="CvC" HorizontalAlignment="Right" Width="140" Visibility="Hidden" IsEnabled="False">
             <TextBlock Text="White Elo:" Margin="10, 80" HorizontalAlignment="Center" VerticalAlignment="Top" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" Width="140" TextAlignment="Center" Foreground="#FFD0D0D0"/>
-            <ComboBox Name="WhiteCPUElo" SelectionChanged="CheckDropdownSelections" Width="100" Height="30" Margin="20, 110" HorizontalAlignment="Center" VerticalAlignment="Top" IsSynchronizedWithCurrentItem="True" IsEnabled="False" FontFamily="Sans Serif Collection" FontSize="11" MaxDropDownHeight="660">
+            <ComboBox Name="WhiteCpuElo" SelectionChanged="CheckDropdownSelections" Width="100" Height="30" Margin="20, 110" HorizontalAlignment="Center" VerticalAlignment="Top" IsSynchronizedWithCurrentItem="True" IsEnabled="False" FontFamily="Sans Serif Collection" FontSize="11" MaxDropDownHeight="660">
                 <ComboBox.ItemContainerStyle>
                     <Style TargetType="ComboBoxItem">
                         <Setter Property="HorizontalContentAlignment" Value="Center"/>
@@ -833,7 +833,7 @@
             </ComboBox>
 
             <TextBlock Text="Black Elo:" Margin="10, 150" HorizontalAlignment="Center" VerticalAlignment="Top" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" Width="140" TextAlignment="Center" Foreground="#FFD0D0D0"/>
-            <ComboBox Name="BlackCPUElo" SelectionChanged="CheckDropdownSelections" Width="100" Height="30" Margin="20, 180" HorizontalAlignment="Center" VerticalAlignment="Top" IsSynchronizedWithCurrentItem="True" IsEnabled="False" FontFamily="Sans Serif Collection" FontSize="11" MaxDropDownHeight="660">
+            <ComboBox Name="BlackCpuElo" SelectionChanged="CheckDropdownSelections" Width="100" Height="30" Margin="20, 180" HorizontalAlignment="Center" VerticalAlignment="Top" IsSynchronizedWithCurrentItem="True" IsEnabled="False" FontFamily="Sans Serif Collection" FontSize="11" MaxDropDownHeight="660">
                 <ComboBox.ItemContainerStyle>
                     <Style TargetType="ComboBoxItem">
                         <Setter Property="HorizontalContentAlignment" Value="Center"/>
@@ -864,7 +864,7 @@
         </Grid>
 
         <Button Name="PlayButton" Content="Play" Click="Play_ClickAsync" Width="100" Height="30" Margin="20" HorizontalAlignment="Right" VerticalAlignment="Bottom" VerticalContentAlignment="Center" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" FontSize="14" IsEnabled="False" Padding="1,-4,1,1"/>
-        <Button Name="PauseButton" Content="II" Click="Pause" Width="30" Height="30" Margin="20,20,130,20" HorizontalAlignment="Right" VerticalAlignment="Bottom" VerticalContentAlignment="Center" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" FontSize="18" IsEnabled="False" Padding="1, -9, 1, 1"/>
+        <Button Name="PauseButton" Content="II" Click="Pause_ClickAsync" Width="30" Height="30" Margin="20,20,130,20" HorizontalAlignment="Right" VerticalAlignment="Bottom" VerticalContentAlignment="Center" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" FontSize="18" IsEnabled="False" Padding="1, -9, 1, 1"/>
         <Button Name="ResumeButton" Content="Resume" Click="Resume_ClickAsync" Width="100" Height="30" Margin="20" HorizontalAlignment="Right" VerticalAlignment="Bottom" VerticalContentAlignment="Center" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" FontSize="14" IsEnabled="False" Padding="1,-4,1,1" Visibility="Collapsed"/>
         <Button Name="QuitButton" Content="Quit Game" Click="QuitGame" Width="140" Height="30" Margin="20,20,20,60" HorizontalAlignment="Right" VerticalAlignment="Bottom" VerticalContentAlignment="Center" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" FontSize="14" IsEnabled="False" Padding="1,-4,1,1" Visibility="Collapsed"/>
 

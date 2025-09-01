@@ -1149,98 +1149,74 @@ namespace Chess_Project
         }
 
         /// <summary>
-        /// Pauses the game, displaying the game start panel, disabling piece interactions,
-        /// and enabling/disabling UI elements based on the current game state.
+        /// Pauses the game: cancels the active loop, blocks input, shows the start panel,
+        /// and enables the appropriate setup controls for the current mode. If a move
+        /// is mid-flight, waits briefly for the loop to finish the critical moving section.
         /// </summary>
-        /// <param name="sender">The event sender.</param>
-        /// <param name="e">The event arguments.</param>
-        private async void Pause(object sender, EventArgs e)  // ✅
+        /// <param name="sender">The source of the event, typically the Pause button.</param>
+        /// <param name="e">The event arguments associated with the click.</param>
+        /// <remarks>✅ Updated on 8/31/2025</remarks>
+        private async void Pause_ClickAsync(object sender, EventArgs e)
         {
+            // Re-entrancy guard
+            if (IsPaused) return;
+            IsPaused = true;
+
+            // Cancel loop & any pending user move waiters
             _loopCts?.Cancel();
             _userMoveTcs?.TrySetCanceled();
-            IsPaused = true;
-            PauseButton.IsEnabled = false;
 
-            if (_loopStoppedTcs is not null && MoveInProgress)
-            {
-                try
-                {
-                    ShowMoveInProgressPopup(true);
-                    await _loopStoppedTcs.Task;
-                    ShowMoveInProgressPopup(false);
-                }
-                catch { /* ignore */ }
-            }
-
-            // If pause was requested on the game-ending move, then just don't process the request as the NewGame process will set up
-            if (EndGame)
-                return;
-
-            // Show game start panel and disable interactions with the chessboard
+            // UI: block interactions immediately
             Chess_Board.IsHitTestVisible = false;
-            Game_Start.Visibility = Visibility.Visible;
-            Game_Start.IsEnabled = true;
             PauseButton.IsEnabled = false;
-
-            bool isUserVsUserOrCom = _selectedPlayType.Content.ToString() == "User Vs. User" || _selectedPlayType.Content.ToString() == "User Vs. Com";
-
-            if (isUserVsUserOrCom)
-            {
-                UvCorUvU.Visibility = Visibility.Visible;
-                if (!MoveInProgress)
-                {
-                    UvCorUvU.IsEnabled = true;
-                    Play_Type.IsEnabled = true;
-                }
-            }
-            else
-            {
-                CvC.Visibility = Visibility.Visible;
-                if (!MoveInProgress)
-                {
-                    CvC.IsEnabled = true;
-                    Play_Type.IsEnabled = true;
-                }
-            }
-
-            IsPaused = true;
-            PauseButton.IsEnabled = false;
-
-            if (!MoveInProgress)   // If CPU is not currently moving
-            {
-                _inactivityTimer.Start();
-                ResumeButton.IsEnabled = true;
-                EpsonMotion.IsEnabled = true;   // Enables user to attempt communication with Epson
-
-                QuitButton.Visibility = Visibility.Visible;
-                QuitButton.IsEnabled = true;
-            }
-            else   // CPU is currently moving
-            {
-                ShowMoveInProgressPopup(true);
-                Play_Type.IsEnabled = false;
-                ResumeButton.IsEnabled = false;
-                HoldResume = true;
-            }
-
-            // Enable relevant settings based on game mode
-            if ((int)_gameMode == 1)
-            {
-                WhiteCPUElo.IsEnabled = true;
-                BlackCPUElo.IsEnabled = true;
-            }
-            else if ((int)_gameMode == 2)
-            {
-                Elo.IsEnabled = true;
-                Color.IsEnabled = true;
-            }
-
-            // Disable piece interactions
             EnableImagesWithTag("WhitePiece", false);
             EnableImagesWithTag("BlackPiece", false);
             EraseAnnotations();
-
             DeselectPieces();
+
+            // Show main panel
+            Game_Start.Visibility = Visibility.Visible;
+            Game_Start.IsEnabled = true;
+
+            // If a move is in its non-interruptible section, wait for the loop to signal it has stopped
+            if (_loopStoppedTcs is not null && MoveInProgress)
+            {
+                ShowMoveInProgressPopup(true);
+                await _loopStoppedTcs.Task;
+                ShowMoveInProgressPopup(false);
+            }
+
+            // If pause landed exactly on a game-ending move, let the new-game funnel take over
+            if (EndGame)
+                return;
+
+            // Reveal the correct setup group and enable its controls
+            if (_gameMode == GameMode.ComVsCom)
+            {
+                CvC.Visibility = Visibility.Visible;
+                CvC.IsEnabled = true;
+
+                WhiteCpuElo.IsEnabled = true;
+                BlackCpuElo.IsEnabled = true;
+            }
+            if (_gameMode == GameMode.UserVsCom || _gameMode == GameMode.UserVsUser)
+            {
+                UvCorUvU.Visibility = Visibility.Visible;
+                UvCorUvU.IsEnabled = true;
+
+                Elo.IsEnabled = _gameMode == GameMode.UserVsCom;
+                Color.IsEnabled = _gameMode == GameMode.UserVsCom;
+            }
+
+            // Let user resume / change connectivity
+            Play_Type.IsEnabled = true;
+            ResumeButton.IsEnabled = true;
+            QuitButton.Visibility = Visibility.Visible;
+            QuitButton.IsEnabled = true;
+            EpsonMotion.IsEnabled = true;
+
+            // Kick the inactivity countdown while paused
+            _inactivityTimer.Start();
         }
 
         /// <summary>
@@ -1404,7 +1380,37 @@ namespace Chess_Project
             }
         }
 
-        // New and improved Game Loop!
+        /// <summary>
+        /// Main game loop. Repeats turn execution until the game ends or a pause is requested,
+        /// handling all three modes (<see cref="GameMode.ComVsCom"/>, <see cref="GameMode.UserVsCom"/>,
+        /// <see cref="GameMode.UserVsUser"/>), animations, bookkeeping, logging, and (optional) robot I/O.
+        /// </summary>
+        /// <param name="ct">
+        /// A <see cref="CancellationToken"/> used to cancel pending awaits (e.g., engine computation or
+        /// user-move waits). When cancellation is requested, the loop exits cleanly after any non-interruptible
+        /// section completes.
+        /// </param>
+        /// <remarks>
+        /// For computer turns, calls <see cref="ComputerMoveAsync"/> to select a move, then animates via
+        /// <see cref="MovePieceAsync"/> (and <see cref="MoveCastleRookAsync"/> when castling). For user
+        /// turns, the loop waits on <see cref="_userMoveTcs.Task"/>, which is completed by the UI input path;
+        /// if move confirmation if disabled, the move animation runs here as well.
+        /// <para>
+        /// After each move, the loop updates callouts, finalizes board state (<see cref="FinalizeMoveAsync"/>),
+        /// writes logs (<see cref="DocumentMoveAsync"/>), checks for mate (<see cref="CheckmateVerifierAsync"/>),
+        /// refreshes evaluation/UI, and, when enabled, sends robot bit patterns via <see cref="SendRobotBitsAsync"/>
+        /// while appending to bit history.
+        /// </para>
+        /// <para>
+        /// Exit paths:
+        /// <list type="bullet">
+        ///     <item><description><c><see cref="EndGame"/> == <see langword="true"/></c> → optional board cleanup, brief delay, then <see cref="NewGameFunnel"/>.</description></item>
+        ///     <item><description><c><see cref="IsPaused"/> == <see langword="true"/></c> → signals <see cref="_loopStoppedTcs"/> so the Pause handler can continue.</description></item>
+        /// </list>
+        /// </para>
+        /// <para>✅ Written on 8/31/2025</para>
+        /// </remarks>
+        /// <returns></returns>
         private async Task RunGameLoopAsync(CancellationToken ct)
         {
             try
@@ -1434,13 +1440,6 @@ namespace Chess_Project
                                 Grid.SetRow(_selectedPiece, _oldRow);
                                 Grid.SetColumn(_selectedPiece, _oldCol);
                                 await MovePieceAsync(_selectedPiece, _newRow, _newColumn, _oldRow, _oldCol);
-
-                                if (KingCastle || QueenCastle)
-                                {
-                                    bool kingside = KingCastle;
-                                    bool blackJustMoved = (Move == 1);
-                                    await MoveCastleRookAsync(blackJustMoved, kingside);
-                                }
                                 break;
                             }
 
@@ -1467,13 +1466,6 @@ namespace Chess_Project
                                     Grid.SetRow(_selectedPiece, _oldRow);
                                     Grid.SetColumn(_selectedPiece, _oldCol);
                                     await MovePieceAsync(_selectedPiece, _newRow, _newColumn, _oldRow, _oldCol);
-
-                                    if (KingCastle || QueenCastle)
-                                    {
-                                        bool kingside = KingCastle;
-                                        bool blackJustMoved = (Move == 1);
-                                        await MoveCastleRookAsync(blackJustMoved, kingside);
-                                    }
                                 }
                                 else
                                 {
@@ -1490,13 +1482,6 @@ namespace Chess_Project
                                         Grid.SetRow(_selectedPiece, _oldRow);
                                         Grid.SetColumn(_selectedPiece, _oldCol);
                                         await MovePieceAsync(_selectedPiece, _newRow, _newColumn, _oldRow, _oldCol);
-
-                                        if (KingCastle || QueenCastle)
-                                        {
-                                            bool kingside = KingCastle;
-                                            bool blackJustMoved = (Move == 1);
-                                            await MoveCastleRookAsync(blackJustMoved, kingside);
-                                        }
                                     }
                                 }
 
@@ -1519,13 +1504,6 @@ namespace Chess_Project
                                     Grid.SetRow(_selectedPiece, _oldRow);
                                     Grid.SetColumn(_selectedPiece, _oldCol);
                                     await MovePieceAsync(_selectedPiece, _newRow, _newColumn, _oldRow, _oldCol);
-
-                                    if (KingCastle || QueenCastle)
-                                    {
-                                        bool kingside = KingCastle;
-                                        bool blackJustMoved = (Move == 1);
-                                        await MoveCastleRookAsync(blackJustMoved, kingside);
-                                    }
                                 }
                                 break;
                             }
@@ -1590,7 +1568,7 @@ namespace Chess_Project
         /// updates castling rights, handles promotion, optionally animates and confirms
         /// the move with the user, and finalizes game state (FEN, checkmate check, selection).
         /// </summary>
-        /// <param name="activePawn">The pawn being moved. Must be a valid piece Image on the board.</param>
+        /// <param name="activePawn">The pawn being moved. Must be a valid piece <see cref="Image"/> on the board.</param>
         /// <remarks>
         /// Steps:
         /// <list type="number">
@@ -1600,24 +1578,29 @@ namespace Chess_Project
         ///     <item>If confirm moves is enabled, animate → confirm → finalize or undo.</item>
         ///     <item>Otherwise finalize immediately (update FEN, verify checkmate, clear selection).</item>
         /// </list>
-        /// <para>✅ Updated on 8/18/2025</para></remarks>
+        /// <para>✅ Updated on 8/31/2025</para>
+        /// </remarks>
+        /// <returns>
+        /// <see langword="true"/> if the move is finalized successfully; <see langword="false"/> if the move was undone
+        /// (e.g. user rejected the configuration).
+        /// </returns>
         public async Task<bool> PawnMoveManagerAsync(Image activePawn)
         {
             // Snapshot board state & castling rights for potential undo.
-            PiecePositions();
+            await PiecePositions();
             int[] castlingRightsSnapshot = [CWR1, CWK, CWR2, CBR1, CBK, CBR2];
 
             _pawnName = activePawn.Name;
 
             // Captures & castling rights
-            HandlePieceCapture(activePawn);  // sets _capturedPiece if any
-            HandleEnPassantCapture();  // resolves en passant capture if applicable
-            DisableCastlingRights(activePawn, _capturedPiece);
+            await HandlePieceCapture(activePawn);  // sets _capturedPiece if any
+            await HandleEnPassantCapture();  // resolves en passant capture if applicable
+            await DisableCastlingRights(activePawn, _capturedPiece);
 
             // En passant eligibility & promotion
             EnPassantCreated = false;
 
-            if (Move == 1)  // White just moved
+            if (Move == 1)  // white just moved
             {
                 if (_oldRow - _newRow == 2)
                 {
@@ -1625,12 +1608,12 @@ namespace Chess_Project
                     EnPassantSquare.Add(Tuple.Create(_newRow + 1, _newColumn));
                     EnPassantCreated = true;
                 }
-                else if (_newRow == 0)
+                else if (_newRow == 0)  // promotion
                 {
-                    PawnPromote(activePawn, Move);
+                    await PawnPromote(activePawn, Move);
                 }
             }
-            else  // Black just moved
+            else  // black just moved
             {
                 if (_newRow - _oldRow == 2)
                 {
@@ -1638,9 +1621,9 @@ namespace Chess_Project
                     EnPassantSquare.Add(Tuple.Create(_newRow - 1, _newColumn));
                     EnPassantCreated = true;
                 }
-                else if (_newRow == 7)
+                else if (_newRow == 7)  // promotion
                 {
-                    PawnPromote(activePawn, Move);
+                    await PawnPromote(activePawn, Move);
                 }
             }
 
@@ -1678,7 +1661,7 @@ namespace Chess_Project
         public async Task<bool> MoveManagerAsync(Image activePiece)
         {
             // Snapshot board state & castling rights for potential undo.
-            PiecePositions();
+            await PiecePositions();
             int[] castlingRightsSnapshot = [CWR1, CWK, CWR2, CBR1, CBK, CBR2];
 
             // King-specific pre-processing (e.g., castling)
@@ -1686,20 +1669,18 @@ namespace Chess_Project
                 KingMoveManager(activePiece);
 
             // Captures and castling rights
-            HandlePieceCapture(activePiece);
-            DisableCastlingRights(activePiece, _capturedPiece);
+            await HandlePieceCapture(activePiece);
+            await DisableCastlingRights(activePiece, _capturedPiece);
 
             // Optional user confirmation path
             if (UserTurn && _moveConfirm)
             {
                 // Callout proposed move
-                if (KingCastle)
+                if (KingCastle || QueenCastle)
                 {
-                    await HandleCastlingMoveAsync("King");
-                }
-                else if (QueenCastle)
-                {
-                    await HandleCastlingMoveAsync("Queen");
+                    // Highlight king's start and rook's target squares for visual confirmation.
+                    SelectedPiece(_oldRow, _oldCol);
+                    SelectedPiece(_newRow, KingCastle ? 7 : 0);
                 }
                 else
                 {
@@ -1730,13 +1711,18 @@ namespace Chess_Project
         /// position to its castled square and sets the appropriate castling flag.
         /// </summary>
         /// <remarks>✅ Updated on 8/18/2025</remarks>
-        public void KingMoveManager(Image activePiece)
+        public async void KingMoveManager(Image activePiece)
         {
             // Not a castling move unless the king shifts exactly two files.
             if (Math.Abs(_oldCol - _newColumn) != 2)
                 return;
 
+            // Mark which castle type occurred for downstream logic/visuals.
             bool isKingside = _oldCol < _newColumn;
+            if (isKingside)
+                KingCastle = true;
+            else
+                QueenCastle = true;
 
             // Determine which side (White/Black) from the active piece name.
             // Assumes _activePiece is set (e.g., in Square_ClickAsync) to the moving piece's name.
@@ -1761,13 +1747,10 @@ namespace Chess_Project
             {
                 Grid.SetRow(rook, _newRow);
                 Grid.SetColumn(rook, rookEndColumn);
+                await MovePieceAsync(rook, _newRow, rookEndColumn, _oldRow, isKingside ? 7 : 0);
             }
 
-            // Mark which castle type occurred for downstream logic/visuals.
-            if (isKingside)
-                KingCastle = true;
-            else
-                QueenCastle = true;
+            
         }
 
         /// <summary>
@@ -1776,7 +1759,7 @@ namespace Chess_Project
         /// </summary>
         /// <param name="side">"King" for kingside, "Queen" for queenside.</param>
         /// <remarks>✅ Updated on 8/18/2025</remarks>
-        private async Task HandleCastlingMoveAsync(string side)
+        private async Task HandleCastlingMoveAsync(Image activePiece, string side)
         {
             if (string.IsNullOrWhiteSpace(side))
                 return;
@@ -1787,7 +1770,8 @@ namespace Chess_Project
                 return;
 
             // Determine color from the active moving piece (e.g., "WhiteKing", "BlackKing")
-            bool isWhite = ActivePiece?.StartsWith("White", StringComparison.Ordinal) == true;
+            //bool isWhite = activePiece?.Name?.StartsWith("White", StringComparison.Ordinal) == true;
+            bool isWhite = Move == 1;
 
             // By naming convention: Rook1 = queenside (col 0), Rook2 = kingside (col 7)
             string rookName =
@@ -1847,18 +1831,18 @@ namespace Chess_Project
         /// removed from the board, and <see cref="Capture"/> is set. The moving piece is untouched.
         /// <para>✅ Updated on 8/19/2025</para>
         /// </remarks>
-        private void HandlePieceCapture(Image activePiece)
+        private Task HandlePieceCapture(Image activePiece)
         {
             // Fast check: does any image currently sit on the destination square?
             bool occupied = ImageCoordinates.Any(coord => coord.Item1 == _newRow && coord.Item2 == _newColumn);
-            if (!occupied) return;
+            if (!occupied) return Task.CompletedTask;
 
             // Locate the captured piece
             var captured = Chess_Board.Children
                 .OfType<Image>()
                 .FirstOrDefault(img => img != activePiece && Grid.GetRow(img) == _newRow && Grid.GetColumn(img) == _newColumn);
 
-            if (captured is null) return;
+            if (captured is null) return Task.CompletedTask;
  
             TakenPiece = captured.Name;
             _capturedPiece = captured;
@@ -1870,6 +1854,7 @@ namespace Chess_Project
             Chess_Board.Children.Remove(_capturedPiece);
 
             Capture = true;
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -1880,11 +1865,11 @@ namespace Chess_Project
         /// is identified, recorded as captured, and removed from the board, and the en passant state is cleared.
         /// <para>✅ Updated on 8/19/2025</para>
         /// </remarks>
-        private void HandleEnPassantCapture()
+        private Task HandleEnPassantCapture()
         {
             // Is the destination square currently flagged as en passant?
             bool isEnPassant = EnPassantSquare.Any(coord => coord.Item1 == _newRow && coord.Item2 == _newColumn);
-            if (!isEnPassant) return;
+            if (!isEnPassant) return Task.CompletedTask;
 
             // Determine the row of the pawn to capture (the pawn that advanced two squares last move)
             int capturedRow = (Move == 1) ? _newRow + 1 : _newRow - 1;
@@ -1907,6 +1892,8 @@ namespace Chess_Project
 
                 EnPassant = true;
             }
+
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -1917,9 +1904,9 @@ namespace Chess_Project
         /// <param name="activePiece">The piece that moved.</param>
         /// <param name="capturedPiece">The piece that was captured (if any).</param>
         /// <remarks>✅ Updated on 8/19/2025</remarks>
-        private void DisableCastlingRights(Image? activePiece, Image? capturedPiece)
+        private Task DisableCastlingRights(Image? activePiece, Image? capturedPiece)
         {
-            if (activePiece == null) return;
+            if (activePiece == null) return Task.CompletedTask;
 
             // Local helper: map a piece name to its castling flag and set it.
             void DisableByName(string name)
@@ -1938,6 +1925,8 @@ namespace Chess_Project
             // Disable because a rook got captured.
             if (capturedPiece is not null)
                 DisableByName(capturedPiece.Name);
+
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -2978,14 +2967,14 @@ namespace Chess_Project
         /// <summary>
         /// Animates the rook during castling based on which side (king/queen) and who just moved.
         /// </summary>
-        /// <param name="blackJustMoved">True if Black made the king move; otherwise White did.</param>
+        /// <param name="isWhite">True if Black made the king move; otherwise White did.</param>
         /// <param name="kingside">True for kingside castling, false for queenside.</param>
         /// <remarks>✅ Written on 8/19/2025</remarks>
-        private async Task MoveCastleRookAsync(bool blackJustMoved, bool kingside)
+        private async Task MoveCastleRookAsync(bool isWhite, bool kingside)
         {
-            string rookName = blackJustMoved
-                ? (kingside ? "BlackRook2" : "BlackRook1")
-                : (kingside ? "WhiteRook2" : "WhiteRook1");
+            string rookName = isWhite
+                ? (kingside ? "WhiteRook2" : "WhiteRook1")
+                : (kingside ? "BlackRook2" : "BlackRook1");
 
             int rookStartCol = kingside ? 7 : 0;
             int rookTargetCol = kingside ? _newColumn - 1 : _newColumn + 1;
@@ -3111,8 +3100,8 @@ namespace Chess_Project
             _selectedPlayType = (ComboBoxItem)Play_Type.SelectedItem;
             _selectedElo = (ComboBoxItem)Elo.SelectedItem;
             _selectedColor = (ComboBoxItem)Color.SelectedItem;
-            _selectedWhiteElo = (ComboBoxItem)WhiteCPUElo.SelectedItem;
-            _selectedBlackElo = (ComboBoxItem)BlackCPUElo.SelectedItem;
+            _selectedWhiteElo = (ComboBoxItem)WhiteCpuElo.SelectedItem;
+            _selectedBlackElo = (ComboBoxItem)BlackCpuElo.SelectedItem;
 
             string? playType = _selectedPlayType?.Content?.ToString();
 
@@ -3127,16 +3116,16 @@ namespace Chess_Project
                 CvC.IsEnabled = !isUserVsCom;
                 Elo.IsEnabled = isUserVsCom;
                 Color.IsEnabled = isUserVsCom;
-                WhiteCPUElo.IsEnabled = !isUserVsCom;
-                BlackCPUElo.IsEnabled = !isUserVsCom;
+                WhiteCpuElo.IsEnabled = !isUserVsCom;
+                BlackCpuElo.IsEnabled = !isUserVsCom;
                 PlayButton.IsEnabled = false;
                 ResumeButton.IsEnabled = false;
 
                 // Clear irrelevant selections
                 if (isUserVsCom)
                 {
-                    WhiteCPUElo.SelectedItem = null;
-                    BlackCPUElo.SelectedItem = null;
+                    WhiteCpuElo.SelectedItem = null;
+                    BlackCpuElo.SelectedItem = null;
                 }
                 else
                 {
@@ -3153,8 +3142,8 @@ namespace Chess_Project
                 CvC.IsEnabled = false;
                 Elo.IsEnabled = false;
                 Color.IsEnabled = false;
-                WhiteCPUElo.IsEnabled = false;
-                BlackCPUElo.IsEnabled = false;
+                WhiteCpuElo.IsEnabled = false;
+                BlackCpuElo.IsEnabled = false;
 
                 // Resume or play based on pause state
                 if (!IsPaused)
@@ -3183,8 +3172,8 @@ namespace Chess_Project
 
             _selectedElo = Elo.SelectedItem as ComboBoxItem;
             _selectedColor = Color.SelectedItem as ComboBoxItem;
-            _selectedWhiteElo = WhiteCPUElo.SelectedItem as ComboBoxItem;
-            _selectedBlackElo = BlackCPUElo.SelectedItem as ComboBoxItem;
+            _selectedWhiteElo = WhiteCpuElo.SelectedItem as ComboBoxItem;
+            _selectedBlackElo = BlackCpuElo.SelectedItem as ComboBoxItem;
 
             string? playType = _selectedPlayType?.Content?.ToString();
 
@@ -3882,8 +3871,8 @@ namespace Chess_Project
             CvC.IsEnabled = !userPlaying;
             Elo.IsEnabled = userPlaying;
             Color.IsEnabled = userPlaying;
-            WhiteCPUElo.IsEnabled = !userPlaying;
-            BlackCPUElo.IsEnabled = !userPlaying;
+            WhiteCpuElo.IsEnabled = !userPlaying;
+            BlackCpuElo.IsEnabled = !userPlaying;
         }
 
         /// <summary>
@@ -4259,7 +4248,7 @@ namespace Chess_Project
         /// Also tracks the positions of the white and black kings.
         /// </summary>
         /// <remarks>✅ Updated on 7/23/2025</remarks>
-        public void PiecePositions()
+        public Task PiecePositions()
         {
             ImageCoordinates.Clear();
 
@@ -4282,6 +4271,8 @@ namespace Chess_Project
                     _blackKingCol = column;
                 }
             }
+
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -4419,20 +4410,20 @@ namespace Chess_Project
         private Task AssignRandomElo()
         {
             // Temporarily unsubscribe to prevent triggering logic during changes
-            WhiteCPUElo.SelectionChanged -= CheckDropdownSelections;
-            BlackCPUElo.SelectionChanged -= CheckDropdownSelections;
+            WhiteCpuElo.SelectionChanged -= CheckDropdownSelections;
+            BlackCpuElo.SelectionChanged -= CheckDropdownSelections;
 
             Random rng = new();
-            WhiteCPUElo.SelectedIndex = rng.Next(WhiteCPUElo.Items.Count);
-            BlackCPUElo.SelectedIndex = rng.Next(BlackCPUElo.Items.Count);
+            WhiteCpuElo.SelectedIndex = rng.Next(WhiteCpuElo.Items.Count);
+            BlackCpuElo.SelectedIndex = rng.Next(BlackCpuElo.Items.Count);
 
             // Manually update the cached fields since the handler didn’t run
-            _selectedWhiteElo = (ComboBoxItem?)WhiteCPUElo.SelectedItem;
-            _selectedBlackElo = (ComboBoxItem?)BlackCPUElo.SelectedItem;
+            _selectedWhiteElo = (ComboBoxItem?)WhiteCpuElo.SelectedItem;
+            _selectedBlackElo = (ComboBoxItem?)BlackCpuElo.SelectedItem;
 
             // Re-subscribe after assignments
-            WhiteCPUElo.SelectionChanged += CheckDropdownSelections;
-            BlackCPUElo.SelectionChanged += CheckDropdownSelections;
+            WhiteCpuElo.SelectionChanged += CheckDropdownSelections;
+            BlackCpuElo.SelectionChanged += CheckDropdownSelections;
 
             return Task.CompletedTask;
         }
@@ -5114,7 +5105,7 @@ namespace Chess_Project
         /// <param name="activePawn">The pawn being moved.</param>
         /// <param name="move">The moving color. 1 for White and 0 for Black</param>
         /// <remarks>✅ Updating...</remarks>
-        public void PawnPromote(Image activePawn, int move)
+        public Task PawnPromote(Image activePawn, int move)
         {
             string[] promotionPieces = ["Rook", "Knight", "Bishop", "Queen"];
             List<string> imagePaths = [];
@@ -5350,6 +5341,8 @@ namespace Chess_Project
 
                 ActivePiece = activePawn.Name;
             }
+
+            return Task.CompletedTask;
         }
 
 
@@ -5362,7 +5355,7 @@ namespace Chess_Project
             using StockfishCall stockfishResponse = new(_stockfishPath!);
             string stockfishFEN = await Task.Run(() => stockfishResponse.GetStockfishResponse(Fen));
             string[] lines = [.. stockfishFEN.Split('\n').Skip(2)];
-            string[] infoLines = lines.Where(line => line.TrimStart().StartsWith("info")).ToArray();
+            string[] infoLines = [.. lines.Where(line => line.TrimStart().StartsWith("info"))];
             string accurateEvaluationLine = infoLines.LastOrDefault() ?? "Most accurate evaluation line not found";
             string[] accurateEvaluation = accurateEvaluationLine.Split(' ');
 
