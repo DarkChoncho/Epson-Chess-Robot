@@ -668,7 +668,7 @@
                     <CheckBox Name="FullscreenEnable" Checked="Fullscreen" Unchecked="Windowed" Width="100" Height="25" Margin="20,15,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Content="Fullscreen" FontFamily="Sans Serif Collection" FontSize="12" FontWeight="Heavy" Foreground="#FFD0D0D0" VerticalContentAlignment="Center"/>
                     <CheckBox Name="Sounds" Click="PieceSoundsSetting" Width="100" Height="25" Margin="20,5,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Content="Piece Sounds" FontFamily="Sans Serif Collection" FontSize="12" FontWeight="Heavy" Foreground="#FFD0D0D0" VerticalContentAlignment="Center"/>
                     <CheckBox Name="ConfirmMove" Click="ConfirmMoveSetting" Width="120" Height="25" Margin="20,5,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Content="Confirm Moves" FontFamily="Sans Serif Collection" FontSize="12" FontWeight="Heavy" Foreground="#FFD0D0D0" VerticalContentAlignment="Center"/>
-                    <CheckBox Name="EpsonMotion" Click="EpsonRcAsync" Width="120" Height="25" Margin="20,5,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Content="Epson RC+" FontFamily="Sans Serif Collection" FontSize="12" FontWeight="Heavy" Foreground="#FFD0D0D0" VerticalContentAlignment="Center"/>
+                    <CheckBox Name="EpsonMotion" Click="EpsonMotionAsync" Width="120" Height="25" Margin="20,5,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Content="Epson RC+" FontFamily="Sans Serif Collection" FontSize="12" FontWeight="Heavy" Foreground="#FFD0D0D0" VerticalContentAlignment="Center"/>
                     <CheckBox Name="CognexVision" Click="CognexVisionAsync" Width="120" Height="25" Margin="20,5,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Content="Cognex Vision" FontFamily="Sans Serif Collection" FontSize="12" FontWeight="Heavy" Foreground="#FFD0D0D0" VerticalContentAlignment="Center"/>
                 </StackPanel>
             </Border>
@@ -715,18 +715,18 @@
             </Rectangle.Clip>
         </Rectangle>
 
-        <TextBlock Text="Epson RC+ Connection:" HorizontalAlignment="Center" VerticalAlignment="Top" TextAlignment="Right" Width="135" FontFamily="Sans Serif Collection" FontWeight="Bold" FontStyle="Normal" FontSize="12" Height="23" Foreground="#FFD0D0D0" Panel.ZIndex="1" Margin="0,1,35,0"/>
-        <TextBlock Text="Cognex Connection:" HorizontalAlignment="Center" VerticalAlignment="Top" TextAlignment="Right" Width="135" FontFamily="Sans Serif Collection" FontWeight="Bold" FontStyle="Normal" FontSize="12" Height="23" Foreground="#FFD0D0D0" Panel.ZIndex="1" Margin="0,21,35,0"/>
+        <TextBlock Text="Epson Connection:" HorizontalAlignment="Center" VerticalAlignment="Top" TextAlignment="Right" Width="115" FontFamily="Sans Serif Collection" FontWeight="Bold" FontStyle="Normal" FontSize="12" Height="23" Foreground="#FFD0D0D0" Panel.ZIndex="1" Margin="0,1,35,0"/>
+        <TextBlock Text="Cognex Connection:" HorizontalAlignment="Center" VerticalAlignment="Top" TextAlignment="Right" Width="115" FontFamily="Sans Serif Collection" FontWeight="Bold" FontStyle="Normal" FontSize="12" Height="23" Foreground="#FFD0D0D0" Panel.ZIndex="1" Margin="0,21,35,0"/>
         <TextBlock Name="AttemptingConnection" Text="Attempting to connect..." HorizontalAlignment="Center" VerticalAlignment="Top" Width="130" FontFamily="Sans Serif Collection" FontWeight="Medium" FontStyle="Italic" FontSize="11" Height="23" Foreground="#FFD0D0D0" Panel.ZIndex="1" Margin="0,40,0,0" Visibility="Collapsed"/>
-        <Rectangle Name="ConnectionRect" Fill="#FF404040" Width="180" Height="50" VerticalAlignment="Top" HorizontalAlignment="Center">
+        <Rectangle Name="ConnectionRect" Fill="#FF404040" Width="170" Height="50" VerticalAlignment="Top" HorizontalAlignment="Center">
             <Rectangle.Clip>
-                <RectangleGeometry Rect="0, -10, 180, 60" RadiusX="5" RadiusY="5"/>
+                <RectangleGeometry Rect="0, -10, 170, 60" RadiusX="5" RadiusY="5"/>
             </Rectangle.Clip>
         </Rectangle>
-        <Ellipse x:Name="WhiteEpsonStatus" Width="12" Height="12" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="120,10,0,0" Panel.ZIndex="1" Stroke="#FFD0D0D0"/>
-        <Ellipse x:Name="BlackEpsonStatus" Width="12" Height="12" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="155,10,0,0" Panel.ZIndex="1" Stroke="#FFD0D0D0"/>
-        <Ellipse x:Name="WhiteCognexStatus" Width="12" Height="12" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="120,30,0,0" Panel.ZIndex="1" Stroke="#FFD0D0D0"/>
-        <Ellipse x:Name="BlackCognexStatus" Width="12" Height="12" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="155,30,0,0" Panel.ZIndex="1" Stroke="#FFD0D0D0"/>
+        <Ellipse x:Name="WhiteEpsonStatus" Width="12" Height="12" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="105,10,0,0" Panel.ZIndex="1" Stroke="#FFD0D0D0"/>
+        <Ellipse x:Name="BlackEpsonStatus" Width="12" Height="12" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="140,10,0,0" Panel.ZIndex="1" Stroke="#FFD0D0D0"/>
+        <Ellipse x:Name="WhiteCognexStatus" Width="12" Height="12" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="105,30,0,0" Panel.ZIndex="1" Stroke="#FFD0D0D0"/>
+        <Ellipse x:Name="BlackCognexStatus" Width="12" Height="12" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="140,30,0,0" Panel.ZIndex="1" Stroke="#FFD0D0D0"/>
 
         <Image Name="InfoSymbol" Source="Assets/Icons/Info.png" HorizontalAlignment="Right" VerticalAlignment="Bottom" Height="25" Width="25" Margin="0,0,137.5,67.5" Panel.ZIndex="1" Visibility="Collapsed"/>
         <TextBlock Name="InProgressText" Text="Move in progress.&#x0a;Please wait..." LineHeight="15" LineStackingStrategy="BlockLineHeight" HorizontalAlignment="Right" VerticalAlignment="Bottom" Height="33" Width="120" FontFamily="Sans Serif Collection" FontSize="12" FontWeight="Medium" FontStyle="Normal" Foreground="#FFD0D0D0" Margin="0,0,10,60" Panel.ZIndex="1" Visibility="Collapsed"/>
@@ -866,7 +866,7 @@
         <Button Name="PlayButton" Content="Play" Click="Play_ClickAsync" Width="100" Height="30" Margin="20" HorizontalAlignment="Right" VerticalAlignment="Bottom" VerticalContentAlignment="Center" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" FontSize="14" IsEnabled="False" Padding="1,-4,1,1"/>
         <Button Name="PauseButton" Content="II" Click="Pause_ClickAsync" Width="30" Height="30" Margin="20,20,130,20" HorizontalAlignment="Right" VerticalAlignment="Bottom" VerticalContentAlignment="Center" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" FontSize="18" IsEnabled="False" Padding="1, -9, 1, 1"/>
         <Button Name="ResumeButton" Content="Resume" Click="Resume_ClickAsync" Width="100" Height="30" Margin="20" HorizontalAlignment="Right" VerticalAlignment="Bottom" VerticalContentAlignment="Center" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" FontSize="14" IsEnabled="False" Padding="1,-4,1,1" Visibility="Collapsed"/>
-        <Button Name="QuitButton" Content="Quit Game" Click="QuitGame" Width="140" Height="30" Margin="20,20,20,60" HorizontalAlignment="Right" VerticalAlignment="Bottom" VerticalContentAlignment="Center" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" FontSize="14" IsEnabled="False" Padding="1,-4,1,1" Visibility="Collapsed"/>
+        <Button Name="QuitButton" Content="Quit Game" Click="Quit_ClickAsync" Width="140" Height="30" Margin="20,20,20,60" HorizontalAlignment="Right" VerticalAlignment="Bottom" VerticalContentAlignment="Center" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" FontSize="14" IsEnabled="False" Padding="1,-4,1,1" Visibility="Collapsed"/>
 
         <Button Name="Confirm" Width="90" Height="40" Margin="100,0,0,20" HorizontalAlignment="Center" VerticalAlignment="Bottom" VerticalContentAlignment="Center" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" FontSize="16" IsEnabled="False" Foreground="White" BorderThickness="0,0,0,0" Padding="1, -4, 1, 1" Visibility="Collapsed">
             <Button.Template>

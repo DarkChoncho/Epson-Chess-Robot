@@ -101,8 +101,8 @@ namespace Chess_Project
         private DispatcherTimer _inactivityTimer;
         private readonly Dictionary<string, SoundPlayer> _soundPlayer = [];
 
-        private EpsonController _whiteRobot;
-        private EpsonController _blackRobot;
+        private EpsonController _whiteEpson;
+        private EpsonController _blackEpson;
         private CognexController _whiteCognex;
         private CognexController _blackCognex;
 
@@ -255,7 +255,7 @@ namespace Chess_Project
 
         private bool _pieceSounds;
         private bool _moveConfirm;
-        private bool _robotMotion;
+        private bool _epsonMotion;
         private bool _cameraVision;
 
         private readonly int _timeoutDuration = 30;
@@ -373,7 +373,7 @@ namespace Chess_Project
             // Apply toggles (keep internal flags in sync with UI)
             Sounds.IsChecked = _pieceSounds = _preferences.PieceSounds;
             ConfirmMove.IsChecked = _moveConfirm = _preferences.ConfirmMove;
-            EpsonMotion.IsChecked = _robotMotion = _preferences.EpsonMotion;
+            EpsonMotion.IsChecked = _epsonMotion = _preferences.EpsonMotion;
             CognexVision.IsChecked = _cameraVision = _preferences.CognexVision;
 
             // Build asset roots
@@ -510,21 +510,21 @@ namespace Chess_Project
         private void InitializeConnections()
         {
             // Clean up old instances to avoid socket leaks if this is called more than once
-            _whiteRobot?.Disconnect();
-            _blackRobot?.Disconnect();
+            _whiteEpson?.Disconnect();
+            _blackEpson?.Disconnect();
             _whiteCognex?.Disconnect();
             _blackCognex?.Disconnect();
 
             _whiteCognex = new CognexController(_whiteCognexIp, _whiteCognexTcpPort, ChessColor.White);
             _blackCognex = new CognexController(_blackCognexIp, _blackCognexTcpPort, ChessColor.Black);
-            _whiteRobot = new EpsonController(_whiteRobotIp, _whiteRobotPort, _whiteRobotBaseDeltas, _whiteDeltaScalar, ChessColor.White, _whiteCognex, _whiteCognexListenPort);
-            _blackRobot = new EpsonController(_blackRobotIp, _blackRobotPort, _blackRobotBaseDeltas, _blackDeltaScalar, ChessColor.Black, _blackCognex, _blackCognexListenPort);
+            _whiteEpson = new EpsonController(_whiteRobotIp, _whiteRobotPort, _whiteRobotBaseDeltas, _whiteDeltaScalar, ChessColor.White, _whiteCognex, _whiteCognexListenPort);
+            _blackEpson = new EpsonController(_blackRobotIp, _blackRobotPort, _blackRobotBaseDeltas, _blackDeltaScalar, ChessColor.Black, _blackCognex, _blackCognexListenPort);
             _ = HandleInitialConnectionsAsync();
         }
 
         /// <summary>
         /// Attempts initial connections for Epson robots and Cognex cameras based on the current
-        /// toggle flags (<see cref="_robotMotion"/> and <see cref="_cameraVision"/>), while updating
+        /// toggle flags (<see cref="_epsonMotion"/> and <see cref="_cameraVision"/>), while updating
         /// UI status indicators and persisting the resulting states to preferences.
         /// Displays a busy overlay during the operation and always restores UI interactivity in <see langword="finally"/>.
         /// </summary>
@@ -542,28 +542,28 @@ namespace Chess_Project
         /// <returns>A task that completes when all requested connection work and UI updates are finished.</returns>
         private async Task HandleInitialConnectionsAsync()
         {
-            if (_robotMotion || _cameraVision)
+            if (_epsonMotion || _cameraVision)
             {
                 DisableEpsonElements();
                 UpdateRectangleClip(65, Visibility.Visible, 75);
 
                 // "Attempting" feedback
-                SetEpsonStatusLight(ChessColor.White, _robotMotion ? Brushes.Yellow : Brushes.Red);
-                SetEpsonStatusLight(ChessColor.Black, _robotMotion ? Brushes.Yellow : Brushes.Red);
+                SetEpsonStatusLight(ChessColor.White, _epsonMotion ? Brushes.Yellow : Brushes.Red);
+                SetEpsonStatusLight(ChessColor.Black, _epsonMotion ? Brushes.Yellow : Brushes.Red);
                 SetCognexStatusLight(ChessColor.White, _cameraVision ? Brushes.Yellow : Brushes.Red);
                 SetCognexStatusLight(ChessColor.Black, _cameraVision ? Brushes.Yellow : Brushes.Red);
 
                 try
                 {
                     // Epson robots
-                    if (_robotMotion)
+                    if (_epsonMotion)
                     {
-                        var whiteRobot = _whiteRobot?.ConnectAsync() ?? Task.CompletedTask;
-                        var blackRobot = _blackRobot?.ConnectAsync() ?? Task.CompletedTask;
+                        var whiteRobot = _whiteEpson?.ConnectAsync() ?? Task.CompletedTask;
+                        var blackRobot = _blackEpson?.ConnectAsync() ?? Task.CompletedTask;
                         await Task.WhenAll(whiteRobot, blackRobot);
 
-                        _robotMotion = GlobalState.WhiteEpsonConnected && GlobalState.BlackEpsonConnected;
-                        EpsonMotion.IsChecked = _robotMotion;
+                        _epsonMotion = GlobalState.WhiteEpsonConnected && GlobalState.BlackEpsonConnected;
+                        EpsonMotion.IsChecked = _epsonMotion;
 
                         SetEpsonStatusLight(ChessColor.White, GlobalState.WhiteEpsonConnected ? Brushes.Green : Brushes.Red);
                         SetEpsonStatusLight(ChessColor.Black, GlobalState.BlackEpsonConnected ? Brushes.Green : Brushes.Red);
@@ -584,7 +584,7 @@ namespace Chess_Project
                     }
 
                     // Persist the final state of the toggles
-                    _preferences.EpsonMotion = _robotMotion;
+                    _preferences.EpsonMotion = _epsonMotion;
                     _preferences.CognexVision = _cameraVision;
                     PreferencesManager.Save(_preferences);
                 }
@@ -1059,7 +1059,7 @@ namespace Chess_Project
                                                  GameMode.UserVsUser;
 
                 // Robot-controlled setup
-                if (_robotMotion && !BoardSet)
+                if (_epsonMotion && !BoardSet)
                 {
                     ShowSetupPopup(true);
                     try
@@ -1155,7 +1155,7 @@ namespace Chess_Project
         /// </summary>
         /// <param name="sender">The source of the event, typically the Pause button.</param>
         /// <param name="e">The event arguments associated with the click.</param>
-        /// <remarks>✅ Updated on 8/31/2025</remarks>
+        /// <remarks>✅ Updated on 9/2/2025</remarks>
         private async void Pause_ClickAsync(object sender, EventArgs e)
         {
             // Re-entrancy guard
@@ -1176,7 +1176,10 @@ namespace Chess_Project
 
             // Show main panel
             Game_Start.Visibility = Visibility.Visible;
-            Game_Start.IsEnabled = true;
+
+            // Reveal the correct setup group
+            if (_gameMode == GameMode.ComVsCom) CvC.Visibility = Visibility.Visible;
+            if (_gameMode == GameMode.UserVsCom || _gameMode == GameMode.UserVsUser) UvCorUvU.Visibility = Visibility.Visible;
 
             // If a move is in its non-interruptible section, wait for the loop to signal it has stopped
             if (_loopStoppedTcs is not null && MoveInProgress)
@@ -1190,20 +1193,17 @@ namespace Chess_Project
             if (EndGame)
                 return;
 
-            // Reveal the correct setup group and enable its controls
+            // Enable the correct controls
+            Game_Start.IsEnabled = true;
             if (_gameMode == GameMode.ComVsCom)
             {
-                CvC.Visibility = Visibility.Visible;
                 CvC.IsEnabled = true;
-
                 WhiteCpuElo.IsEnabled = true;
                 BlackCpuElo.IsEnabled = true;
             }
             if (_gameMode == GameMode.UserVsCom || _gameMode == GameMode.UserVsUser)
             {
-                UvCorUvU.Visibility = Visibility.Visible;
                 UvCorUvU.IsEnabled = true;
-
                 Elo.IsEnabled = _gameMode == GameMode.UserVsCom;
                 Color.IsEnabled = _gameMode == GameMode.UserVsCom;
             }
@@ -1515,7 +1515,7 @@ namespace Chess_Project
                     UpdateEvalBar();
                     DeselectPieces();
 
-                    if (_robotMotion)
+                    if (_epsonMotion)
                     {
                         await SendRobotBitsAsync();
 
@@ -1530,7 +1530,7 @@ namespace Chess_Project
 
                 if (EndGame)
                 {
-                    if (_robotMotion)
+                    if (_epsonMotion)
                     {
                         ShowCleanupPopup(true);
                         await ClearBoard();
@@ -1702,7 +1702,7 @@ namespace Chess_Project
                 }
                 else
                 {
-                    System.Diagnostics.Debug.WriteLine("Move string not recognized.");
+                    Debug.WriteLine("Move string not recognized.");
                     return null;
                 }
 
@@ -2570,6 +2570,152 @@ namespace Chess_Project
             }
         }
 
+        /// <summary>
+        /// Verifies game-ending conditions using Stockfish evaluation and board state.
+        /// </summary>
+        /// <remarks>
+        /// Performs several checks in order:
+        /// <list type="number">
+        ///     <item><description>Queries Stockfish for the latest evaluation and best move.</description></item>
+        ///     <item><description>Interprets forced mates, centipawn evaluations, and win/draw conditions.</description></item>
+        ///     <item><description>Handles terminal outcomes: checkmate, stalemate, fifty-move rule, threefold repetition, or insufficient material.</description></item>
+        ///     <item><description>Updates <see cref="DisplayedAdvantage"/>, <see cref="QuantifiedEvaluation"/>, and sets <see cref="EndGame"/> where appropriate.</description></item>
+        ///     <item><description>Displays appropriate popups to communicate the result to the user.</description></item>
+        /// </list>
+        /// <para>✅ Updated on 9/2/2025</para>
+        /// </remarks>
+        /// <returns></returns>
+        private async Task CheckmateVerifierAsync()
+        {
+            using StockfishCall stockfishResponse = new(_stockfishPath!);
+            string stockfishFEN = await Task.Run(() => stockfishResponse.GetStockfishResponse(Fen));
+            string[] lines = [.. stockfishFEN.Split('\n').Skip(2)];
+            string[] infoLines = [.. lines.Where(line => line.TrimStart().StartsWith("info"))];
+
+            string accurateEvaluationLine = infoLines.LastOrDefault() ?? "Most accurate evaluation line not found";
+            string[] accurateEvaluation = accurateEvaluationLine.Split(' ');
+
+            // Evaluation outcome: win, mate, centipawn score
+            if (accurateEvaluation.Length > 5 && accurateEvaluation[5].StartsWith('0'))
+            {
+                DisplayedAdvantage = "1-0";
+                QuantifiedEvaluation = (Move == 0) ? 0 : 20;
+            }
+            else if (accurateEvaluation.Length > 9 && accurateEvaluation[8].StartsWith("mate"))
+            {
+                string mateVal = accurateEvaluation[9];
+                DisplayedAdvantage = mateVal.StartsWith('-') ? $"M{mateVal[1..]}" : $"M{mateVal}";
+
+                if (Move == 0)
+                    QuantifiedEvaluation = mateVal.StartsWith('-') ? 0 : 20;
+                else
+                    QuantifiedEvaluation = mateVal.StartsWith('-') ? 20 : 0;
+            }
+            else if (accurateEvaluation.Length > 9)
+            {
+                double eval = double.Parse(accurateEvaluation[9]) / 100;
+                DisplayedAdvantage = Math.Abs(eval).ToString("0.0");
+
+                if (Move == 0)
+                    QuantifiedEvaluation = Math.Clamp(10 + eval, 1, 19);
+                else
+                    QuantifiedEvaluation = Math.Clamp(10 - eval, 1, 19);
+            }
+
+            // Check terminal conditions
+            string bestMoveLine = lines.FirstOrDefault(line => line.TrimStart().StartsWith("bestmove")) ?? string.Empty;
+            string[] parts = bestMoveLine.Split(' ');
+
+            if (parts.Length > 1 && parts[1].StartsWith("(none)"))
+            {
+                EndGame = true;
+                if (infoLines.Any(line => line.Contains("mate")))
+                {
+                    if (Move == 0)
+                        ShowGameOverPopup($"White wins by checkmate in {Fullmove} moves!", "White wins by checkmate");
+                    else
+                        ShowGameOverPopup($"Black wins by checkmate in {Fullmove - 1} moves!", "Black wins by checkmate");
+                }
+                else if (infoLines.Any(line => line.Contains("cp")))
+                {
+                    DisplayedAdvantage = ".5 = .5";
+                    QuantifiedEvaluation = 10;
+                    ShowGameOverPopup($"Game ends in a stalemate after {(Move == 0 ? Fullmove : Fullmove - 1)}", "Stalemate");
+                }
+            }
+            else if (Halfmove == 100)  // fifty-move rule occurs
+            {
+                EndGame = true;
+                DisplayedAdvantage = ".5 - .5";
+                QuantifiedEvaluation = 10;
+                ShowGameOverPopup("The game is a draw due to the fifty-move rule,\n" +
+                                  "as there have been no pawn movements\n" +
+                                  "or captures in the last fifty full turns.", "Draw due to fifty-move rule");
+            }
+            else if (ThreefoldRepetition)
+            {
+                EndGame = true;
+                DisplayedAdvantage = ".5 - .5";
+                QuantifiedEvaluation = 10;
+                ShowGameOverPopup("The game is a draw due to threefold repetition,\n" +
+                                  "as the same position was reached three\n" +
+                                  "times with the same color to move each time.", "Draw due to threefold repetition");
+            }
+            else
+            {
+                // Insufficient material check
+                bool insufficient = true;
+                int whiteBishopCount = 0, blackBishopCount = 0, whiteKnightCount = 0, blackKnightCount = 0;
+                int whiteLightBishopCount = 0, whiteDarkBishopCount = 0, blackLightBishopCount = 0, blackDarkBishopCount = 0;
+
+                foreach (Image image in Chess_Board.Children.OfType<Image>())
+                {
+                    if (image.Name.Contains("Pawn") || image.Name.Contains("Rook") || image.Name.Contains("Queen"))
+                    {
+                        insufficient = false;
+                        break;
+                    }
+
+                    if (image.Name.StartsWith("WhiteBishop"))
+                    {
+                        whiteBishopCount++;
+
+                        if (((Grid.GetRow(image) + 1) + (Grid.GetColumn(image) + 1)) % 2 == 1) whiteLightBishopCount++; else whiteDarkBishopCount++;
+                    }
+
+                    if (image.Name.StartsWith("BlackBishop"))
+                    {
+                        blackBishopCount++;
+
+                        if (((Grid.GetRow(image) + 1) + (Grid.GetColumn(image) + 1)) % 2 == 1) blackLightBishopCount++; else blackDarkBishopCount++;
+                    }
+
+                    if (image.Name.StartsWith("WhiteKnight")) whiteKnightCount++;
+                    if (image.Name.StartsWith("BlackKnight")) blackKnightCount++;
+                }
+
+                if (insufficient)
+                {
+                    bool hasSufficient =
+                        whiteKnightCount >= 2 || blackKnightCount >= 2 ||
+                        whiteBishopCount >= 2 || blackBishopCount >= 2 ||
+                        (whiteKnightCount == 1 && blackKnightCount == 1) ||
+                        (whiteLightBishopCount >= 1 && blackDarkBishopCount >= 1) ||
+                        (whiteDarkBishopCount >= 1 && blackLightBishopCount >= 1);
+
+                    if (!hasSufficient)
+                    {
+                        EndGame = true;
+                        DisplayedAdvantage = ".5 - .5";
+                        QuantifiedEvaluation = 10;
+                        ShowGameOverPopup("The game is a draw due to insufficient material,\n" +
+                                            "as neither side has enough remaining pieces\n" +
+                                            "on the board to force a checkmate.", "Draw due to insufficient material");
+                    }
+                }
+            }
+        }
+
         #endregion
 
         #region Stockfish Querying & Parsing
@@ -3301,7 +3447,6 @@ namespace Chess_Project
         private void CheckDropdownSelections(object sender, EventArgs e)
         {
             _inactivityTimer.Stop();
-            _inactivityTimer.Start();
 
             _selectedElo = Elo.SelectedItem as ComboBoxItem;
             _selectedColor = Color.SelectedItem as ComboBoxItem;
@@ -3324,6 +3469,8 @@ namespace Chess_Project
                     TogglePlayButtons(false);
                     break;
             }
+
+            _inactivityTimer.Start();
         }
 
         /// <summary>
@@ -3769,13 +3916,30 @@ namespace Chess_Project
         }
 
         /// <summary>
-        /// Handles Epson RC connection status and UI updates.
+        /// Handles Cognex camera connection status and UI updates.
+        /// Displays "In Progress" status light while attempting connection.
+        /// </summary>
+        /// <param name="sender">The UI element that triggered the event.</param>
+        /// <param name="e">Event data associated with the action.</param>
+        /// <remarks>✅ Updated on 9/2/2025</remarks>
+        private async void CognexVisionAsync(object sender, EventArgs e)
+        {
+            if (sender is not CheckBox checkBox)
+                return;
+
+            DisableCognexElements();
+            await CognexConnectAsync(checkBox);
+            CognexVision.IsEnabled = true;
+        }
+
+        /// <summary>
+        /// Handles Epson controller connection status and UI updates.
         /// Displays "In Progress" status light while attempting connection.
         /// </summary>
         /// <param name="sender">The UI element that triggered the event.</param>
         /// <param name="e">Event data associated with the action.</param>
         /// <remarks>✅ Updated on 8/19/2025</remarks>
-        private async void EpsonRcAsync(object sender, EventArgs e)
+        private async void EpsonMotionAsync(object sender, EventArgs e)
         {
             if (sender is not CheckBox checkBox)
                 return;
@@ -3784,25 +3948,6 @@ namespace Chess_Project
             _inactivityTimer.Stop();
             await EpsonConnectAsync(checkBox);
             _inactivityTimer.Start();
-        }
-
-        private async void CognexVisionAsync(object sender, EventArgs e)
-        {
-            if (sender is not CheckBox checkBox)
-                return;
-
-            DisableCognexElements();
-            if (!GlobalState.WhiteCognexConnected) { SetCognexStatusLight(Chess_Project.ChessColor.White, Brushes.Yellow); }
-            if (!GlobalState.BlackCognexConnected) { SetCognexStatusLight(Chess_Project.ChessColor.Black, Brushes.Yellow); }
-
-            // Begin animated feedback
-            UpdateRectangleClip(65, Visibility.Visible, 75);
-
-            // Toggle CameraComm state and attempt communication
-            _cameraVision = !_cameraVision;
-            await CognexConnectAsync(checkBox);
-
-            CognexVision.IsEnabled = true;
         }
 
         #endregion
@@ -3943,6 +4088,102 @@ namespace Chess_Project
                 clipGeometry.RadiusX = 5;
                 clipGeometry.RadiusY = 5;
             }
+        }
+
+        /// <summary>
+        /// Updates the Stockfish evaluation UI (popup, bar, gauge, labels) to reflect the
+        /// current <see cref="QuantifiedEvaluation"/> and the board's layout/flip state.
+        /// </summary>
+        /// <remarks>
+        /// Computes available width next to the board, hides the popup if the layout is too
+        /// narrow, then sizes/positions the popup, evaluation bar, gauge, and move list.
+        /// The gauge height is animated toward the latest evaluation and its orientation is
+        /// inverted when the board is flipped.
+        /// <para>Assumes this is called on the UI thread.</para>
+        /// <para>✅ Updated on 9/2/2025</para>
+        /// </remarks>
+        /// <returns>A completed task (no asynchronous work within the method).</returns>
+        private Task UpdateEvalBar()
+        {
+            // Layout constants
+            const double ExternalHorizontalMargin = 10;   // left/right margins outside the popup
+            const double ExternalVerticalMargin = 77;   // top/bottom margins outside the popup
+            const double MinimumWidth = 280;  // required room to show the popup
+            const double InternalHorizontalMargin = 15;   // left/right margins inside the popup
+            const double InternalVerticalMargin = 15;   // top/bottom margins inside the popup
+            const double EvalBarCornerRadius = 2;    // eval bar corner radius
+            const double AnimationDuration = 1.5;  // seconds
+
+            WhiteAdvantage.Text = DisplayedAdvantage;
+            BlackAdvantage.Text = DisplayedAdvantage;
+
+            // Width between screen's left edge and board's left edge (minus margins)
+            double availableWidth = (Screen.ActualWidth / 2) - (Board.ActualWidth / 2) - (2 * ExternalHorizontalMargin);
+
+            if (availableWidth < MinimumWidth)
+            {
+                EngineEvaluation.IsOpen = false;
+                return Task.CompletedTask;
+            }
+
+            EngineEvaluation.Width = availableWidth;
+            EngineEvaluation.HorizontalOffset = EngineEvaluation.Width + ExternalHorizontalMargin;  // anchor (top-right) from screen's left
+            EngineEvaluation.VerticalOffset = ExternalVerticalMargin;                               // anchor (top-right) from screen's top
+            EvalBar.Height = Board.ActualHeight - (2 * InternalVerticalMargin);
+            EvalBar.Width = EngineEvaluation.Width / 15;
+            EvalBar.Margin = new Thickness(0, -(StockfishEvaluationText.Height - InternalVerticalMargin), InternalHorizontalMargin, 0);  // Shifts the bar upwards since the stockfish evaluation text forces it lower than desired.
+
+            var clipGeometry = new RectangleGeometry(new(0, 0, EvalBar.Width, EvalBar.Height), EvalBarCornerRadius, EvalBarCornerRadius);
+            EvalBar.Clip = clipGeometry;
+
+            WhiteAdvantage.Width = BlackAdvantage.Width = EvalBar.Width;
+            WhiteAdvantage.Height = BlackAdvantage.Height = EvalBar.Width;
+
+            PlayedMoves.Width = (EngineEvaluation.Width - ((3 * InternalHorizontalMargin) + EvalBar.Width));
+            PlayedMoves.Height = EvalBar.Height - 30;
+            PlayedMoves.Margin = new Thickness(InternalVerticalMargin, -EvalBar.Height + 30, 0, 0);
+
+            // Perspective: which label shows, and which color should the text be
+            bool whiteIsWinning = (_flip == 0) ? (QuantifiedEvaluation <= 10) : (QuantifiedEvaluation > 10);
+
+            if (whiteIsWinning)
+            {
+                WhiteAdvantage.Visibility = Visibility.Visible;
+                BlackAdvantage.Visibility = Visibility.Collapsed;
+                WhiteAdvantage.Foreground = new SolidColorBrush(_flip == 0 ? Colors.Black : (Color)ColorConverter.ConvertFromString("#FFD0D0D0"));
+            }
+            else
+            {
+                WhiteAdvantage.Visibility = Visibility.Collapsed;
+                BlackAdvantage.Visibility = Visibility.Visible;
+                BlackAdvantage.Foreground = new SolidColorBrush(_flip == 0 ? (Color)ColorConverter.ConvertFromString("#FFD0D0D0") : Colors.Black);
+            }
+
+            // Bar/gauge colors flip with board orientation
+            EvalBar.Fill = new SolidColorBrush(_flip == 0 ? (Color)ColorConverter.ConvertFromString("#FFD0D0D0") : Colors.Black);
+            AdvantageGauge.Fill = new SolidColorBrush(_flip == 0 ? Colors.Black : (Color)ColorConverter.ConvertFromString("#FFD0D0D0"));
+            AdvantageGauge.Clip = clipGeometry;
+
+            // Animate gauge height toward the new evaluation (flip evaluation for bar height)
+            double oldHeight = double.IsNaN(AdvantageGauge.Height) ? EvalBar.Height / 2 : AdvantageGauge.Height;
+            double newHeight = (EvalBar.Height / 20) * (_flip == 0 ? QuantifiedEvaluation : (20 - QuantifiedEvaluation));
+
+            var animation = new DoubleAnimation
+            {
+                From = oldHeight,
+                To = newHeight,
+                Duration = new Duration(TimeSpan.FromSeconds(AnimationDuration)),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
+            };
+
+            AdvantageGauge.BeginAnimation(Rectangle.HeightProperty, animation);
+            AdvantageGauge.Width = EvalBar.Width;
+            AdvantageGauge.Margin = new Thickness(0, -EvalBar.Height, InternalVerticalMargin, 0);
+
+            WhiteAdvantage.Margin = new Thickness(0, -EvalBar.Width, InternalVerticalMargin, 0);
+            BlackAdvantage.Margin = new Thickness(0, -EvalBar.Height, InternalVerticalMargin, 0);
+
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -4099,6 +4340,26 @@ namespace Chess_Project
                 Reject.IsEnabled = false;
                 PauseButton.IsHitTestVisible = true;
             }
+        }
+
+        /// <summary>
+        /// Displays the game-over popup window with the provided result text and message/
+        /// </summary>
+        /// <param name="winnerText">Main text shown in the popup, e.g., the game result.</param>
+        /// <param name="msg">Debug log message describing the game-over reason.</param>
+        /// <remarks>
+        /// Initializes a new <see cref="_gameOver"/> window, sets ownership/positioning,
+        /// shows it to the user, and logs the result for diagnostics.
+        /// <para>✅ Written on 9/2/2025</para>
+        /// </remarks>
+        private void ShowGameOverPopup(string winnerText, string msg)
+        {
+            _gameOver = new();
+            _gameOver.WinnerText.Text = winnerText;
+            _gameOver.Owner = this;
+            _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            _gameOver.Show();
+            ChessLog.LogDebug(msg);
         }
 
         #endregion
@@ -4398,6 +4659,221 @@ namespace Chess_Project
         #region Helper Methods
 
         /// <summary>
+        /// Connects or disconnects Cognex cameras based on a UI toggle (a <see cref="CheckBox"/> sender),
+        /// shows animated connection feedback, updates status lights, and persists the preferences.
+        /// </summary>
+        /// <param name="sender">
+        /// The event source. When it is a <see cref="CheckBox"/>, its checked state controls connection.
+        /// If it is not a <see cref="CheckBox"/>, the method only refreshes status lights.
+        /// </param>
+        /// <remarks>
+        /// <list type="bullet">
+        ///     <item><description>Shows the "attempting connection" UI while connecting; hides it when done.</description></item>
+        ///     <item><description>Updates <see cref="_preferences.CognexVision"/> and saves via <see cref="PreferencesManager.Save"/>.</description></item>
+        ///     <item><description>Sets per-camera status lights: green on success, red on failure/off.</description></item>
+        /// </list>
+        /// Assumes it is called on the UI thread for UI updates.
+        /// <para>✅ Updated on 9/2/2025</para>
+        /// </remarks>
+        /// <returns>A task that completes when connection/disconnection work and UI updates finish.</returns>
+        private async Task CognexConnectAsync(object sender)
+        {
+            // If this wasn't triggered by the checkbox, just refresh indicator lights and bail
+            if (sender is not CheckBox checkBox)
+            {
+                if (!GlobalState.WhiteCognexConnected) { SetCognexStatusLight(ChessColor.White, Brushes.Red); }
+                if (!GlobalState.BlackCognexConnected) { SetCognexStatusLight(ChessColor.Black, Brushes.Red); }
+                return;
+            }
+
+            // Flip state
+            _cameraVision = !_cameraVision;
+
+            // If the checkbox is unchecked OR vision is globally off, disconnect and reset
+            if (!_cameraVision)
+            {
+                _preferences.CognexVision = _cameraVision = false;
+                PreferencesManager.Save(_preferences);
+
+                checkBox.IsChecked = false;
+                SetCognexStatusLight(ChessColor.White, Brushes.Red);
+                SetCognexStatusLight(ChessColor.Black, Brushes.Red);
+
+                _whiteCognex.Disconnect();
+                _blackCognex.Disconnect();
+                return;
+            }
+
+            // Checkbox is checked and vision is enabled, attempt to connect
+            UpdateRectangleClip(65, Visibility.Visible, 75);
+            if (!GlobalState.WhiteCognexConnected) { SetCognexStatusLight(ChessColor.White, Brushes.Yellow); }
+            if (!GlobalState.BlackCognexConnected) { SetCognexStatusLight(ChessColor.Black, Brushes.Yellow); }
+
+            bool whiteOk = GlobalState.WhiteCognexConnected;
+            bool blackOk = GlobalState.BlackCognexConnected;
+
+            try
+            {
+                // Kick off both connections if needed (in parallel)
+                var tasks = new List<Task>(2);
+                if (!whiteOk) tasks.Add(_whiteCognex.ConnectAsync());
+                if (!blackOk) tasks.Add(_blackCognex.ConnectAsync());
+                if (tasks.Count > 0) await Task.WhenAll(tasks);
+
+                whiteOk = GlobalState.WhiteCognexConnected;
+                blackOk = GlobalState.BlackCognexConnected;
+
+                if (whiteOk && blackOk)
+                {
+                    _preferences.CognexVision = _cameraVision = true;
+                    PreferencesManager.Save(_preferences);
+
+                    checkBox.IsChecked = true;
+                    SetCognexStatusLight(ChessColor.White, Brushes.Green);
+                    SetCognexStatusLight(ChessColor.Black, Brushes.Green);
+                }
+                else
+                {
+                    _preferences.CognexVision = _cameraVision = false;
+                    PreferencesManager.Save(_preferences);
+
+                    checkBox.IsChecked = false;
+                    if (!whiteOk) SetCognexStatusLight(ChessColor.White, Brushes.Red);
+                    if (!blackOk) SetCognexStatusLight(ChessColor.Black, Brushes.Red);
+                }
+            }
+            catch
+            {
+                // Treat exceptions as a failed connection attempt
+                _preferences.CognexVision = _cameraVision = false;
+                PreferencesManager.Save(_preferences);
+
+                checkBox.IsChecked = false;
+                SetCognexStatusLight(ChessColor.White, Brushes.Red);
+                SetCognexStatusLight(ChessColor.Black, Brushes.Red);
+            }
+            finally
+            {
+                // Close the “attempting connection” UI either way
+                UpdateRectangleClip(rectHeight: 50, visibility: Visibility.Collapsed, clipHeight: 60);
+            }
+        }
+
+        /// <summary>
+        /// Connects or disconnects Epson controllers based on a UI toggle (a <see cref="CheckBox"/> sender),
+        /// shows animated connection feedback, updates status lights, and persists the preferences.
+        /// </summary>
+        /// <param name="sender">
+        /// The event source. When it is a <see cref="CheckBox"/>, its checked state controls connection.
+        /// If it is not a <see cref="CheckBox"/>, the method only refreshes status lights.
+        /// </param>
+        /// <remarks>
+        /// <list type="bullet">
+        ///     <item><description>Shows the "attempting connection" UI while connecting; hides it when done.</description></item>
+        ///     <item><description>Updates <see cref="_preferences.EpsonMotion"/> and saves via <see cref="PreferencesManager.Save"/>.</description></item>
+        ///     <item><description>Sets per-controller status lights: green on success, red on failure/off.</description></item>
+        /// </list>
+        /// Assumes it is called on the UI thread for UI updates.
+        /// <para>✅ Updated on 9/2/2025</para>
+        /// </remarks>
+        /// <returns>A task that completes when connection/disconnection work and UI updates finish.</returns>
+        private async Task EpsonConnectAsync(object sender)
+        {
+            // If this wasn't triggered by the checkbox, just refresh indicator lights and bail
+            if (sender is not CheckBox checkBox)
+            {
+                if (!GlobalState.WhiteEpsonConnected) SetEpsonStatusLight(ChessColor.White, Brushes.Red);
+                if (!GlobalState.BlackEpsonConnected) SetEpsonStatusLight(ChessColor.Black, Brushes.Red);
+                return;
+            }
+
+            // Flip state
+            _epsonMotion = !_epsonMotion;
+
+            // If the checkbox is unchecked OR motion is globally off, disconnect and reset
+            if (!_epsonMotion)
+            {
+                _preferences.EpsonMotion = _epsonMotion = false;
+                PreferencesManager.Save(_preferences);
+
+                checkBox.IsChecked = false;
+                SetEpsonStatusLight(ChessColor.White, Brushes.Red);
+                SetEpsonStatusLight(ChessColor.Black, Brushes.Red);
+
+                // Cleanup process if necessary
+                if (_gameMode != GameMode.Blank)
+                {
+                    ShowCleanupPopup(true);
+                    await ClearBoard();
+                    ShowCleanupPopup(false);
+                }
+
+                _whiteEpson.Disconnect();
+                _blackEpson.Disconnect();
+                return;
+            }
+
+            // Preserve resume/play state
+            StorePlayState();
+
+            // Checkbox is checked and motion is enabled, attempt to connect
+            DisableEpsonElements();
+            UpdateRectangleClip(65, Visibility.Visible, 75);
+            if (!GlobalState.WhiteEpsonConnected) { SetEpsonStatusLight(ChessColor.White, Brushes.Yellow); }
+            if (!GlobalState.BlackEpsonConnected) { SetEpsonStatusLight(ChessColor.Black, Brushes.Yellow); }
+
+            bool whiteOk = GlobalState.WhiteEpsonConnected;
+            bool blackOk = GlobalState.BlackEpsonConnected;
+
+            try
+            {
+                // Kick off both connections if needed (in parallel)
+                var tasks = new List<Task>(2);
+                if (!whiteOk) tasks.Add(_whiteEpson.ConnectAsync());
+                if (!blackOk) tasks.Add(_blackEpson.ConnectAsync());
+                if (tasks.Count > 0) await Task.WhenAll(tasks);
+
+                whiteOk = GlobalState.WhiteEpsonConnected;
+                blackOk = GlobalState.BlackEpsonConnected;
+
+                if (whiteOk && blackOk)
+                {
+                    _preferences.EpsonMotion = _epsonMotion = true;
+                    PreferencesManager.Save(_preferences);
+
+                    checkBox.IsChecked = true;
+                    SetEpsonStatusLight(ChessColor.White, Brushes.Green);
+                    SetEpsonStatusLight(ChessColor.Black, Brushes.Green);
+                }
+                else
+                {
+                    _preferences.EpsonMotion = _epsonMotion = false;
+                    PreferencesManager.Save(_preferences);
+
+                    checkBox.IsChecked = false;
+                    if (!whiteOk) SetEpsonStatusLight(ChessColor.White, Brushes.Red);
+                    if (!blackOk) SetEpsonStatusLight(ChessColor.Black, Brushes.Red);
+                }
+            }
+            catch
+            {
+                // Treat exceptions as a failed connection attempt
+                _preferences.EpsonMotion = _epsonMotion = false;
+                PreferencesManager.Save(_preferences);
+
+                checkBox.IsChecked = false;
+                SetEpsonStatusLight(ChessColor.White, Brushes.Red);
+                SetEpsonStatusLight(ChessColor.Black, Brushes.Red);
+            }
+            finally
+            {
+                // Close the “attempting connection” UI either way
+                EnableEpsonElements();
+                UpdateRectangleClip(rectHeight: 50, visibility: Visibility.Collapsed, clipHeight: 60);
+            }
+        }
+
+        /// <summary>
         /// Updates the coordinates of all pieces on the chessboard.
         /// Also tracks the positions of the white and black kings.
         /// </summary>
@@ -4446,20 +4922,6 @@ namespace Chess_Project
                     comboBox.SelectedItem = item;
                     return;
                 }
-            }
-        }
-
-        /// <summary>
-        /// Programmatically simulates a user click on a button to start or resume the game.
-        /// </summary>
-        /// <param name="button">The <see cref="Button"/> to simulate a click on.</param>
-        /// <remarks>✅ Updated on 6/11/2025</remarks>
-        private static void SimulateStartClick(Button button)
-        {
-            var peer = new ButtonAutomationPeer(button);
-            if (peer.GetPattern(PatternInterface.Invoke) is IInvokeProvider invokeProvider)
-            {
-                invokeProvider.Invoke();
             }
         }
 
@@ -5011,16 +5473,16 @@ namespace Chess_Project
             if (Move == 0)
             {
                 if (!string.IsNullOrEmpty(BlackBits))
-                    await _blackRobot.SendDataAsync(BlackBits);
+                    await _blackEpson.SendDataAsync(BlackBits);
 
-                await _whiteRobot.SendDataAsync(WhiteBits);
+                await _whiteEpson.SendDataAsync(WhiteBits);
             }
             else
             {
                 if (!string.IsNullOrEmpty(WhiteBits))
-                    await _whiteRobot.SendDataAsync(WhiteBits);
+                    await _whiteEpson.SendDataAsync(WhiteBits);
 
-                await _blackRobot.SendDataAsync(BlackBits);
+                await _blackEpson.SendDataAsync(BlackBits);
             }
 
             ShowMoveInProgressPopup(false);
@@ -5047,558 +5509,7 @@ namespace Chess_Project
 
         #endregion
 
-        #region Game Restarting
-
-        
-
-        #endregion
-
-
-        /// <summary>
-        /// Attempts communication and updates Epson RC+ connection setting in the "Preferences" file.
-        /// </summary>
-        /// <param name="checkBox">The sender object triggering the connection attempt.</param>
-        /// <returns>An asynchronous task representing the connection attempt.</returns>
-        private async Task EpsonConnectAsync(object sender)  // ✅
-        {
-            if (sender is not CheckBox checkBox)
-                return;
-
-            DisableEpsonElements();
-            if (!GlobalState.WhiteEpsonConnected) { SetEpsonStatusLight(ChessColor.White, Brushes.Yellow); }
-            if (!GlobalState.BlackEpsonConnected) { SetEpsonStatusLight(ChessColor.Black, Brushes.Yellow); }
-
-            // Preserve resume/play state
-            StorePlayState();
-
-            // Toggle RobotComm state and attempt communication
-            _robotMotion = !_robotMotion;
-
-            if (checkBox.IsChecked.HasValue && _robotMotion)  // If user is trying to connect to Epson robots
-            {
-                // Begin animated feedback
-                UpdateRectangleClip(65, Visibility.Visible, 75);
-
-                // Attempt to connect
-                if (!GlobalState.WhiteEpsonConnected) { await _whiteRobot.ConnectAsync(); }
-                if (!GlobalState.BlackEpsonConnected) { await _blackRobot.ConnectAsync(); }
-
-                if (GlobalState.WhiteEpsonConnected && GlobalState.BlackEpsonConnected)  // Successfully connected to both Epson robots
-                {
-                    _preferences.EpsonMotion = _robotMotion = true;
-                    PreferencesManager.Save(_preferences);
-
-                    checkBox.IsChecked = true;
-                    SetEpsonStatusLight(ChessColor.White, Brushes.Green);
-                    SetEpsonStatusLight(ChessColor.Black, Brushes.Green);
-
-                    UpdateRectangleClip(50, Visibility.Collapsed, 60);
-
-                    if (!BoardSet)
-                    {
-                        ShowSetupPopup(true);
-                        await SetupBoard();
-                        ShowSetupPopup(false);
-                    }
-
-                    // Process any prior moves before proceeding
-                    if (!string.IsNullOrEmpty(PrevWhiteBits))
-                    {
-                        ShowMoveInProgressPopup(true);
-
-                        string[] whiteBitLines = PrevWhiteBits.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
-                        foreach (var line in whiteBitLines)
-                            await _whiteRobot.SendDataAsync(line);
-
-                        if (!string.IsNullOrEmpty(PrevBlackBits))
-                        {
-                            string[] blackBitLines = PrevWhiteBits.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
-                            foreach (var line in blackBitLines)
-                                await _blackRobot.SendDataAsync(line);
-                        }
-
-                        ShowMoveInProgressPopup(false);
-                    }
-                }
-                else
-                {
-                    _preferences.EpsonMotion = _robotMotion = false;
-                    PreferencesManager.Save(_preferences);
-
-                    checkBox.IsChecked = false;
-                    if (!GlobalState.WhiteEpsonConnected) { SetEpsonStatusLight(ChessColor.White, Brushes.Red); }
-                    if (!GlobalState.BlackEpsonConnected) { SetEpsonStatusLight(ChessColor.Black, Brushes.Red); }
-
-                    UpdateRectangleClip(50, Visibility.Collapsed, 60);
-                }
-            }
-            else
-            {
-                _preferences.EpsonMotion = _robotMotion = false;
-                PreferencesManager.Save(_preferences);
-
-                checkBox.IsChecked = false;
-                SetEpsonStatusLight(Chess_Project.ChessColor.White, Brushes.Red);
-                SetEpsonStatusLight(Chess_Project.ChessColor.Black, Brushes.Red);
-
-                if ((int)_gameMode != 0)  // Cleanup process if necessary
-                {
-                    ShowCleanupPopup(true);
-                    await ClearBoard();
-                    ShowCleanupPopup(false);
-                }
-
-                _whiteRobot.Disconnect();
-                _blackRobot.Disconnect();
-            }
-
-
-            // Restore UI
-            EnableEpsonElements();
-
-            EpsonMotion.IsEnabled = true;
-        }
-
-        private async Task CognexConnectAsync(object sender)
-        {
-            // Ensure sender is a CheckBox
-            if (sender is not CheckBox checkBox)
-            {
-                if (!GlobalState.WhiteCognexConnected) { SetCognexStatusLight(Chess_Project.ChessColor.White, Brushes.Red); }
-                if (!GlobalState.BlackCognexConnected) { SetCognexStatusLight(Chess_Project.ChessColor.Black, Brushes.Red); }
-            }
-            else if (checkBox.IsChecked.HasValue && _cameraVision)
-            {
-                // Begin animated feedback
-                UpdateRectangleClip(65, Visibility.Visible, 75);
-
-                // Attempt to connect
-                if (!GlobalState.WhiteCognexConnected) { await _whiteCognex.ConnectAsync(); }
-                if (!GlobalState.BlackCognexConnected) { await _blackCognex.ConnectAsync(); }
-
-                if (GlobalState.WhiteCognexConnected && GlobalState.BlackCognexConnected)  // Successfully connected to both Cognex cameras
-                {
-                    _preferences.CognexVision = _cameraVision = true;
-                    PreferencesManager.Save(_preferences);
-
-                    checkBox.IsChecked = true;
-                    SetCognexStatusLight(Chess_Project.ChessColor.White, Brushes.Green);
-                    SetCognexStatusLight(Chess_Project.ChessColor.Black, Brushes.Green);
-
-                    UpdateRectangleClip(50, Visibility.Collapsed, 60);
-                }
-                else
-                {
-                    _preferences.CognexVision = _cameraVision = false;
-                    PreferencesManager.Save(_preferences);
-
-                    checkBox.IsChecked = false;
-                    if (!GlobalState.WhiteCognexConnected) { SetCognexStatusLight(Chess_Project.ChessColor.White, Brushes.Red); }
-                    if (!GlobalState.BlackCognexConnected) { SetCognexStatusLight(Chess_Project.ChessColor.Black, Brushes.Red); }
-
-                    UpdateRectangleClip(50, Visibility.Collapsed, 60);
-                }
-            }
-            else
-            {
-                _preferences.CognexVision = _cameraVision = false;
-                PreferencesManager.Save(_preferences);
-
-                checkBox.IsChecked = false;
-                SetCognexStatusLight(Chess_Project.ChessColor.White, Brushes.Red);
-                SetCognexStatusLight(Chess_Project.ChessColor.Black, Brushes.Red);
-
-                _whiteCognex.Disconnect();
-                _blackCognex.Disconnect();
-            }
-        }
-
-        
-
-        
-
-        /// <summary>
-        /// Updates the Stockfish evaluation bar and adjusts its UI components.
-        /// Dynamically scales and animates the evaluation bar based on board size, screen width,
-        /// and the current evaluation score.
-        /// </summary>
-        /// <remarks>✅ Updating...</remarks>
-        private void UpdateEvalBar()
-        {
-            // Layout constants
-            const double ExternalHorizontalMargin = 10;  // Left and right margins outside the evaluation interface
-            const double ExternalVerticalMargin = 77;  // Top and bottom margins outside the evaluation interface
-            const double MinimumWidth = 280;  // Minimum pixels required between left and right external margins
-            const double InternalHorizontalMargin = 15;  // Left and right margins inside the evaluation interface
-            const double InternalVerticalMargin = 15;  // Top and bottom margins inside the evaluation interface
-            const double EvalBarCornerRadius = 2;  // Corner radius of evaluation bar
-            const double AnimationDuration = 1.5;
-
-            WhiteAdvantage.Text = DisplayedAdvantage;
-            BlackAdvantage.Text = DisplayedAdvantage;
-
-            // Find the pixel width between the left edge of the screen and the right edge of the board with the buffer applied.
-            double availableWidth = (Screen.ActualWidth / 2) - (Board.ActualWidth / 2) - (2 * ExternalHorizontalMargin);
-
-            if (availableWidth < MinimumWidth)
-            {
-                EngineEvaluation.IsOpen = false;
-                return;
-            }
-
-            EngineEvaluation.Width = availableWidth;
-            EngineEvaluation.HorizontalOffset = EngineEvaluation.Width + ExternalHorizontalMargin;  // Sets the anchor point offset (top right corner) from the left edge of the screen
-            EngineEvaluation.VerticalOffset = ExternalVerticalMargin;  // Sets the anchor point offset (top right corner) from the top of the screen
-            EvalBar.Height = Board.ActualHeight - (2 * InternalVerticalMargin);
-            EvalBar.Width = EngineEvaluation.Width / 15;
-            EvalBar.Margin = new Thickness(0, -(StockfishEvaluationText.Height - InternalVerticalMargin), InternalHorizontalMargin, 0);  // Shifts the bar upwards since the stockfish evaluation text forces it lower than desired.
-
-            RectangleGeometry clipGeometry = new(new(0, 0, EvalBar.Width, EvalBar.Height), EvalBarCornerRadius, EvalBarCornerRadius);
-            EvalBar.Clip = clipGeometry;
-
-            WhiteAdvantage.Width = BlackAdvantage.Width = EvalBar.Width;
-            WhiteAdvantage.Height = BlackAdvantage.Height = EvalBar.Width;
-
-            PlayedMoves.Width = (EngineEvaluation.Width - ((3 * InternalHorizontalMargin) + EvalBar.Width));
-            PlayedMoves.Height = EvalBar.Height - 30;
-            PlayedMoves.Margin = new Thickness(InternalVerticalMargin, -EvalBar.Height + 30, 0, 0);
-
-            // Flip the evaluation perspective if the board is flipped
-            bool whiteIsWinning = (_flip == 0) ? (QuantifiedEvaluation <= 10) : (QuantifiedEvaluation > 10);
-
-            if (whiteIsWinning)
-            {
-                WhiteAdvantage.Visibility = Visibility.Visible;
-                BlackAdvantage.Visibility = Visibility.Collapsed;
-                WhiteAdvantage.Foreground = new SolidColorBrush(_flip == 0 ? Colors.Black : (System.Windows.Media.Color)ColorConverter.ConvertFromString("#FFD0D0D0"));
-            }
-            else
-            {
-                WhiteAdvantage.Visibility = Visibility.Collapsed;
-                BlackAdvantage.Visibility = Visibility.Visible;
-                BlackAdvantage.Foreground = new SolidColorBrush(_flip == 0 ? (System.Windows.Media.Color)ColorConverter.ConvertFromString("#FFD0D0D0") : Colors.Black);
-            }
-
-            // Set bar colors based on the flipped evaluation
-            EvalBar.Fill = new SolidColorBrush(_flip == 0 ? (System.Windows.Media.Color)ColorConverter.ConvertFromString("#FFD0D0D0") : Colors.Black);
-            AdvantageGauge.Fill = new SolidColorBrush(_flip == 0 ? Colors.Black : (System.Windows.Media.Color)ColorConverter.ConvertFromString("#FFD0D0D0"));
-            AdvantageGauge.Clip = clipGeometry;
-
-            // Compute animation height, flipping evaluation for the bar height
-            double oldHeight = double.IsNaN(AdvantageGauge.Height) ? EvalBar.Height / 2 : AdvantageGauge.Height;
-            double newHeight = (EvalBar.Height / 20) * (_flip == 0 ? QuantifiedEvaluation : (20 - QuantifiedEvaluation));
-
-            DoubleAnimation animation = new()
-            {
-                From = oldHeight,
-                To = newHeight,
-                Duration = new Duration(TimeSpan.FromSeconds(AnimationDuration)),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
-            };
-
-            AdvantageGauge.BeginAnimation(Rectangle.HeightProperty, animation);
-            AdvantageGauge.Width = EvalBar.Width;
-            AdvantageGauge.Margin = new Thickness(0, -EvalBar.Height, InternalVerticalMargin, 0);
-
-            WhiteAdvantage.Margin = new Thickness(0, -EvalBar.Width, InternalVerticalMargin, 0);
-            BlackAdvantage.Margin = new Thickness(0, -EvalBar.Height, InternalVerticalMargin, 0);
-        }
-
-        
-
-        
-
-
-
-        /// <summary>
-        /// 
-        /// </summary>
-        public async Task CheckmateVerifierAsync()
-        {
-            using StockfishCall stockfishResponse = new(_stockfishPath!);
-            string stockfishFEN = await Task.Run(() => stockfishResponse.GetStockfishResponse(Fen));
-            string[] lines = [.. stockfishFEN.Split('\n').Skip(2)];
-            string[] infoLines = [.. lines.Where(line => line.TrimStart().StartsWith("info"))];
-            string accurateEvaluationLine = infoLines.LastOrDefault() ?? "Most accurate evaluation line not found";
-            string[] accurateEvaluation = accurateEvaluationLine.Split(' ');
-
-            if (accurateEvaluation[5].StartsWith('0'))   // If game has been won
-            {
-                DisplayedAdvantage = "1-0";
-
-                if (Move == 0)
-                {
-                    QuantifiedEvaluation = 0;
-                }
-                else
-                {
-                    QuantifiedEvaluation = 20;
-                }
-            }
-            else if (accurateEvaluation[8].StartsWith("mate") && accurateEvaluation.Length > 9)   // If there is a mating sequence present
-            {
-                if (accurateEvaluation[9].StartsWith('-'))
-                {
-                    DisplayedAdvantage = $"M{accurateEvaluation[9][1..]}";
-                }
-                else
-                {
-                    DisplayedAdvantage = $"M{accurateEvaluation[9]}";
-                }
-
-                if (Move == 0)   // White just moved
-                {
-                    if (accurateEvaluation[9].StartsWith('-'))
-                    {
-                        QuantifiedEvaluation = 0;
-                    }
-                    else
-                    {
-                        QuantifiedEvaluation = 20;
-                    }
-                }
-                else   // Black just moved
-                {
-                    if (accurateEvaluation[9].StartsWith('-'))
-                    {
-                        QuantifiedEvaluation = 20;
-                    }
-                    else
-                    {
-                        QuantifiedEvaluation = 0;
-                    }
-                }
-            }
-            else
-            {
-                QuantifiedEvaluation = double.Parse(accurateEvaluation[9].ToString()) / 100;
-                DisplayedAdvantage = Math.Abs(QuantifiedEvaluation).ToString("0.0");
-
-                if (Move == 0)   // White just moved
-                {
-                    QuantifiedEvaluation = 10 + QuantifiedEvaluation;
-
-                    if (QuantifiedEvaluation < 1)
-                    {
-                        QuantifiedEvaluation = 1;
-                    }
-                    else if (QuantifiedEvaluation > 19)
-                    {
-                        QuantifiedEvaluation = 19;
-                    }
-                }
-                else   // Black just moved
-                {
-                    QuantifiedEvaluation = 10 - QuantifiedEvaluation;
-
-                    if (QuantifiedEvaluation < 1)
-                    {
-                        QuantifiedEvaluation = 1;
-                    }
-                    else if (QuantifiedEvaluation > 19)
-                    {
-                        QuantifiedEvaluation = 19;
-                    }
-                }
-            }
-
-            string bestMoveLine = lines.FirstOrDefault(line => line.TrimStart().StartsWith("bestmove")) ?? "Bestmove line not found";
-            string[] parts = bestMoveLine.Split(' ');
-
-            if (parts[1].StartsWith("(none)"))   // If there are no best moves then game is over
-            {
-                EndGame = true;
-
-                string outcomeLine = lines[^2];
-                string[] partsOutcome = outcomeLine.Split(' ');
-
-                if (infoLines.Any(line => line.Contains("mate")))  // If Stockfish calculates a checkmate
-                {
-                    if (Move == 0)   // Checkmate for white
-                    {
-                        _gameOver = new();
-                        _gameOver.WinnerText.Text = $"White wins by checkmate in {Fullmove} moves!";
-                        _gameOver.Owner = this;
-                        _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-                        _gameOver.Show();
-                        Debug.WriteLine("White wins by checkmate");
-                    }
-                    else   // Checkmate for black
-                    {
-                        _gameOver = new();
-                        _gameOver.WinnerText.Text = $"Black wins by checkmate in {Fullmove - 1} moves!";
-                        _gameOver.Owner = this;
-                        _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-                        _gameOver.Show();
-                        Debug.WriteLine("Black wins by checkmate");
-                    }
-                }
-                else if (infoLines.Any(line => line.Contains("cp")))   // If Stockfish calculates a stalemate
-                {
-                    DisplayedAdvantage = ".5 - .5";
-                    QuantifiedEvaluation = 10;
-
-                    if (Move == 0)
-                    {
-                        _gameOver = new();
-                        _gameOver.WinnerText.Text = $"Game ends in a stalemate after {Fullmove} moves";
-                        _gameOver.Owner = this;
-                        _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-                        _gameOver.Show();
-                        Debug.WriteLine("Stalemate");
-                    }
-
-                    else
-                    {
-                        _gameOver = new();
-                        _gameOver.WinnerText.Text = $"Game ends in a stalemate after {Fullmove - 1} moves";
-                        _gameOver.Owner = this;
-                        _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-                        _gameOver.Show();
-                        Debug.WriteLine("Stalemate");
-                    }
-                }
-            }
-            else if (Halfmove == 100)   // If fifty-move rule occurs
-            {
-                EndGame = true;
-
-                DisplayedAdvantage = ".5 - .5";
-                QuantifiedEvaluation = 10;
-
-                _gameOver = new();
-                _gameOver.WinnerText.Text = "The game is a draw due to the fifty-move rule,\n" +
-                                           "as there have been no pawn movements\n" +
-                                           "or captures in the last fifty full turns.";
-                _gameOver.Owner = this;
-                _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-                _gameOver.Show();
-                Debug.WriteLine("Draw due to fifty-move rule");
-            }
-            else if (ThreefoldRepetition)   // If threefold repetition occurs
-            {
-                EndGame = true;
-
-                DisplayedAdvantage = ".5 - .5";
-                QuantifiedEvaluation = 10;
-
-                _gameOver = new();
-                _gameOver.WinnerText.Text = "The game is a draw due to threemove repetition,\n" +
-                                           "as the same position was reached three\n" +
-                                           "times with the same color to move each time.";
-                _gameOver.Owner = this;
-                _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-                _gameOver.Show();
-                Debug.WriteLine("Draw due to threefold repetition");
-            }
-            else
-            {
-                bool insufficient = true;
-
-                int whiteBishopCount = 0;
-                int blackBishopCount = 0;
-                int whiteKnightCount = 0;
-                int blackKnightCount = 0;
-
-                int whiteLightSquareBishopCount = 0;
-                int whiteDarkSquareBishopCount = 0;
-                int blackLightSquareBishopCount = 0;
-                int blackDarkSquareBishopCount = 0;
-
-                foreach (Image image in Chess_Board.Children.OfType<Image>())
-                {
-                    if (image.Name.Contains("Pawn") || image.Name.Contains("Rook") || image.Name.Contains("Queen"))
-                    {
-                        insufficient = false;
-
-                        break;   // Sufficient mating material is present on the board
-                    }
-
-                    if (image.Name.StartsWith("WhiteBishop"))
-                    {
-                        whiteBishopCount++;
-
-                        if (((Grid.GetRow(image) + 1) + (Grid.GetColumn(image) + 1)) % 2 == 1)
-                        {
-                            whiteLightSquareBishopCount++;
-                        }
-
-                        else
-                        {
-                            whiteDarkSquareBishopCount++;
-                        }
-                    }
-
-                    if (image.Name.StartsWith("BlackBishop"))
-                    {
-                        blackBishopCount++;
-
-                        if (((Grid.GetRow(image) + 1) + (Grid.GetColumn(image) + 1)) % 2 == 1)
-                        {
-                            blackLightSquareBishopCount++;
-                        }
-
-                        else
-                        {
-                            blackDarkSquareBishopCount++;
-                        }
-                    }
-
-                    if (image.Name.StartsWith("WhiteKnight"))
-                    {
-                        whiteKnightCount++;
-                    }
-
-                    if (image.Name.StartsWith("BlackKnight"))
-                    {
-                        blackKnightCount++;
-                    }
-                }
-
-                if (insufficient)   // If no pawns, rooks, or queens are on the board
-                {
-                    if (whiteKnightCount >= 2 || blackKnightCount >= 2 || whiteBishopCount >= 2 || blackBishopCount >= 2)
-                    {
-                        insufficient = false;
-
-                        return;   // Sufficient mating material is present on the board
-                    }
-
-                    else if (whiteKnightCount == 1 && blackKnightCount == 1)
-                    {
-                        insufficient = false;
-
-                        return;   // Sufficient mating material is present on the board
-                    }
-
-                    else if ((whiteLightSquareBishopCount >= 1 && blackDarkSquareBishopCount >= 1) || (whiteDarkSquareBishopCount >= 1 && blackLightSquareBishopCount >= 1))
-                    {
-                        insufficient = false;
-
-                        return;   // Sufficient mating material is present on the board
-                    }
-                }
-
-                if (insufficient)   // If there is insufficient checkmating material
-                {
-                    EndGame = true;
-
-                    DisplayedAdvantage = ".5 - .5";
-                    QuantifiedEvaluation = 10;
-
-                    _gameOver = new();
-                    _gameOver.WinnerText.Text = "The game is a draw due to insufficient material,\n" +
-                                                "as neither side has enough remaining pieces\n" +
-                                                "on the board to force a checkmate.";
-                    _gameOver.Owner = this;
-                    _gameOver.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-                    _gameOver.Show();
-                    Debug.WriteLine("Draw due to insufficient material");
-                    return;
-                }
-            }
-        }
-
+        #region Game Restart / Cleanup
 
         // Sets up pieces for game
         public async Task SetupBoard()
@@ -5766,25 +5677,25 @@ namespace Chess_Project
                                     {
                                         BlackBits += $", {PickBit1}, {PlaceBit1}";
                                     }
-                                }                      
+                                }
                             }
                         }
                     }
                 }
             }
 
-            await _whiteRobot.HighSpeedAsync();
-            await _blackRobot.HighSpeedAsync();
+            await _whiteEpson.HighSpeedAsync();
+            await _blackEpson.HighSpeedAsync();
 
             // Kick both off concurrently
-            var whiteTask = _whiteRobot.SendDataAsync(WhiteBits);
-            var blackTask = _blackRobot.SendDataAsync(BlackBits);
+            var whiteTask = _whiteEpson.SendDataAsync(WhiteBits);
+            var blackTask = _blackEpson.SendDataAsync(BlackBits);
 
             // Wait until BOTH complete (or throw)
             await Task.WhenAll(whiteTask, blackTask);
 
-            await _whiteRobot.LowSpeedAsync();
-            await _blackRobot.LowSpeedAsync();
+            await _whiteEpson.LowSpeedAsync();
+            await _blackEpson.LowSpeedAsync();
 
             // Safe to clear/continue only after both finished
             WhiteBits = "";
@@ -5793,8 +5704,6 @@ namespace Chess_Project
             EnableImagesWithTag("WhitePiece", true);
             EnableImagesWithTag("BlackPiece", true);
         }
-
-
 
         // Resets Epson chess board
         public async Task ClearBoard()
@@ -5887,23 +5796,23 @@ namespace Chess_Project
                                 {
                                     BlackBits += $", {PickBit1}, {PlaceBit1}";
                                 }
-                            }                                          
+                            }
                         }
                     }
                 }
             }
 
-            await _whiteRobot.HighSpeedAsync();
-            await _blackRobot.HighSpeedAsync();
+            await _whiteEpson.HighSpeedAsync();
+            await _blackEpson.HighSpeedAsync();
 
-            await _whiteRobot.SendDataAsync(WhiteBits);
-            await _blackRobot.SendDataAsync(BlackBits);
+            await _whiteEpson.SendDataAsync(WhiteBits);
+            await _blackEpson.SendDataAsync(BlackBits);
 
             WhiteBits = "";
             BlackBits = "";
         }
 
-        private async void QuitGame(object sender, EventArgs e)
+        private async void Quit_ClickAsync(object sender, EventArgs e)
         {
             // Ensure the game doesn't auto-resume after inactivity timeout
             _inactivityTimer.Stop();
@@ -5912,7 +5821,7 @@ namespace Chess_Project
             QuitButton.Visibility = Visibility.Collapsed;
             QuitButton.IsEnabled = false;
 
-            if (_robotMotion)
+            if (_epsonMotion)
             {
                 ShowCleanupPopup(true);
                 await ClearBoard();
@@ -6045,6 +5954,39 @@ namespace Chess_Project
             while (Moves.RowDefinitions.Count > MovesHeaderRows)
                 Moves.RowDefinitions.RemoveAt(Moves.RowDefinitions.Count - 1);
         }
+
+        #endregion
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     }
 }
 // The #1 Boyfriend EVER made this... I am so proud of him and he is one of the smartest people I know! I love him more than I can say. <3
