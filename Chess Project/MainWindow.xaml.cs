@@ -38,6 +38,7 @@ namespace Chess_Project
         private bool _recoveryNeeded = false;
         private readonly RecoveryHandler _recoveryHandler;
         private readonly SemaphoreSlim _recoveryGate = new(1, 1);
+        private const int MovesHeaderRows = 1;
 
         #region Epson Configuration (local)
 
@@ -276,7 +277,6 @@ namespace Chess_Project
         private int _newRow;
         private int _newCol;
 
-        private string _clickedButtonName;
         private string _pawnName;
         private char? _startFile;
         private string? _startRank;
@@ -286,6 +286,7 @@ namespace Chess_Project
         private string? _endPosition;
         private string? _executedMove;
         private string? _pgnMove;
+        private readonly string _clickedButtonName;
 
         private int _whiteKingRow;
         private int _whiteKingCol;
@@ -979,7 +980,7 @@ namespace Chess_Project
         /// <see cref="StartGameAsync"/>.
         /// <para>✅ Updated on 8/31/2025</para>
         /// </remarks>
-        public async void Play_ClickAsync(object sender, EventArgs e)
+        private async void Play_ClickAsync(object sender, EventArgs e)
         {
             // Event handler stays tiny: kick off and log problems, don't do the work here
             try
@@ -989,168 +990,6 @@ namespace Chess_Project
             catch (Exception ex)
             {
                 ChessLog.LogError("Failed to play game.", ex);
-            }
-        }
-
-        /// <summary>
-        /// Starts a new chess game: applies initial UI state, initializes FEN/PGN logs,
-        /// performs optional robot setup, derives the selected <see cref="_gameMode"/>,
-        /// and launches the main game loop in the background.
-        /// </summary>
-        /// <remarks>
-        /// <list type="bullet">
-        ///     
-        ///     <item>Stops the inactivity timer and plays the “GameStart” sound.</item>
-        ///     <item>Hides the setup panels, disables setup controls, and enables the pause UI when ready.</item>
-        ///     <item>Clears annotations, enables pieces, and initializes FEN/PGN (FEN file is truncated).</item>
-        ///     <item>If robot motion is enabled and the board isn’t set, displays a setup popup and awaits <see cref="SetupBoard"/>.</item>
-        ///     <item>Determines user/computer turn rules based on the selected mode and color, including an initial board flip if needed.</item>
-        ///     <item>Creates a fresh cancellation token for the game loop and starts <see cref="RunGameLoopAsync"/> fire-and-forget.</item>
-        /// </list>
-        /// Any unexpected errors are logged and rethrown after cleanup.
-        /// <para>✅ Written on 8/31/2025</para>
-        /// </remarks>
-        /// <exception cref="Exception">Unexpected failures during startup or loop launch.</exception>
-        private async Task StartGameAsync()
-        {
-            // Re-entrancy guard
-            if (_isStarting) return;
-            _isStarting = true;
-
-            try
-            {
-                _inactivityTimer.Stop();
-                PlaySound("GameStart");
-
-                // Read selections safely
-                _selectedPlayType = (ComboBoxItem)Play_Type.SelectedItem;
-                _selectedColor = (ComboBoxItem)Color.SelectedItem;
-                string? playType = _selectedPlayType?.Content?.ToString();
-                string? playerColor = _selectedColor?.Content?.ToString();
-
-                if (string.IsNullOrWhiteSpace(playType))
-                {
-                    ChessLog.LogWarning("No game mode selected.");
-                    return;
-                }
-
-                // UI: initial state
-                Game_Start.Visibility = Visibility.Collapsed;
-                Game_Start.IsEnabled = false;
-                CvC.Visibility = Visibility.Collapsed;
-                CvC.IsEnabled = false;
-                UvCorUvU.Visibility = Visibility.Collapsed;
-                UvCorUvU.IsEnabled = false;
-                PlayButton.Visibility = Visibility.Collapsed;
-                PlayButton.IsEnabled = false;
-                PauseButton.IsEnabled = false;  // enable after setup
-                ResumeButton.Visibility = Visibility.Visible;
-                EpsonMotion.IsEnabled = false;
-
-                EnableAllPieces();
-                EraseAnnotations();
-
-                // Initialize FEN/PGN (async where possible)
-                CreateFenCode();
-                await File.WriteAllTextAsync(_fenFilePath, string.Empty, CancellationToken.None);
-                WritePGNFile();
-
-                // Decide move
-                _gameMode =
-                    playType == "Com Vs. Com" ? GameMode.ComVsCom :
-                    playType == "User Vs. Com" ? GameMode.UserVsCom :
-                                                 GameMode.UserVsUser;
-
-                if (_recoveryHandler.RecoveryNeeded && _recoveryHandler.RecoveryPieces != null)
-                    await ExecuteRecoveryAsync();
-
-                // Robot-controlled setup
-                if (_epsonMotion && !BoardSet)
-                {
-                    ShowSetupPopup(true);
-                    try
-                    {
-                        await SetupBoard();
-                    }
-                    finally
-                    {
-                        ShowSetupPopup(false);
-                    }
-                }
-
-                // Let the UI render the above changes before heavier work
-                await Task.Yield();
-
-                // Mode-specific state
-                switch (_gameMode)
-                {
-                    case GameMode.ComVsCom:
-                        {
-                            UserTurn = false;
-                            Chess_Board.IsHitTestVisible = false;
-                            break;
-                        }
-
-                    case GameMode.UserVsCom:
-                        {
-                            // Flip once if needed
-                            if (!string.IsNullOrEmpty(playerColor) &&
-                                ((_flip == 0 && playerColor == "Black") ||
-                                 (_flip == 1 && playerColor == "White")))
-                            {
-                                FlipBoard();
-                                UpdateEvalBar();
-                            }
-
-                            if (playerColor == "Black")
-                            {
-                                UserTurn = false;
-                                Chess_Board.IsHitTestVisible = false;
-                            }
-                            else
-                            {
-                                UserTurn = true;
-                                Chess_Board.IsHitTestVisible = true;
-                                EnableImagesWithTag("WhitePiece", true);
-                                EnableImagesWithTag("BlackPiece", false);
-                            }
-                            break;
-                        }
-
-                    case GameMode.UserVsUser:
-                    default:
-                        {
-                            UserTurn = true;
-                            Chess_Board.IsHitTestVisible = true;
-                            EnableImagesWithTag("WhitePiece", true);
-                            EnableImagesWithTag("BlackPiece", false);
-                            break;
-                        }
-                }
-
-                PauseButton.IsEnabled = true;
-
-                _loopCts?.Cancel();
-                _loopCts = new CancellationTokenSource();
-
-                // Create a fresh “loop stopped” signal
-                _loopStoppedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-                // Fire and forget; the loop itself will signal when it fully exits
-                _ = RunGameLoopAsync(_loopCts.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                // normal on cancel; optional log
-            }
-            catch (Exception ex)
-            {
-                ChessLog.LogError("Operation crashed.", ex);
-                throw;
-            }
-            finally
-            {
-                _isStarting = false;
             }
         }
 
@@ -1248,6 +1087,168 @@ namespace Chess_Project
             catch (Exception ex)
             {
                 ChessLog.LogError("Failed to resume game.", ex);
+            }
+        }
+
+        /// <summary>
+        /// Starts a new chess game: applies initial UI state, initializes FEN/PGN logs,
+        /// performs optional robot setup, derives the selected <see cref="_gameMode"/>,
+        /// and launches the main game loop in the background.
+        /// </summary>
+        /// <remarks>
+        /// <list type="bullet">
+        ///     
+        ///     <item>Stops the inactivity timer and plays the “GameStart” sound.</item>
+        ///     <item>Hides the setup panels, disables setup controls, and enables the pause UI when ready.</item>
+        ///     <item>Clears annotations, enables pieces, and initializes FEN/PGN (FEN file is truncated).</item>
+        ///     <item>If robot motion is enabled and the board isn’t set, displays a setup popup and awaits <see cref="SetupBoardAsync"/>.</item>
+        ///     <item>Determines user/computer turn rules based on the selected mode and color, including an initial board flip if needed.</item>
+        ///     <item>Creates a fresh cancellation token for the game loop and starts <see cref="RunGameLoopAsync"/> fire-and-forget.</item>
+        /// </list>
+        /// Any unexpected errors are logged and rethrown after cleanup.
+        /// <para>✅ Updated on 9/3/2025</para>
+        /// </remarks>
+        /// <exception cref="Exception">Unexpected failures during startup or loop launch.</exception>
+        private async Task StartGameAsync()
+        {
+            // Re-entrancy guard
+            if (_isStarting) return;
+            _isStarting = true;
+
+            try
+            {
+                _inactivityTimer.Stop();
+                PlaySound("GameStart");
+
+                // Read selections safely
+                _selectedPlayType = (ComboBoxItem)Play_Type.SelectedItem;
+                _selectedColor = (ComboBoxItem)Color.SelectedItem;
+                string? playType = _selectedPlayType?.Content?.ToString();
+                string? playerColor = _selectedColor?.Content?.ToString();
+
+                if (string.IsNullOrWhiteSpace(playType))
+                {
+                    ChessLog.LogWarning("No game mode selected.");
+                    return;
+                }
+
+                // UI: initial state
+                Game_Start.Visibility = Visibility.Collapsed;
+                Game_Start.IsEnabled = false;
+                CvC.Visibility = Visibility.Collapsed;
+                CvC.IsEnabled = false;
+                UvCorUvU.Visibility = Visibility.Collapsed;
+                UvCorUvU.IsEnabled = false;
+                PlayButton.Visibility = Visibility.Collapsed;
+                PlayButton.IsEnabled = false;
+                PauseButton.IsEnabled = false;  // enable after setup
+                ResumeButton.Visibility = Visibility.Visible;
+                EpsonMotion.IsEnabled = false;
+
+                EnableAllPieces();
+                EraseAnnotations();
+
+                // Initialize FEN/PGN (async where possible)
+                CreateFenCode();
+                await File.WriteAllTextAsync(_fenFilePath, string.Empty, CancellationToken.None);
+                WritePGNFile();
+
+                // Decide move
+                _gameMode =
+                    playType == "Com Vs. Com" ? GameMode.ComVsCom :
+                    playType == "User Vs. Com" ? GameMode.UserVsCom :
+                                                 GameMode.UserVsUser;
+
+                if (_recoveryHandler.RecoveryNeeded && _recoveryHandler.RecoveryPieces != null)
+                    await ExecuteRecoveryAsync();
+
+                // Robot-controlled setup
+                if (_epsonMotion && !BoardSet)
+                {
+                    ShowSetupPopup(true);
+                    try
+                    {
+                        await SetupBoardAsync();
+                    }
+                    finally
+                    {
+                        ShowSetupPopup(false);
+                    }
+                }
+
+                // Let the UI render the above changes before heavier work
+                await Task.Yield();
+
+                // Mode-specific state
+                switch (_gameMode)
+                {
+                    case GameMode.ComVsCom:
+                        {
+                            UserTurn = false;
+                            Chess_Board.IsHitTestVisible = false;
+                            break;
+                        }
+
+                    case GameMode.UserVsCom:
+                        {
+                            // Flip once if needed
+                            if (!string.IsNullOrEmpty(playerColor) &&
+                                ((_flip == 0 && playerColor == "Black") ||
+                                 (_flip == 1 && playerColor == "White")))
+                            {
+                                FlipBoard();
+                                UpdateEvalBar();
+                            }
+
+                            if (playerColor == "Black")
+                            {
+                                UserTurn = false;
+                                Chess_Board.IsHitTestVisible = false;
+                            }
+                            else
+                            {
+                                UserTurn = true;
+                                Chess_Board.IsHitTestVisible = true;
+                                EnableImagesWithTag("WhitePiece", true);
+                                EnableImagesWithTag("BlackPiece", false);
+                            }
+                            break;
+                        }
+
+                    case GameMode.UserVsUser:
+                    default:
+                        {
+                            UserTurn = true;
+                            Chess_Board.IsHitTestVisible = true;
+                            EnableImagesWithTag("WhitePiece", true);
+                            EnableImagesWithTag("BlackPiece", false);
+                            break;
+                        }
+                }
+
+                PauseButton.IsEnabled = true;
+
+                _loopCts?.Cancel();
+                _loopCts = new CancellationTokenSource();
+
+                // Create a fresh “loop stopped” signal
+                _loopStoppedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+                // Fire and forget; the loop itself will signal when it fully exits
+                _ = RunGameLoopAsync(_loopCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                // normal on cancel; optional log
+            }
+            catch (Exception ex)
+            {
+                ChessLog.LogError("Operation crashed.", ex);
+                throw;
+            }
+            finally
+            {
+                _isStarting = false;
             }
         }
 
@@ -1398,11 +1399,11 @@ namespace Chess_Project
         /// </param>
         /// <remarks>
         /// For computer turns, calls <see cref="ComputerMoveAsync"/> to select a move, then animates via
-        /// <see cref="MovePieceAsync"/> (and <see cref="MoveCastleRookAsync"/> when castling). For user
+        /// <see cref="MovePiece"/> (and <see cref="MoveCastleRookAsync"/> when castling). For user
         /// turns, the loop waits on <see cref="_userMoveTcs.Task"/>, which is completed by the UI input path;
         /// if move confirmation if disabled, the move animation runs here as well.
         /// <para>
-        /// After each move, the loop updates callouts, finalizes board state (<see cref="FinalizeMoveAsync"/>),
+        /// After each move, the loop updates callouts, finalizes board state (<see cref="FinalizeMove"/>),
         /// writes logs (<see cref="DocumentMoveAsync"/>), checks for mate (<see cref="CheckmateVerifierAsync"/>),
         /// refreshes evaluation/UI, and, when enabled, sends robot bit patterns via <see cref="SendRobotBitsAsync"/>
         /// while appending to bit history.
@@ -1414,7 +1415,7 @@ namespace Chess_Project
         ///     <item><description><c><see cref="IsPaused"/> == <see langword="true"/></c> → signals <see cref="_loopStoppedTcs"/> so the Pause handler can continue.</description></item>
         /// </list>
         /// </para>
-        /// <para>✅ Updating...</para>
+        /// <para>✅ Updated on 9/3/2025</para>
         /// </remarks>
         /// <returns></returns>
         private async Task RunGameLoopAsync(CancellationToken ct)
@@ -1448,7 +1449,7 @@ namespace Chess_Project
                                 // Animate computer move
                                 Grid.SetRow(_selectedPiece, _oldRow);
                                 Grid.SetColumn(_selectedPiece, _oldCol);
-                                await MovePieceAsync(_selectedPiece, _newRow, _newCol, _oldRow, _oldCol);
+                                await MovePiece(_selectedPiece, _newRow, _newCol, _oldRow, _oldCol);
                                 break;
                             }
 
@@ -1474,7 +1475,7 @@ namespace Chess_Project
                                     // Animate computer move
                                     Grid.SetRow(_selectedPiece, _oldRow);
                                     Grid.SetColumn(_selectedPiece, _oldCol);
-                                    await MovePieceAsync(_selectedPiece, _newRow, _newCol, _oldRow, _oldCol);
+                                    await MovePiece(_selectedPiece, _newRow, _newCol, _oldRow, _oldCol);
                                 }
                                 else
                                 {
@@ -1490,7 +1491,7 @@ namespace Chess_Project
                                         // Animate computer move
                                         Grid.SetRow(_selectedPiece, _oldRow);
                                         Grid.SetColumn(_selectedPiece, _oldCol);
-                                        await MovePieceAsync(_selectedPiece, _newRow, _newCol, _oldRow, _oldCol);
+                                        await MovePiece(_selectedPiece, _newRow, _newCol, _oldRow, _oldCol);
                                     }
                                 }
 
@@ -1512,13 +1513,13 @@ namespace Chess_Project
                                     // Animate computer move
                                     Grid.SetRow(_selectedPiece, _oldRow);
                                     Grid.SetColumn(_selectedPiece, _oldCol);
-                                    await MovePieceAsync(_selectedPiece, _newRow, _newCol, _oldRow, _oldCol);
+                                    await MovePiece(_selectedPiece, _newRow, _newCol, _oldRow, _oldCol);
                                 }
                                 break;
                             }
                     }
 
-                    await FinalizeMoveAsync();
+                    await FinalizeMove();
                     await DocumentMoveAsync();
                     await CheckmateVerifierAsync();
                     UpdateEvalBar();
@@ -1579,7 +1580,7 @@ namespace Chess_Project
                     if (_epsonMotion)
                     {
                         ShowCleanupPopup(true);
-                        await ClearBoard();
+                        await ClearBoardAsync();
                         ShowCleanupPopup(false);
                     }
 
@@ -1868,7 +1869,7 @@ namespace Chess_Project
         /// <see langword="true"/> if the move is finalized successfully; <see langword="false"/> if the move was undone
         /// (e.g. user rejected the configuration).
         /// </returns>
-        public async Task<bool> PawnMoveManagerAsync(Image activePawn)
+        private async Task<bool> PawnMoveManagerAsync(Image activePawn)
         {
             // Snapshot board state & castling rights for potential undo.
             await PiecePositions();
@@ -1921,7 +1922,7 @@ namespace Chess_Project
                 // Animate from old to new (board already updated by caller)
                 Grid.SetRow(activePawn, _oldRow);
                 Grid.SetColumn(activePawn, _oldCol);
-                await MovePieceAsync(activePawn, _newRow, _newCol, _oldRow, _oldCol);
+                await MovePiece(activePawn, _newRow, _newCol, _oldRow, _oldCol);
 
                 bool confirmed = await WaitForConfirmationAsync();
                 EraseAnnotations();
@@ -1956,7 +1957,7 @@ namespace Chess_Project
         /// <see langword="true"/> if the move is finalized successfully; <see langword="false"/> if the move was undone
         /// (e.g. user rejected the configuration).
         /// </returns>
-        public async Task<bool> MoveManagerAsync(Image activePiece)
+        private async Task<bool> MoveManagerAsync(Image activePiece)
         {
             // Snapshot board state & castling rights for potential undo.
             await PiecePositions();
@@ -1988,7 +1989,7 @@ namespace Chess_Project
                 // Animate from old to new (board already updated by caller)
                 Grid.SetRow(activePiece, _oldRow);
                 Grid.SetColumn(activePiece, _oldCol);
-                await MovePieceAsync(activePiece, _newRow, _newCol, _oldRow, _oldCol);
+                await MovePiece(activePiece, _newRow, _newCol, _oldRow, _oldCol);
 
                 bool confirmed = await WaitForConfirmationAsync();
                 EraseAnnotations();
@@ -2018,7 +2019,7 @@ namespace Chess_Project
         /// </list>
         /// <para>✅ Updated on 9/1/2025</para>
         /// </remarks>
-        public async void KingMoveManagerAsync(Image activePiece)
+        private async void KingMoveManagerAsync(Image activePiece)
         {
             // Not a castling move unless the king shifts exactly two files
             if (Math.Abs(_oldCol - _newCol) != 2)
@@ -2051,7 +2052,7 @@ namespace Chess_Project
             {
                 Grid.SetRow(rook, _newRow);
                 Grid.SetColumn(rook, rookEndColumn);
-                await MovePieceAsync(rook, _newRow, rookEndColumn, _oldRow, isKingside ? 7 : 0);
+                await MovePiece(rook, _newRow, rookEndColumn, _oldRow, isKingside ? 7 : 0);
             }
         }
 
@@ -2209,7 +2210,7 @@ namespace Chess_Project
         /// <para>✅ Updated on 9/1/2025</para>
         /// </remarks>
         /// <returns></returns>
-        public Task PawnPromote(Image activePawn, int move)
+        private Task PawnPromote(Image activePawn, int move)
         {
             // Build theme-dependent image paths once
             string[] promotionPieces = ["Rook", "Knight", "Bishop", "Queen"];
@@ -2469,7 +2470,7 @@ namespace Chess_Project
         /// and clears the en passant square unless one was created this move.
         /// </summary>
         /// <remarks>✅ Updated on 9/1/2025</remarks>
-        private Task FinalizeMoveAsync()
+        private Task FinalizeMove()
         {
             // Switch side to move
             Move = 1 - Move;
@@ -3222,12 +3223,12 @@ namespace Chess_Project
         /// <param name="oldRow">The origin row.</param>
         /// <param name="oldColumn">The origin column.</param>
         /// <remarks>✅ Updated on 8/31/2025</remarks>
-        private Task MovePieceAsync(Image piece, int newRow, int newColumn, int oldRow, int oldColumn)
+        private Task MovePiece(Image piece, int newRow, int newColumn, int oldRow, int oldColumn)
         {
             // Ensure we're on the UI thread
             if (!Application.Current.Dispatcher.CheckAccess())
                 return Application.Current.Dispatcher.InvokeAsync(
-                    () => MovePieceAsync(piece, newRow, newColumn, oldRow, oldColumn)
+                    () => MovePiece(piece, newRow, newColumn, oldRow, oldColumn)
                 ).Task;
 
             // 1) Set LOGICAL state first so FEN can read the new board immediately after await.
@@ -3309,7 +3310,7 @@ namespace Chess_Project
 
             Grid.SetRow(rook, _oldRow);
             Grid.SetColumn(rook, rookStartCol);
-            await MovePieceAsync(rook, _newRow, rookTargetCol, _oldRow, rookStartCol);
+            await MovePiece(rook, _newRow, rookTargetCol, _oldRow, rookStartCol);
         }
 
         #endregion
@@ -3553,7 +3554,7 @@ namespace Chess_Project
                 Play_Type.SelectedIndex = (int)GameMode.ComVsCom;
 
                 // Reset UI state
-                ToggleUIState(false);
+                ToggleUiState(false);
                 PlayButton.IsEnabled = true;
                 ResumeButton.IsEnabled = false;
                 Elo.SelectedItem = null;
@@ -4089,7 +4090,7 @@ namespace Chess_Project
             EpsonMotion.IsEnabled = false;
             Play_Type.IsEnabled = false;
 
-            TogglePlayTypeUI(false);
+            TogglePlayTypeUi(false);
         }
 
         /// <summary>
@@ -4112,7 +4113,7 @@ namespace Chess_Project
             EpsonMotion.IsEnabled = true;
 
             RestorePlayState();
-            TogglePlayTypeUI(true);
+            TogglePlayTypeUi(true);
         }
 
         /// <summary>
@@ -4275,7 +4276,7 @@ namespace Chess_Project
         /// </summary>
         /// <param name="isEnabled">True to enable, false to disable.</param>
         /// <remarks>✅ Updated on 7/18/2025</remarks>
-        private void TogglePlayTypeUI(bool isEnabled)
+        private void TogglePlayTypeUi(bool isEnabled)
         {
             if (Play_Type.SelectedIndex == -1)
             {
@@ -4303,7 +4304,7 @@ namespace Chess_Project
         /// <c>false</c> if the game is running in CPU vs CPU mode.
         /// </param>
         /// <remarks>✅ Updated on 6/11/2025</remarks>
-        private void ToggleUIState(bool userPlaying)
+        private void ToggleUiState(bool userPlaying)
         {
             // Show or hide the appropriate game mode controls
             UvCorUvU.Visibility = userPlaying ? Visibility.Visible : Visibility.Collapsed;
@@ -4432,11 +4433,11 @@ namespace Chess_Project
             switch (modifiers)
             {
                 case ModifierKeys.Control:
-                    CTRLAnnotate(annotationRow, annotationCol);
+                    CtrlAnnotate(annotationRow, annotationCol);
                     break;
 
                 case ModifierKeys.Alt:
-                    ALTAnnotate(annotationRow, annotationCol);
+                    AltAnnotate(annotationRow, annotationCol);
                     break;
 
                 case ModifierKeys.Shift:
@@ -4467,11 +4468,11 @@ namespace Chess_Project
             switch (modifiers)
             {
                 case ModifierKeys.Control:
-                    CTRLAnnotate(annotationRow, annotationCol);
+                    CtrlAnnotate(annotationRow, annotationCol);
                     break;
 
                 case ModifierKeys.Alt:
-                    ALTAnnotate(annotationRow, annotationCol);
+                    AltAnnotate(annotationRow, annotationCol);
                     break;
 
                 case ModifierKeys.Shift:
@@ -4491,7 +4492,7 @@ namespace Chess_Project
         /// <param name="row">The row index of the square (0-7).</param>
         /// <param name="col">The column index of the square (0-7).</param>
         /// <remarks>✅ Updated on 7/18/2025</remarks>
-        private void CTRLAnnotate(int row, int col)
+        private void CtrlAnnotate(int row, int col)
         {
             char annotateCol = (char)(col + 1 + 96);  // Convert to 'a'-'h'
             string annotateRow = (8 - row).ToString();  // Convert to '1'-'8'
@@ -4527,7 +4528,7 @@ namespace Chess_Project
         /// <param name="row">The row index of the square (0-7).</param>
         /// <param name="col">The column index of the square (0-7).</param>
         /// <remarks>✅ Updated on 7/18/2025</remarks>
-        private void ALTAnnotate(int row, int col)
+        private void AltAnnotate(int row, int col)
         {
             char annotateCol = (char)(col + 1 + 96);  // Convert to 'a'-'h'
             string annotateRow = (8 - row).ToString();  // Convert to '1'-'8'
@@ -4707,6 +4708,38 @@ namespace Chess_Project
         #region Helper Methods
 
         /// <summary>
+        /// Updates the coordinates of all pieces on the chessboard.
+        /// Also tracks the positions of the white and black kings.
+        /// </summary>
+        /// <remarks>✅ Updated on 7/23/2025</remarks>
+        public Task PiecePositions()
+        {
+            ImageCoordinates.Clear();
+
+            foreach (var image in Chess_Board.Children.OfType<Image>())
+            {
+                int row = Grid.GetRow(image);
+                int column = Grid.GetColumn(image);
+
+                ImageCoordinates.Add(Tuple.Create(row, column));
+
+                // Directly update king positions
+                if (image.Name.StartsWith("WhiteKing"))
+                {
+                    _whiteKingRow = row;
+                    _whiteKingCol = column;
+                }
+                else if (image.Name.StartsWith("BlackKing"))
+                {
+                    _blackKingRow = row;
+                    _blackKingCol = column;
+                }
+            }
+
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
         /// Connects or disconnects Cognex cameras based on a UI toggle (a <see cref="CheckBox"/> sender),
         /// shows animated connection feedback, updates status lights, and persists the preferences.
         /// </summary>
@@ -4852,7 +4885,7 @@ namespace Chess_Project
                 if (_gameMode != GameMode.Blank)
                 {
                     ShowCleanupPopup(true);
-                    await ClearBoard();
+                    await ClearBoardAsync();
                     ShowCleanupPopup(false);
                 }
 
@@ -4922,33 +4955,27 @@ namespace Chess_Project
         }
 
         /// <summary>
-        /// Updates the coordinates of all pieces on the chessboard.
-        /// Also tracks the positions of the white and black kings.
+        /// Randomly selects Elo ratings for both White and Black CPU players,
+        /// temporarily unsubscribing event handlers to prevent unnecessary triggers.
         /// </summary>
-        /// <remarks>✅ Updated on 7/23/2025</remarks>
-        public Task PiecePositions()
+        /// <remarks>✅ Updated on 6/11/2025</remarks>
+        private Task AssignRandomElo()
         {
-            ImageCoordinates.Clear();
+            // Temporarily unsubscribe to prevent triggering logic during changes
+            WhiteCpuElo.SelectionChanged -= CheckDropdownSelections;
+            BlackCpuElo.SelectionChanged -= CheckDropdownSelections;
 
-            foreach (var image in Chess_Board.Children.OfType<Image>())
-            {
-                int row = Grid.GetRow(image);
-                int column = Grid.GetColumn(image);
+            Random rng = new();
+            WhiteCpuElo.SelectedIndex = rng.Next(WhiteCpuElo.Items.Count);
+            BlackCpuElo.SelectedIndex = rng.Next(BlackCpuElo.Items.Count);
 
-                ImageCoordinates.Add(Tuple.Create(row, column));
+            // Manually update the cached fields since the handler didn’t run
+            _selectedWhiteElo = (ComboBoxItem?)WhiteCpuElo.SelectedItem;
+            _selectedBlackElo = (ComboBoxItem?)BlackCpuElo.SelectedItem;
 
-                // Directly update king positions
-                if (image.Name.StartsWith("WhiteKing"))
-                {
-                    _whiteKingRow = row;
-                    _whiteKingCol = column;
-                }
-                else if (image.Name.StartsWith("BlackKing"))
-                {
-                    _blackKingRow = row;
-                    _blackKingCol = column;
-                }
-            }
+            // Re-subscribe after assignments
+            WhiteCpuElo.SelectionChanged += CheckDropdownSelections;
+            BlackCpuElo.SelectionChanged += CheckDropdownSelections;
 
             return Task.CompletedTask;
         }
@@ -5064,32 +5091,6 @@ namespace Chess_Project
                     image.IsEnabled = true;
                 }
             }
-        }
-
-        /// <summary>
-        /// Randomly selects Elo ratings for both White and Black CPU players,
-        /// temporarily unsubscribing event handlers to prevent unnecessary triggers.
-        /// </summary>
-        /// <remarks>✅ Updated on 6/11/2025</remarks>
-        private Task AssignRandomElo()
-        {
-            // Temporarily unsubscribe to prevent triggering logic during changes
-            WhiteCpuElo.SelectionChanged -= CheckDropdownSelections;
-            BlackCpuElo.SelectionChanged -= CheckDropdownSelections;
-
-            Random rng = new();
-            WhiteCpuElo.SelectedIndex = rng.Next(WhiteCpuElo.Items.Count);
-            BlackCpuElo.SelectedIndex = rng.Next(BlackCpuElo.Items.Count);
-
-            // Manually update the cached fields since the handler didn’t run
-            _selectedWhiteElo = (ComboBoxItem?)WhiteCpuElo.SelectedItem;
-            _selectedBlackElo = (ComboBoxItem?)BlackCpuElo.SelectedItem;
-
-            // Re-subscribe after assignments
-            WhiteCpuElo.SelectionChanged += CheckDropdownSelections;
-            BlackCpuElo.SelectionChanged += CheckDropdownSelections;
-
-            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -5506,7 +5507,7 @@ namespace Chess_Project
         /// </summary>
         /// <remarks>
         /// <list type="bullet">
-        ///     <item><description>When White just moved (<c><see cref="Move"/> == 0</c> after <see cref="FinalizeMoveAsync"/>), sends Black’s bits first (if any), then White’s.</description></item>
+        ///     <item><description>When White just moved (<c><see cref="Move"/> == 0</c> after <see cref="FinalizeMove"/>), sends Black’s bits first (if any), then White’s.</description></item>
         ///     <item><description>When Black just moved (<c><see cref="Move"/> == 1</c>), sends White’s bits first (if any), then Black’s.</description></item>
         ///     <item><description>Shows a “move in progress” popup before and after transmission.</description></item>
         /// </list>
@@ -5567,7 +5568,7 @@ namespace Chess_Project
         #region Game Restart/Cleanup
 
         // Sets up pieces for game
-        public async Task SetupBoard()
+        public async Task SetupBoardAsync()
         {
             EnableImagesWithTag("WhitePiece", false);
             EnableImagesWithTag("BlackPiece", false);
@@ -5761,7 +5762,7 @@ namespace Chess_Project
         }
 
         // Resets Epson chess board
-        public async Task ClearBoard()
+        public async Task ClearBoardAsync()
         {
             BoardSet = false;
 
@@ -5879,7 +5880,7 @@ namespace Chess_Project
             if (_epsonMotion)
             {
                 ShowCleanupPopup(true);
-                await ClearBoard();
+                await ClearBoardAsync();
                 ShowCleanupPopup(false);
             }
 
@@ -5987,7 +5988,7 @@ namespace Chess_Project
             else if (n.Contains("King")) img.MouseUp += ChessKing_Click;
         }
 
-        private const int MovesHeaderRows = 1;
+        
 
         private void ResetMoveTable()
         {
@@ -6154,7 +6155,7 @@ namespace Chess_Project
 
                 // Cleanup cycle (these must be real async Tasks that complete after animation/work finish)
                 ShowCleanupPopup(true);  // sync UI is fine
-                await ClearBoard();  // MUST complete only when the board is actually cleared
+                await ClearBoardAsync();  // MUST complete only when the board is actually cleared
                 ShowCleanupPopup(false);
 
                 // Reapply initial layout

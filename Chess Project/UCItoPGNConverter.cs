@@ -365,7 +365,7 @@ namespace Chess_Project
                 System.Diagnostics.Debug.Write($"Applying Move: {move}");
 
                 // Find the piece at OldPosition
-                Piece piece = Pieces.FirstOrDefault(p => p.Position.Equals(move.OldPosition));
+                Piece? piece = Pieces.FirstOrDefault(p => p.Position.Equals(move.OldPosition));
 
                 if (piece == null)
                 {
