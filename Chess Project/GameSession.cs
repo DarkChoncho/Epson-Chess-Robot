@@ -51,6 +51,9 @@ namespace Chess_Project
         private string? _prevWhiteBits = null;
         private string? _prevBlackBits = null;
 
+        private List<int> _completedWhiteBits = [];
+        private List<int> _completedBlackBits = [];
+
         public int? PickBit1 { get => _pickBit1; set => Set(ref _pickBit1, value); }
         public int? PickBit2 { get => _pickBit2; set => Set(ref _pickBit2, value); }
         public int? PickBit3 { get => _pickBit3; set => Set(ref _pickBit3, value); }
@@ -62,6 +65,9 @@ namespace Chess_Project
         public string? BlackBits { get => _blackBits; set => Set(ref _blackBits, value); }
         public string? PrevWhiteBits { get => _prevWhiteBits; set => Set(ref _prevWhiteBits, value); }
         public string? PrevBlackBits { get => _prevBlackBits; set => Set(ref _prevBlackBits, value); }
+
+        public List<int> CompletedWhiteBits { get => _completedWhiteBits; set => Set(ref _completedWhiteBits, value); }
+        public List<int> CompletedBlackBits { get => _completedBlackBits; set => Set(ref _completedBlackBits, value); }
 
         #endregion
 
@@ -186,6 +192,7 @@ namespace Chess_Project
         {
             PickBit1 = PickBit2 = PickBit3 = PlaceBit1 = PlaceBit2 = PlaceBit3 = null;
             WhiteBits = BlackBits = PrevWhiteBits = PrevBlackBits = null;
+            CompletedWhiteBits = CompletedBlackBits = [];
 
             PromotedPawn = PromotedTo = ActivePiece = TakenPiece = Fen = PreviousFen = null;
 

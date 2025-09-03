@@ -33,9 +33,11 @@ namespace Chess_Project
         private GameOver? _gameOver;
         private TaskCompletionSource<bool>? _userMoveTcs;
         private bool _isStarting;
-        private CancellationTokenSource? _gameCts;
         private CancellationTokenSource? _loopCts;
         private TaskCompletionSource<bool>? _loopStoppedTcs;
+        private bool _recoveryNeeded = false;
+        private readonly RecoveryHandler _recoveryHandler;
+        private readonly SemaphoreSlim _recoveryGate = new(1, 1);
 
         #region Epson Configuration (local)
 
@@ -114,7 +116,7 @@ namespace Chess_Project
         public List<Tuple<int, int>> EnPassantSquare { get => Session.EnPassantSquare; set => Session.EnPassantSquare = value; }
         private List<string> GameFens { get => Session.GameFens; set => Session.GameFens = value; }
 
-        private sealed class PieceInit
+        public sealed class PieceInit
         {
             public required Image Img { get; set; }
             public required string Name { get; init; }
@@ -126,6 +128,8 @@ namespace Chess_Project
         }
 
         private Dictionary<string, PieceInit> _initialPieces = [];
+        private Dictionary<string, PieceInit> _previousPieces = [];
+        private Dictionary<string, PieceInit> _recoveryPieces = [];
 
         #endregion
 
@@ -153,6 +157,9 @@ namespace Chess_Project
         private string? BlackBits { get => Session.BlackBits; set => Session.BlackBits = value; }
         private string? PrevWhiteBits { get => Session.PrevWhiteBits; set => Session.PrevWhiteBits = value; }
         private string? PrevBlackBits { get => Session.PrevBlackBits; set => Session.PrevBlackBits = value; }
+
+        private List<int> CompletedWhiteBits { get => Session.CompletedWhiteBits; set => Session.CompletedWhiteBits = value; }
+        private List<int> CompletedBlackBits { get => Session.CompletedBlackBits; set => Session.CompletedBlackBits = value; }
 
         #endregion
 
@@ -320,12 +327,13 @@ namespace Chess_Project
         /// </list>
         /// </summary>
         /// <remarks>
-        /// <para>✅ Updated on 8/29/2025</para>
+        /// <para>✅ Updated on 9/3/2025</para>
         /// </remarks>
         public MainWindow()
         {
             InitializeComponent();
             _executableDirectory = AppDomain.CurrentDomain.BaseDirectory;
+            _recoveryHandler = new RecoveryHandler(_executableDirectory);
 
             InitializeUserPreferences();
             InitializeSounds();
@@ -391,35 +399,30 @@ namespace Chess_Project
             Dispatcher.BeginInvoke(
                 new Action(() =>
                 {
-                    try { SnapshotInitialBoard(); }
+                    try { _initialPieces = CaptureBoardSnapshot(); }
                     catch (Exception ex) { ChessLog.LogWarning("Failed to snapshot board.", ex); }
                 }),
-                System.Windows.Threading.DispatcherPriority.Loaded
+                DispatcherPriority.Loaded
             );
         }
 
         /// <summary>
-        /// Captures the initial state of all chess piece <see cref="Image"/> elements
-        /// on the board and stores them in <see cref="_initialPieces"/> for later reset.
+        /// Captures the current state of all chess piece <see cref="Image"/> elements on the board
+        /// and returns a dictionary keyed by the piece's <see cref="FrameworkElement.Name"/>.
         /// </summary>
         /// <remarks>
-        /// This method iterates through <see cref="Chess_Board"/> children, filtering
-        /// only those tagged as "WhitePiece" or "BlackPiece". For each piece it records:
-        /// <list type="bullet">
-        ///     <item><description>Name</description></item>
-        ///     <item><description>Grid row and column</description></item>
-        ///     <item><description>Z-index</description></item>
-        ///     <item><description>Enabled state</description></item>
-        ///     <item><description>Tag</description></item>
-        /// </list>
-        /// These snapshots allow the board to be restored to its original setup
-        /// (e.g., after a game reset) without reloading from XAML.
-        /// Call this once after the UI has been fully initialized and pieces are loaded.
-        /// <para>✅ Written on 8/28/2025</para>
+        /// Iterates <see cref="Chess_Board"/> children and includes only items tagged
+        /// <c>"WhitePiece"</c> or <c>"BlackPiece"</c>. Call this after the UI has fully
+        /// initialized and pieces are loaded. This method does not mutate UI state.
+        /// <para>✅ Written on 9/2/2025</para>
         /// </remarks>
-        private void SnapshotInitialBoard()
+        /// <returns>
+        /// A <see cref="Dictionary{TKey,TValue}"/> mapping piece name → <see cref="PieceInit"/>
+        /// containing the <see cref="Image"/> reference, row/column, Z-index, enabled state, and tag.
+        /// </returns>
+        private Dictionary<string, PieceInit> CaptureBoardSnapshot()
         {
-            _initialPieces = Chess_Board.Children
+            return Chess_Board.Children
                 .OfType<Image>()
                 .Where(i => Equals(i.Tag, "WhitePiece") || Equals(i.Tag, "BlackPiece"))
                 .ToDictionary(
@@ -479,7 +482,7 @@ namespace Chess_Project
         /// <see cref="_timeoutDuration"/> seconds of inactivity.
         /// </summary>
         /// <remarks>
-        /// Uses <see cref="DispatcherTimer"/> (UI thread). The handler <see cref="InactivityTimer_Tick"/>
+        /// Uses <see cref="DispatcherTimer"/> (UI thread). The handler <see cref="InactivityTimer_TickAsync"/>
         /// is (re)attached safely so repeated calls won't double-subscribe.
         /// <para>✅ Updated on 8/29/2025</para>
         /// </remarks>
@@ -491,8 +494,8 @@ namespace Chess_Project
             };
 
             // Ensure we don't end up with duplicate handlers if called more than once
-            _inactivityTimer.Tick -= InactivityTimer_Tick;
-            _inactivityTimer.Tick += InactivityTimer_Tick;
+            _inactivityTimer.Tick -= InactivityTimer_TickAsync;
+            _inactivityTimer.Tick += InactivityTimer_TickAsync;
 
             _inactivityTimer.Start();
         }
@@ -1058,6 +1061,9 @@ namespace Chess_Project
                     playType == "User Vs. Com" ? GameMode.UserVsCom :
                                                  GameMode.UserVsUser;
 
+                if (_recoveryHandler.RecoveryNeeded && _recoveryHandler.RecoveryPieces != null)
+                    await ExecuteRecoveryAsync();
+
                 // Robot-controlled setup
                 if (_epsonMotion && !BoardSet)
                 {
@@ -1408,7 +1414,7 @@ namespace Chess_Project
         ///     <item><description><c><see cref="IsPaused"/> == <see langword="true"/></c> → signals <see cref="_loopStoppedTcs"/> so the Pause handler can continue.</description></item>
         /// </list>
         /// </para>
-        /// <para>✅ Written on 8/31/2025</para>
+        /// <para>✅ Updating...</para>
         /// </remarks>
         /// <returns></returns>
         private async Task RunGameLoopAsync(CancellationToken ct)
@@ -1417,6 +1423,9 @@ namespace Chess_Project
             {
                 while (!EndGame && !IsPaused)
                 {
+                    // Store previous board position in the event that the Epson robot move fails
+                    if (_epsonMotion) _previousPieces = CaptureBoardSnapshot();
+
                     switch (_gameMode)
                     {
                         case GameMode.ComVsCom:
@@ -1517,12 +1526,49 @@ namespace Chess_Project
 
                     if (_epsonMotion)
                     {
-                        await SendRobotBitsAsync();
+                        (bool whiteOk, bool blackOk) = await SendRobotBitsAsync();
+
+                        if (!whiteOk || !blackOk)
+                        {
+                            // Put UI back exactly to previous snapshot
+                            await ReinstantiateBoard(_previousPieces);
+
+                            // Disconnect robot
+                            await EpsonConnectAsync(EpsonMotion);
+
+                            EndGame = true;
+
+                            // Recompute, strictly in order (White first, then Black)
+                            if (!string.IsNullOrEmpty(WhiteBits))
+                            {
+                                var whiteProcessed = BuildProcessedMoves(CompletedWhiteBits, WhiteBits);
+                                if (whiteProcessed.Count > 0)
+                                    await ApplyProcessedMovesAsync(whiteProcessed, ChessColor.White);
+                            }
+
+                            if (!string.IsNullOrEmpty(BlackBits))
+                            {
+                                var blackProcessed = BuildProcessedMoves(CompletedBlackBits, BlackBits);
+                                if (blackProcessed.Count > 0)
+                                    await ApplyProcessedMovesAsync(blackProcessed, ChessColor.Black);
+                            }
+
+                            // Freeze the recovered position for restart-on-next-launch
+                            _recoveryPieces = CaptureBoardSnapshot();
+                            _recoveryHandler.SaveRecovery(_recoveryPieces, true);
+                        }
+                        else
+                        {
+                            _recoveryPieces.Clear();
+                            _recoveryNeeded = false;
+                        }
 
                         PrevWhiteBits = AppendToHistory(PrevWhiteBits, WhiteBits);
                         PrevBlackBits = AppendToHistory(PrevBlackBits, BlackBits);
                         WhiteBits = string.Empty;
                         BlackBits = string.Empty;
+                        CompletedWhiteBits = [];
+                        CompletedBlackBits = [];
                     }
 
                     MoveInProgress = false;
@@ -2542,7 +2588,7 @@ namespace Chess_Project
             sb.Append(' ').Append(Halfmove).Append(' ').Append(Fullmove);
 
             Fen = sb.ToString();
-            System.Diagnostics.Debug.WriteLine($"\n\nFEN: {Fen}");
+            Debug.WriteLine($"\n\nFEN: {Fen}");
 
             // Local helper
             char MapNameToFenAndAccumulate(string name)
@@ -3485,7 +3531,7 @@ namespace Chess_Project
         /// It prepares the game for autonomous play and ensures the UI reflects the new state.
         /// <para>✅ Updated on 8/31/2025</para>
         /// </remarks>
-        private async void InactivityTimer_Tick(object? sender, EventArgs e)
+        private async void InactivityTimer_TickAsync(object? sender, EventArgs e)
         {
             _inactivityTimer.Stop();
 
@@ -3498,6 +3544,10 @@ namespace Chess_Project
             // Start or resume the game
             if (GlobalState.WhiteEpsonConnected && GlobalState.BlackEpsonConnected)
             {
+                _recoveryHandler.LoadRecovery();
+                if (_recoveryHandler.RecoveryNeeded && _recoveryHandler.RecoveryPieces != null)
+                    await ExecuteRecoveryAsync();
+
                 // Randomize difficulty and set mode
                 await AssignRandomElo();
                 Play_Type.SelectedIndex = (int)GameMode.ComVsCom;
@@ -4103,7 +4153,7 @@ namespace Chess_Project
         /// <para>✅ Updated on 9/2/2025</para>
         /// </remarks>
         /// <returns>A completed task (no asynchronous work within the method).</returns>
-        private Task UpdateEvalBar()
+        private void UpdateEvalBar()
         {
             // Layout constants
             const double ExternalHorizontalMargin = 10;   // left/right margins outside the popup
@@ -4123,7 +4173,7 @@ namespace Chess_Project
             if (availableWidth < MinimumWidth)
             {
                 EngineEvaluation.IsOpen = false;
-                return Task.CompletedTask;
+                return;
             }
 
             EngineEvaluation.Width = availableWidth;
@@ -4182,8 +4232,6 @@ namespace Chess_Project
 
             WhiteAdvantage.Margin = new Thickness(0, -EvalBar.Width, InternalVerticalMargin, 0);
             BlackAdvantage.Margin = new Thickness(0, -EvalBar.Height, InternalVerticalMargin, 0);
-
-            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -5453,8 +5501,8 @@ namespace Chess_Project
         }
 
         /// <summary>
-        /// Sends the accumulated robot command bits to the appropriate robots,
-        /// sequencing by which side just moved.
+        /// Sends the accumulated robot command bits to the Epson controllers, ordering the
+        /// transmissions based on which side just moved.
         /// </summary>
         /// <remarks>
         /// <list type="bullet">
@@ -5463,29 +5511,36 @@ namespace Chess_Project
         ///     <item><description>Shows a “move in progress” popup before and after transmission.</description></item>
         /// </list>
         /// </remarks>
-        /// <para>✅ Updated on 8/29/2025</para>
-        /// <returns></returns>
-        private async Task SendRobotBitsAsync()
+        /// <para>✅ Updated on 9/2/2025</para>
+        /// <returns>
+        /// A tuple <c>(whiteOk, blackOk)</c> indicating whether each side’s transmission
+        /// completed successfully.
+        /// </returns>
+        private async Task<(bool, bool)> SendRobotBitsAsync()
         {
+            bool whiteOk = true;
+            bool blackOk = true;
+
             ShowMoveInProgressPopup(true);
 
             // Since FinalizeMoveAsync flips Move by this state, now Move == 0 is if white is moving
             if (Move == 0)
             {
                 if (!string.IsNullOrEmpty(BlackBits))
-                    await _blackEpson.SendDataAsync(BlackBits);
+                    (blackOk, CompletedBlackBits) = await _blackEpson.SendDataAsync(BlackBits);
 
-                await _whiteEpson.SendDataAsync(WhiteBits);
+                (whiteOk, CompletedWhiteBits) = await _whiteEpson.SendDataAsync(WhiteBits);
             }
             else
             {
                 if (!string.IsNullOrEmpty(WhiteBits))
-                    await _whiteEpson.SendDataAsync(WhiteBits);
+                    (whiteOk, CompletedWhiteBits) = await _whiteEpson.SendDataAsync(WhiteBits);
 
-                await _blackEpson.SendDataAsync(BlackBits);
+                (blackOk, CompletedBlackBits) = await _blackEpson.SendDataAsync(BlackBits);
             }
 
             ShowMoveInProgressPopup(false);
+            return (whiteOk, blackOk);
         }
 
         /// <summary>
@@ -5509,13 +5564,11 @@ namespace Chess_Project
 
         #endregion
 
-        #region Game Restart / Cleanup
+        #region Game Restart/Cleanup
 
         // Sets up pieces for game
         public async Task SetupBoard()
         {
-            BoardSet = true;
-
             EnableImagesWithTag("WhitePiece", false);
             EnableImagesWithTag("BlackPiece", false);
 
@@ -5703,6 +5756,8 @@ namespace Chess_Project
 
             EnableImagesWithTag("WhitePiece", true);
             EnableImagesWithTag("BlackPiece", true);
+
+            BoardSet = true;
         }
 
         // Resets Epson chess board
@@ -5865,7 +5920,7 @@ namespace Chess_Project
         {
             EraseAnnotations();
             MoveCallout(9, 9, 9, 9);
-            ReinstantiateBoard();
+            ReinstantiateBoard(_initialPieces);
             ResetMoveTable();
 
             Session.ResetGame();
@@ -5874,49 +5929,43 @@ namespace Chess_Project
             _inactivityTimer.Start();
         }
 
-        public void ReinstantiateBoard()
+        private Task ReinstantiateBoard(Dictionary<string, PieceInit> boardPosition)
         {
-            if (_initialPieces is null) return;
+            if (boardPosition is null) return Task.CompletedTask;
 
-            // Remove any piece images currently on the board
-            var toRemove = Chess_Board.Children
-                .OfType<Image>()
-                .Where(i => Equals(i.Tag, "WhitePiece") || Equals(i.Tag, "BlackPiece"))
-                .ToList();
-
-            foreach (var img in toRemove)
-                Chess_Board.Children.Remove(img);
-
-            // Re-add and restore each original piece
-            foreach (var kv in _initialPieces)
+            // Ensure all UI work runs on the UI thread and is awaited
+            return Application.Current.Dispatcher.InvokeAsync(() =>
             {
-                var p = kv.Value;
-                var img = p.Img;
+                // Remove any piece images currently on the board
+                var toRemove = Chess_Board.Children
+                    .OfType<Image>()
+                    .Where(i => Equals(i.Tag, "WhitePiece") || Equals(i.Tag, "BlackPiece"))
+                    .ToList();
 
-                if (!Chess_Board.Children.Contains(img))
-                    Chess_Board.Children.Add(img);
+                foreach (var img in toRemove)
+                    Chess_Board.Children.Remove(img);
 
-                // Restore original identity and placement
-                img.Name = p.Name;
-                img.Tag = p.Tag;
-                img.IsEnabled = p.Enabled;
-                Grid.SetRow(img, p.Row);
-                Grid.SetColumn(img, p.Col);
-                Panel.SetZIndex(img, p.Z);
-                img.Visibility = Visibility.Visible;
+                // Re-add and restore each original piece
+                foreach (var kv in boardPosition)
+                {
+                    var p = kv.Value;
+                    var img = p.Img;
 
-                // Rewire handlers based on (restored) name
-                AttachClickHandlerByName(img);
+                    if (!Chess_Board.Children.Contains(img))
+                        Chess_Board.Children.Add(img);
 
-                // Refresh the bitmap from your theme/pieces folder
-                LoadImage(img, new RoutedEventArgs());
-            }
+                    img.Name = p.Name;
+                    img.Tag = p.Tag;
+                    img.IsEnabled = p.Enabled;
+                    Grid.SetRow(img, p.Row);
+                    Grid.SetColumn(img, p.Col);
+                    Panel.SetZIndex(img, p.Z);
+                    img.Visibility = Visibility.Visible;
 
-            // Reset your session counters back to “starting set”
-            Session.NumWR = Session.NumWN = Session.NumWB = 2;
-            Session.NumBR = Session.NumBN = Session.NumBB = 2;
-            Session.NumWQ = Session.NumBQ = 1;
-            // Pawns are handled by name/placement; your other counters (if any) can be reset here too.
+                    AttachClickHandlerByName(img);
+                    LoadImage(img, new RoutedEventArgs()); // assumes this is synchronous/UI-safe
+                }
+            }).Task;
         }
 
         private void AttachClickHandlerByName(Image img)
@@ -5957,36 +6006,170 @@ namespace Chess_Project
 
         #endregion
 
+        #region Position Recovery
 
+        private static List<int> BuildProcessedMoves(List<int> completedBits, string attemptedBits)
+        {
+            // Parse attempted list safely
+            var attempted = (attemptedBits ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .Where(s => int.TryParse(s, out _))
+                .Select(int.Parse)
+                .ToList();
 
+            if (completedBits is null || completedBits.Count == 0 || attempted.Count == 0)
+                return [];
 
+            // Find how many completed entries match the attempted prefix in order
+            int prefix = 0;
+            int lim = Math.Min(completedBits.Count, attempted.Count);
+            for (; prefix < lim; prefix++)
+            {
+                if (attempted[prefix] != completedBits[prefix])
+                    break;
+            }
 
+            // If nothing matched, treat as "no completed" and do nothing
+            if (prefix == 0)
+                return [];
 
+            // If prefix is odd, try to complete the pair by adding one more attempted bit
+            int processCount = (prefix % 2 == 0) ? prefix : Math.Min(prefix + 1, attempted.Count);
 
+            return attempted.GetRange(0, processCount);
+        }
 
+        private async Task ApplyProcessedMovesAsync(List<int> processed, ChessColor color)
+        {
+            if (processed == null || processed.Count == 0) return;
 
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                string side = color == ChessColor.White ? "White" : "Black";
+                string sideTag = color == ChessColor.White ? "WhitePiece" : "BlackPiece";
 
+                // Map 0..63
+                static (int row, int col) MapBoard(int b)
+                {
+                    int q = b / 8, r = b % 8;
+                    return (7 - q, r);
+                }
 
+                // Find a piece of the correct side at (row,col)
+                Image? FindAtCell(int row, int col) =>
+                    Chess_Board.Children
+                        .OfType<Image>()
+                        .FirstOrDefault(img =>
+                            Grid.GetRow(img) == row &&
+                            Grid.GetColumn(img) == col &&
+                            img.Name.StartsWith(side, StringComparison.Ordinal));
 
+                // Given an off-board pick bit 128..159, construct standard name (e.g., "WhitePawn3")
+                string? NameFromPickBit(int pickBit)
+                {
+                    int idx;
+                    if ((idx = Array.IndexOf(_pawnPick, pickBit)) >= 0) return $"{side}Pawn{idx + 1}";
+                    if ((idx = Array.IndexOf(_rookPick, pickBit)) >= 0) return $"{side}Rook{idx + 1}";
+                    if ((idx = Array.IndexOf(_knightPick, pickBit)) >= 0) return $"{side}Knight{idx + 1}";
+                    if ((idx = Array.IndexOf(_bishopPick, pickBit)) >= 0) return $"{side}Bishop{idx + 1}";
+                    if ((idx = Array.IndexOf(_queenPick, pickBit)) >= 0) return $"{side}Queen{idx + 1}";
+                    if (pickBit == _kingPick) return $"{side}King";
+                    return null;
+                }
 
+                // Resolve/create the source piece for a given src bit
+                Image? ResolveSource(int srcBit)
+                {
+                    if (srcBit >= 0 && srcBit < 64)  // on-board pick
+                    {
+                        var (r, c) = MapBoard(srcBit);
+                        return FindAtCell(r, c);
+                    }
+                    if (srcBit >= 128 && srcBit < 160)  // off-board pick
+                    {
+                        string? name = NameFromPickBit(srcBit);
+                        if (name == null) return null;
 
+                        var existing = Chess_Board.Children.OfType<Image>().FirstOrDefault(i => i.Name == name);
+                        if (existing != null) return existing;
 
+                        // Create if not present
+                        var img = new Image()
+                        {
+                            Name = name,
+                            Tag = sideTag,
+                            Visibility = Visibility.Visible,
+                            IsEnabled = true,
+                            IsHitTestVisible = false
+                        };
+                        LoadImage(img, null);
+                        Chess_Board.Children.Add(img);
+                        return img;
+                    }
 
+                    // Any other src classification is unexpected for a "pick"
+                    return null;
+                }
 
+                for (int i = 0; i + 1 < processed.Count; i += 2)
+                {
+                    int src = processed[i];
+                    int dst = processed[i + 1];
 
+                    var piece = ResolveSource(src);
+                    if (piece == null) continue;
 
+                    if (dst >= 64 && dst < 128)  // board place
+                    {
+                        var (r, c) = MapBoard(dst - 64);
 
+                        Grid.SetRow(piece, r);
+                        Grid.SetColumn(piece, c);
+                        Panel.SetZIndex(piece, 1);
+                        piece.Tag = sideTag;
+                        piece.Visibility = Visibility.Visible;
+                        piece.IsEnabled = true;
+                        piece.IsHitTestVisible = false;
+                    }
+                    else if (dst >= 160)  // off-board place (treat as removing piece from the baord
+                    {
+                        piece.Visibility = Visibility.Collapsed;
+                        piece.IsHitTestVisible = false;
+                        piece.IsEnabled = false;
+                        Chess_Board.Children.Remove(piece);
+                    }
+                }
+            }).Task;
+        }
 
+        private async Task ExecuteRecoveryAsync()
+        {
+            // Prevent overlapping recoveries
+            await _recoveryGate.WaitAsync();
+            try
+            {
+                // Restore to recovery snapshot (UI work should be awaited/synchronous)
+                await ReinstantiateBoard(_recoveryHandler.RecoveryPieces);
 
+                // Cleanup cycle (these must be real async Tasks that complete after animation/work finish)
+                ShowCleanupPopup(true);  // sync UI is fine
+                await ClearBoard();  // MUST complete only when the board is actually cleared
+                ShowCleanupPopup(false);
 
+                // Reapply initial layout
+                await ReinstantiateBoard(_initialPieces);
 
+                // Clear persisted recovery state
+                _recoveryHandler.ClearRecovery();
+            }
+            finally
+            {
+                _recoveryGate.Release();
+            }
+        }
 
-
-
-
-
-
-
+        #endregion
     }
 }
 // The #1 Boyfriend EVER made this... I am so proud of him and he is one of the smartest people I know! I love him more than I can say. <3

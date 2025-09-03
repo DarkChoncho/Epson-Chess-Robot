@@ -1,10 +1,13 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Documents;
+using System.Windows.Navigation;
 
 namespace Chess_Project
 {
@@ -367,17 +370,20 @@ namespace Chess_Project
         #region Motion Execution and Recovery
 
         /// <summary>
-        /// Executes a batch "bit-run" on the Epson RC700A: for each requested output bit,
-        /// asserts teh digital output, runs motion programs, optionally applies vision
-        /// offsets, and verifies the controller returns to a ready state. Finishes by
-        /// sending the robot home and re-validating readiness.
+        /// Executes a batch “bit run” on an Epson RC700A controller. For each requested output bit,
+        /// asserts the digital output, runs the appropriate stage programs, optionally applies Cognex
+        /// vision offsets, waits for the controller to report ready, and records success. When all bits
+        /// are processed, the robot is sent home and readiness is re-validated.
         /// </summary>
         /// <param name="rcBits">Comma-separated list of output bit values to activate with <c>memon</c>, e.g., <c>"6, 38"</c>. Each entry is parsed as an integer after trimming.
         /// Invalid entries are logged and cause the method to return <see langword="false"/>.</param>
         /// <param name="ct">Optional cancellation token. Propagated to command sends, ready waits, and camera reads so the operation can be aborted cooperatively.</param>
         /// <returns>
-        /// <see langword="true"/> if every per-bit sequence succeeds and the final home/ready
-        /// check completes; otherwise, <see langword="false"/> (errors are logged).
+        /// A tuple <c>(success, completedBits)</c> where:
+        /// <list type="bullet">
+        ///     <item><description><c>success</c> is <see langword="true"/> iff every per-bit sequence completes and the final home/ready check passes.</description></item>
+        ///     <item><description><c>completedBits</c> is the list of bit numbers that finished successfully in this call, in order.</description></item>
+        /// </list>
         /// </returns>
         /// <remarks>
         /// <para><b>Per-bit sequence:</b></para>
@@ -400,10 +406,12 @@ namespace Chess_Project
         /// are also logged and cause an immediate <see langword="false"/> return.
         /// This method does not rethrow to the caller.
         /// 
-        /// <para>✅ Updated on 8/28/2025</para>
+        /// <para>✅ Updated on 9/2/2025</para>
         /// </remarks>
-        public async Task<bool> SendDataAsync(string rcBits, CancellationToken ct = default)
+        public async Task<(bool, List<int>)> SendDataAsync(string rcBits, CancellationToken ct = default)
         {
+            List<int> completedBits = [];
+            
             try
             {
                 var activeBits = rcBits.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).ToArray();
@@ -413,7 +421,7 @@ namespace Chess_Project
                     if (!int.TryParse(bitStr, out int bitNumber))
                     {
                         ChessLog.LogError($"Invalid bit '{bitStr}' in '{rcBits}'.");
-                        return false;
+                        return (false, completedBits);
                     }
 
                     // memon <bit>
@@ -458,8 +466,8 @@ namespace Chess_Project
                     }
 
                     // Write both deltas
-                    if (!IsValid(SetDouble("deltaX", deltaX), await SendCommandAsync(SetDouble("deltaX", deltaX), ct: ct), "#", disconnectOnFailure: false)) return false;
-                    if (!IsValid(SetDouble("deltaY", deltaY), await SendCommandAsync(SetDouble("deltaY", deltaY), ct: ct), "#", disconnectOnFailure: false)) return false;
+                    if (!IsValid(SetDouble("deltaX", deltaX), await SendCommandAsync(SetDouble("deltaX", deltaX), ct: ct), "#", disconnectOnFailure: false)) return (false, completedBits);
+                    if (!IsValid(SetDouble("deltaY", deltaY), await SendCommandAsync(SetDouble("deltaY", deltaY), ct: ct), "#", disconnectOnFailure: false)) return (false, completedBits);
 
                     // Re-assert bit, then $start,3
                     memOnResponse = await SendCommandAsync(MemOn(bitStr), ct: ct);
@@ -473,6 +481,8 @@ namespace Chess_Project
                     string? completionResponse = await WaitForReadyAsync(ReadyStatus, ct: ct);
                     if (!IsValid(GetStatusCmd, completionResponse, ReadyStatus, disconnectOnFailure:false))
                         throw new EpsonException(GetStatusCmd, completionResponse, _robotIp);
+
+                    completedBits.Add(bitNumber);
                 }
 
                 // Send robot home
@@ -484,14 +494,14 @@ namespace Chess_Project
                 if (!IsValid(GetStatusCmd, ready, ReadyStatus, disconnectOnFailure:false))
                     throw new EpsonException(GetStatusCmd, ready, _robotIp);
 
-                return true;
+                return (true, completedBits);
 
             }
             catch (Exception ex)
             {
                 ChessLog.LogError($"Data send failed for {_robotIp}:{_robotPort} (bits: '{rcBits}').", ex);
                 ChangeRobotState(RobotState.Error);
-                return false;
+                return (false, completedBits);
             }
         }
 

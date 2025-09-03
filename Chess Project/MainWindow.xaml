@@ -766,7 +766,6 @@
                         <Setter Property="HorizontalContentAlignment" Value="Center"/>
                     </Style>
                 </ComboBox.ItemContainerStyle>
-                <ComboBoxItem Content="Random"/>
                 <ComboBoxItem Content="200"/>
                 <ComboBoxItem Content="300"/>
                 <ComboBoxItem Content="400"/>
@@ -809,7 +808,6 @@
                         <Setter Property="HorizontalContentAlignment" Value="Center"/>
                     </Style>
                 </ComboBox.ItemContainerStyle>
-                <ComboBoxItem Content="Random"/>
                 <ComboBoxItem Content="200"/>
                 <ComboBoxItem Content="300"/>
                 <ComboBoxItem Content="400"/>
@@ -839,7 +837,6 @@
                         <Setter Property="HorizontalContentAlignment" Value="Center"/>
                     </Style>
                 </ComboBox.ItemContainerStyle>
-                <ComboBoxItem Content="Random"/>
                 <ComboBoxItem Content="200"/>
                 <ComboBoxItem Content="300"/>
                 <ComboBoxItem Content="400"/>
