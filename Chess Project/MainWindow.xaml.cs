@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Media;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -1540,6 +1541,7 @@ namespace Chess_Project
                             EndGame = true;
 
                             // Recompute, strictly in order (White first, then Black)
+                            Debug.WriteLine($"WhiteBits: {WhiteBits}");
                             if (!string.IsNullOrEmpty(WhiteBits))
                             {
                                 var whiteProcessed = BuildProcessedMoves(CompletedWhiteBits, WhiteBits);
@@ -1547,6 +1549,7 @@ namespace Chess_Project
                                     await ApplyProcessedMovesAsync(whiteProcessed, ChessColor.White);
                             }
 
+                            Debug.WriteLine($"BlackBits: {BlackBits}");
                             if (!string.IsNullOrEmpty(BlackBits))
                             {
                                 var blackProcessed = BuildProcessedMoves(CompletedBlackBits, BlackBits);
@@ -2786,88 +2789,46 @@ namespace Chess_Project
         private static async Task<(List<(string cp, string cpValue, string possibleMove)>, List<(string cp, string cpValue, string possibleMove)>, string[])> ParseStockfishOutputAsync(string fen, int depth, string stockfishPath, CancellationToken ct = default)
         {
             string stockfishOut = await StockfishMovesAnalysisAsync(fen, depth, stockfishPath, ct: ct);
-
-            // Checkpoint after big awaits / CPU bursts
             ct.ThrowIfCancellationRequested();
 
-            // Skip the initial two banner lines
-            string[] lines = [.. stockfishOut.Split('\n').Skip(2)];
+            // CR/LF safe split, drop empties; skip banner lines if present
+            var lines = stockfishOut
+                .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries)
+                .Skip(2)
+                .ToArray();
 
             var main = new List<(string cp, string cpValue, string possibleMove)>();
             var reserve = new List<(string cp, string cpValue, string possibleMove)>();
 
-            foreach (string line in lines)
-            {
-                if (ct.IsCancellationRequested) ct.ThrowIfCancellationRequested();
+            // Single regex that tolerates token order wiggles and extra fields
+            // Matches: depth <d> ... score (cp|mate) <val> ... pv <firstMove>
+            var rx = new Regex(@"depth\s+(?<d>\d+).*?score\s+(?<lbl>cp|mate)\s+(?<val>[+\-]?\d+).*?\bpv\s+(?<pv>\S+)",
+                               RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-                if (!line.TrimStart().StartsWith("info", StringComparison.OrdinalIgnoreCase))
+            foreach (string raw in lines)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                // Only look at "info" lines
+                var line = raw.TrimStart();
+                if (!line.StartsWith("info", StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                if (TryParseInfoLine(line, out int parsedDepth, out string scoreLabel, out string scoreValue, out string pvMove))
-                {
-                    if (parsedDepth >= depth)
-                        main.Add((scoreLabel, scoreValue, pvMove));
-                    else if (parsedDepth == 1)
-                        reserve.Add((scoreLabel, scoreValue, pvMove));
-                }
+                var m = rx.Match(line);
+                if (!m.Success) continue;
+
+                int parsedDepth = int.Parse(m.Groups["d"].Value);
+                string label = m.Groups["lbl"].Value.Equals("mate", StringComparison.OrdinalIgnoreCase) ? "mate" : "cp";
+                string value = m.Groups["val"].Value;   // keep string for later int.TryParse
+                string pvMove = m.Groups["pv"].Value;
+
+                if (parsedDepth >= depth)
+                    main.Add((label, value, pvMove));
+                else if (parsedDepth == 1)
+                    reserve.Add((label, value, pvMove));
             }
 
-            // Fallback: if nothing reached the requested depth, keep whatever we got
             return (main, reserve, lines);
-
-            // Local helper
-            static bool TryParseInfoLine(string line, out int parsedDepth, out string scoreLabel, out string scoreValue, out string pvMove)
-            {
-                parsedDepth = 0;
-                scoreLabel = "";
-                scoreValue = "";
-                pvMove = "";
-
-                // Tokenize by whitespace
-                var parts = line.Split((char[])null!, StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length < 6) return false;
-
-                // Find "depth X"
-                int depthIdx = Array.IndexOf(parts, "depth");
-                if (depthIdx >= 0 && depthIdx + 1 < parts.Length && int.TryParse(parts[depthIdx + 1], out int d))
-                    parsedDepth = d;
-
-                // Find "score <cp|mate> <value>"
-                int scoreIdx = Array.IndexOf(parts, "score");
-                if (scoreIdx >= 0 && scoreIdx + 2 < parts.Length)
-                {
-                    string label = parts[scoreIdx + 1];
-                    string value = parts[scoreIdx + 2];
-
-                    if ((label == "cp" || label == "mate") && IsSignedNumber(value))
-                    {
-                        scoreLabel = label == "mate" ? "mate" : "cp";
-                        scoreValue = value;
-                    }
-                }
-
-                // Find "pv <firstmove> ..."
-                int pvIdx = Array.IndexOf(parts, "pv");
-                if (pvIdx >= 0 && pvIdx + 1 < parts.Length)
-                {
-                    // The first move in PV is enough
-                    pvMove = parts[pvIdx + 1];
-                }
-
-                // Valid only if we got a depth, a score, and a PV move
-                return parsedDepth > 0 && !string.IsNullOrEmpty(scoreLabel) && !string.IsNullOrEmpty(scoreValue) && !string.IsNullOrEmpty(pvMove);
-
-                static bool IsSignedNumber(string s)
-                {
-                    // Allows "123", "-45", "+7"
-                    if (string.IsNullOrEmpty(s)) return false;
-                    int start = (s[0] == '-' || s[0] == '+') ? 1 : 0;
-                    if (start >= s.Length) return false;
-                    for (int i = start; i < s.Length; i++)
-                        if (!char.IsDigit(s[i])) return false;
-                    return true;
-                }
-            }
         }
 
         /// <summary>
@@ -2892,7 +2853,6 @@ namespace Chess_Project
         {
             if (string.IsNullOrWhiteSpace(stockfishPath) || !File.Exists(stockfishPath))
                 return "Stockfish executable not found.";
-
             if (string.IsNullOrWhiteSpace(fen))
                 return "FEN was empty.";
 
@@ -2906,47 +2866,41 @@ namespace Chess_Project
                 CreateNoWindow = true
             };
 
-            var output = new StringBuilder(4096);  // generous headroom
-            var bestMoveSeen = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var output = new StringBuilder(4096);
+
+            // handshake completion flags
+            var uciOkTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var readyOkTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var bestMoveTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             using var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
 
-            DataReceivedEventHandler? stdoutHandler = null;
-            DataReceivedEventHandler? stderrHandler = null;
+            DataReceivedEventHandler stdout = (_, e) =>
+            {
+                if (string.IsNullOrEmpty(e.Data)) return;
+                output.AppendLine(e.Data);
+
+                if (e.Data.Equals("uciok", StringComparison.OrdinalIgnoreCase))
+                    uciOkTcs.TrySetResult(true);
+                else if (e.Data.Equals("readyok", StringComparison.OrdinalIgnoreCase))
+                    readyOkTcs.TrySetResult(true);
+                else if (e.Data.StartsWith("bestmove", StringComparison.Ordinal))
+                {
+                    try { process.StandardInput.WriteLine("quit"); process.StandardInput.Flush(); } catch { }
+                    bestMoveTcs.TrySetResult(true);
+                }
+            };
+
+            DataReceivedEventHandler stderr = (_, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.Data))
+                    output.AppendLine(e.Data);
+            };
 
             try
             {
-                // Stream output
-                stdoutHandler = (_, e) =>
-                {
-                    if (string.IsNullOrEmpty(e.Data)) return;
-
-                    output.AppendLine(e.Data);
-
-                    // Once bestmove appears, we can ask the engine to quit.
-                    if (e.Data.StartsWith("bestmove", StringComparison.Ordinal))
-                    {
-                        try
-                        {
-                            // Sending quit twice is harmless; we guard with TrySetResult below
-                            process.StandardInput.WriteLine("quit");
-                            process.StandardInput.Flush();
-                        }
-                        catch { /* process may already be exiting */ }
-
-                        bestMoveSeen.TrySetResult(true);
-                    }
-                };
-
-                // (Optional) capture stderr as well
-                stderrHandler = (_, e) =>
-                {
-                    if (!string.IsNullOrEmpty(e.Data))
-                        output.AppendLine(e.Data);
-                };
-
-                process.OutputDataReceived += stdoutHandler;
-                process.ErrorDataReceived += stderrHandler;
+                process.OutputDataReceived += stdout;
+                process.ErrorDataReceived += stderr;
 
                 if (!process.Start())
                     throw new InvalidOperationException("Failed to start Stockfish process.");
@@ -2956,42 +2910,38 @@ namespace Chess_Project
 
                 using var reg = ct.Register(() =>
                 {
-                    // Cancel the best-move waiter so Task.WhenAny can complete it immediately
-                    bestMoveSeen.TrySetCanceled(ct);
-                    try { if (!process.HasExited) process.Kill(); } catch { /* ignore */ }
+                    uciOkTcs.TrySetCanceled(ct);
+                    readyOkTcs.TrySetCanceled(ct);
+                    bestMoveTcs.TrySetCanceled(ct);
+                    try { if (!process.HasExited) process.Kill(); } catch { }
                 });
 
-                // UCI handshake
                 if (!process.StandardInput.BaseStream.CanWrite)
-                    throw new IOException("Unable to write to Stockfish sdtin.");
+                    throw new IOException("Unable to write to Stockfish stdin.");
 
+                // UCI handshake
                 await process.StandardInput.WriteLineAsync("uci");
                 await process.StandardInput.FlushAsync(ct);
-
-                // Wait until we see "uciok" in stdout (quick polling loop from buffer)
-                // If you want zero polling, swap to a read-line loop; keeping your event model:
-                while (!ct.IsCancellationRequested && !output.ToString().Contains("\nuciok"))
-                    await Task.Delay(10, ct);
+                await uciOkTcs.Task; // wait for "uciok"
 
                 await process.StandardInput.WriteLineAsync("isready");
                 await process.StandardInput.FlushAsync(ct);
-                while (!ct.IsCancellationRequested && !output.ToString().Contains("\nreadyok"))
-                    await Task.Delay(10, ct);
+                await readyOkTcs.Task; // wait for "readyok"
 
+                // Analysis
                 await process.StandardInput.WriteLineAsync($"setoption name MultiPV value {multiPV}");
                 await process.StandardInput.WriteLineAsync($"position fen {fen}");
                 await process.StandardInput.WriteLineAsync($"go depth {depth}");
                 await process.StandardInput.FlushAsync(ct);
 
-                // Wait until we either see bestmove or the process exits (cancellable)
+                // Wait for bestmove or exit
                 var exitTask = process.WaitForExitAsync(ct);
-                await Task.WhenAny(bestMoveSeen.Task, exitTask);
+                await Task.WhenAny(bestMoveTcs.Task, exitTask);
 
-                // If bestmove never arrived but the process is still running, ask politely then await exit
                 if (!process.HasExited)
                 {
                     try { process.StandardInput.WriteLine("quit"); process.StandardInput.Flush(); } catch { }
-                    await exitTask; // will throw OperationCanceledException if ct was cancelled
+                    await exitTask;
                 }
 
                 ct.ThrowIfCancellationRequested();
@@ -2999,8 +2949,8 @@ namespace Chess_Project
             }
             finally
             {
-                if (stdoutHandler is not null) process.OutputDataReceived -= stdoutHandler;
-                if (stderrHandler is not null) process.ErrorDataReceived -= stderrHandler;
+                process.OutputDataReceived -= stdout;
+                process.ErrorDataReceived -= stderr;
                 try { if (!process.HasExited) process.Kill(); } catch { }
             }
         }
@@ -4881,14 +4831,6 @@ namespace Chess_Project
                 SetEpsonStatusLight(ChessColor.White, Brushes.Red);
                 SetEpsonStatusLight(ChessColor.Black, Brushes.Red);
 
-                // Cleanup process if necessary
-                if (_gameMode != GameMode.Blank)
-                {
-                    ShowCleanupPopup(true);
-                    await ClearBoardAsync();
-                    ShowCleanupPopup(false);
-                }
-
                 _whiteEpson.Disconnect();
                 _blackEpson.Disconnect();
                 return;
@@ -5987,8 +5929,6 @@ namespace Chess_Project
             else if (n.Contains("Queen")) img.MouseUp += ChessQueen_Click;
             else if (n.Contains("King")) img.MouseUp += ChessKing_Click;
         }
-
-        
 
         private void ResetMoveTable()
         {
