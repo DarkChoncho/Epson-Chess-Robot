@@ -71,7 +71,7 @@ namespace Chess_Project
         private sealed class RecoveryDto
         {
             public bool RecoveryNeeded { get; set; }
-            public Dictionary<string, PieceDto> Pieces { get; set; } = new();
+            public Dictionary<string, PieceDto> Pieces { get; set; } = [];
         }
 
         private sealed class PieceDto

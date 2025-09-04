@@ -135,7 +135,6 @@ namespace Chess_Project
 
         private bool _userTurn = false;
         private bool _moveInProgress = false;
-        private bool _holdResume = false;
         private bool _wasPlayable = false;
         private bool _wasResumable = false;
         private bool _isPaused = false;
@@ -147,7 +146,6 @@ namespace Chess_Project
 
         public bool UserTurn { get => _userTurn; set => Set(ref _userTurn, value); }
         public bool MoveInProgress { get => _moveInProgress; set => Set(ref _moveInProgress, value); }
-        public bool HoldResume { get => _holdResume; set => Set(ref _holdResume, value); }
         public bool WasPlayable { get => _wasPlayable; set => Set(ref _wasPlayable, value); }
         public bool WasResumable { get => _wasResumable; set => Set(ref _wasResumable, value); }
         public bool IsPaused { get => _isPaused; set => Set(ref _isPaused, value); }
@@ -209,7 +207,7 @@ namespace Chess_Project
             Move = Fullmove = 1;
             Halfmove = 0;
 
-            UserTurn = MoveInProgress = HoldResume = WasPlayable = WasResumable = IsPaused = BoardSet = false;
+            UserTurn = MoveInProgress = WasPlayable = WasResumable = IsPaused = BoardSet = false;
 
             WhiteMaterial = BlackMaterial = 0;
             QuantifiedEvaluation = 10;

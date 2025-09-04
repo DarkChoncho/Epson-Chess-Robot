@@ -36,31 +36,6 @@ namespace Chess_Project
 
         #endregion
 
-        #region Epson Configuration (local)
-
-        private readonly string _whiteRobotIp = "192.168.0.2";
-        private readonly string _blackRobotIp = "192.168.0.3";
-        private readonly int _whiteRobotPort = 5000;
-        private readonly int _blackRobotPort = 5000;
-
-        private readonly double[] _whiteRobotBaseDeltas = [-1.218, -67.697];
-        private readonly double[] _blackRobotBaseDeltas = [0.616, -80.406];
-        private readonly double _whiteDeltaScalar = 0.095952;
-        private readonly double _blackDeltaScalar = 0.0895833;
-
-        #endregion
-
-        #region Cognex Configuration (local)
-
-        private readonly string _whiteCognexIp = "192.168.0.12";
-        private readonly string _blackCognexIp = "192.168.0.13";
-        private readonly int _whiteCognexTcpPort = 23;
-        private readonly int _blackCognexTcpPort = 23;
-        private readonly int _whiteCognexListenPort = 3000;
-        private readonly int _blackCognexListenPort = 3001;
-
-        #endregion
-
         #region Loop State & Coordination (local)
 
         private bool _isStarting;
@@ -69,6 +44,31 @@ namespace Chess_Project
         private TaskCompletionSource<bool>? _userMoveTcs;
         private TaskCompletionSource<bool>? _loopStoppedTcs;
         private readonly SemaphoreSlim _recoveryGate = new(1, 1);
+
+        #endregion
+
+        #region Epson Configuration (constants)
+
+        private const string WhiteEpsonIp = "192.168.0.2";
+        private const string BlackEpsonIp = "192.168.0.3";
+        private const int WhiteEpsonPort = 5000;
+        private const int BlackEpsonPort = 5000;
+
+        private readonly double[] _whiteRobotBaseDeltas = [-1.218, -67.697];
+        private readonly double[] _blackRobotBaseDeltas = [0.616, -80.406];
+        private const double WhiteDeltaScalar = 0.095952;
+        private const double BlackDeltaScalar = 0.0895833;
+
+        #endregion
+
+        #region Cognex Configuration (constants)
+
+        private const string WhiteCognexIp = "192.168.0.12";
+        private const string BlackCognexIp = "192.168.0.13";
+        private const int WhiteCognexTcpPort = 23;
+        private const int BlackCognexTcpPort = 23;
+        private const int WhiteCognexListenPort = 3000;
+        private const int BlackCognexListenPort = 3001;
 
         #endregion
 
@@ -129,14 +129,14 @@ namespace Chess_Project
 
         public sealed class PieceInit
         {
-            [JsonIgnore] public Image? Img { get; set; }   // never serialized
+            [JsonIgnore] public Image? Img { get; set; }  // never serialized
 
             public string Name { get; set; } = "";
             public int Row { get; set; }
             public int Col { get; set; }
             public int Z { get; set; }
             public bool Enabled { get; set; }
-            public string? Tag { get; set; }               // store tag as string ("WhitePiece"/"BlackPiece")
+            public string? Tag { get; set; }  // store tag as string ("WhitePiece"/"BlackPiece")
         }
 
         private Dictionary<string, PieceInit> _blankPieces = [];
@@ -216,7 +216,6 @@ namespace Chess_Project
 
         private bool UserTurn { get => Session.UserTurn; set => Session.UserTurn = value; }
         private bool MoveInProgress { get => Session.MoveInProgress; set => Session.MoveInProgress = value; }
-        private bool HoldResume { get => Session.HoldResume; set => Session.HoldResume = value; }
         private bool WasPlayable { get => Session.WasPlayable; set => Session.WasPlayable = value; }
         private bool WasResumable { get => Session.WasResumable; set => Session.WasResumable = value; }
         private bool IsPaused { get => Session.IsPaused; set => Session.IsPaused = value; }
@@ -317,8 +316,8 @@ namespace Chess_Project
 
         private readonly string _executableDirectory;
         private string? _stockfishPath;
-        private readonly string _fenFilePath = "FEN_Codes.txt";
-        private readonly string _pgnFilePath = "GamePGN.pgn";
+        private const string FenFilePath = "FEN_Codes.txt";
+        private const string PgnFilePath = "GamePGN.pgn";
         private string _backgroundImagePath;
         private string _boardImagePath;
         private Preferences _preferences;
@@ -428,7 +427,7 @@ namespace Chess_Project
         /// Iterates <see cref="Chess_Board"/> children and includes only items tagged
         /// <c>"WhitePiece"</c> or <c>"BlackPiece"</c>. Call this after the UI has fully
         /// initialized and pieces are loaded. This method does not mutate UI state.
-        /// <para>✅ Written on 9/2/2025</para>
+        /// <para>✅ Written on 9/4/2025</para>
         /// </remarks>
         /// <returns>
         /// A <see cref="Dictionary{TKey,TValue}"/> mapping piece name → <see cref="PieceInit"/>
@@ -532,10 +531,10 @@ namespace Chess_Project
             _whiteCognex?.Disconnect();
             _blackCognex?.Disconnect();
 
-            _whiteCognex = new CognexController(_whiteCognexIp, _whiteCognexTcpPort, ChessColor.White);
-            _blackCognex = new CognexController(_blackCognexIp, _blackCognexTcpPort, ChessColor.Black);
-            _whiteEpson = new EpsonController(_whiteRobotIp, _whiteRobotPort, _whiteRobotBaseDeltas, _whiteDeltaScalar, ChessColor.White, _whiteCognex, _whiteCognexListenPort);
-            _blackEpson = new EpsonController(_blackRobotIp, _blackRobotPort, _blackRobotBaseDeltas, _blackDeltaScalar, ChessColor.Black, _blackCognex, _blackCognexListenPort);
+            _whiteCognex = new CognexController(WhiteCognexIp, WhiteCognexTcpPort, ChessColor.White);
+            _blackCognex = new CognexController(BlackCognexIp, BlackCognexTcpPort, ChessColor.Black);
+            _whiteEpson = new EpsonController(WhiteEpsonIp, WhiteEpsonPort, _whiteRobotBaseDeltas, WhiteDeltaScalar, ChessColor.White, _whiteCognex, WhiteCognexListenPort);
+            _blackEpson = new EpsonController(BlackEpsonIp, BlackEpsonPort, _blackRobotBaseDeltas, BlackDeltaScalar, ChessColor.Black, _blackCognex, BlackCognexListenPort);
             _ = HandleInitialConnectionsAsync();
         }
 
@@ -622,109 +621,7 @@ namespace Chess_Project
 
         #endregion
 
-        #region Theme and Preference Methods
-
-        /// <summary>
-        /// Resolves and assings the image paths for all chess pieces (white and black)
-        /// from the specified theme directory.
-        /// </summary>
-        /// <param name="piecePath">The absolute path to themed piece image directory.</param>
-        /// <remarks>
-        /// Uses reflection to set the corresponding private backing fields in <see cref="MainWindow"/>.
-        /// Logs a fatal error via <see cref="ChessLog"/> if any expected asset is missing.
-        /// <para>✅ Updated on 6/11/2025</para>
-        /// </remarks>
-        private void SetPieceImagePaths(string piecePath)
-        {
-            string[] pieces = ["Pawn", "Knight", "Bishop", "Rook", "Queen", "King"];
-
-            foreach (string piece in pieces)
-            {
-                string whitePath = System.IO.Path.Combine(piecePath, $"White{piece}.png");
-                string blackPath = System.IO.Path.Combine(piecePath, $"Black{piece}.png");
-
-                if (!File.Exists(whitePath))
-                {
-                    var msg = $"File path executable not found at:\n{whitePath}\n\n" +
-                               "The game cannot run without this file path.";
-                    ChessLog.LogFatal(msg);
-                    MessageBox.Show(msg, "Fatal Error - White Path Missing", MessageBoxButton.OK, MessageBoxImage.Error);
-
-                    Application.Current.Shutdown(-1);
-                    return;  // keep compiler happy; Shutdown tears down the app
-                }
-
-                if (!File.Exists(blackPath))
-                {
-                    var msg = $"File path executable not found at:\n{blackPath}\n\n" +
-                               "The game cannot run without this file path.";
-                    ChessLog.LogFatal(msg);
-                    MessageBox.Show(msg, "Fatal Error - Black Path Missing", MessageBoxButton.OK, MessageBoxImage.Error);
-
-                    Application.Current.Shutdown(-1);
-                    return;  // keep compiler happy; Shutdown tears down the app
-                }
-
-                typeof(MainWindow).GetField($"white{piece}ImagePath",
-                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-                    ?.SetValue(this, whitePath);
-
-                typeof(MainWindow).GetField($"black{piece}ImagePath",
-                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-                    ?.SetValue(this, blackPath);
-            }
-        }
-
-        /// <summary>
-        /// Applies visual theme preferences to the background, piece set, and board style
-        /// by updating the corresponding <see cref="ComboBox"/> selections in the UI.
-        /// </summary>
-        /// <remarks>
-        /// Reads the values from the loaded <see cref="_preferences"/> object and normalizes
-        /// them through <see cref="FormatThemeName"/> before applying with
-        /// <see cref="SetComboBoxSelection"/>. This ensures the UI accurately reflects the 
-        /// user's saved theme choices when the application starts or preferences are reloaded.
-        /// <para>✅ Updated on 6/11/2025</para>
-        /// </remarks>
-        private void ApplyThemeFormatting()
-        {
-            SetComboBoxSelection(BackgroundSelection, FormatThemeName(_preferences.Background));
-            SetComboBoxSelection(PieceSelection, FormatThemeName(_preferences.Pieces));
-            SetComboBoxSelection(BoardSelection, FormatThemeName(_preferences.Board));
-        }
-
-        /// <summary>
-        /// Normalizes a theme name into a human-readable format by inserting spaces
-        /// between lowercase and uppercase letter transitions (camel case splitting).
-        /// </summary>
-        /// <param name="input">The raw theme name (may be <see langword="null"/> or empty).</param>
-        /// <remarks>✅ Updated on 6/11/2025</remarks>
-        /// <returns>
-        /// A formatted string with spaces inserted between camel case segments.
-        /// Returns <see cref="string.Empty"/> if <paramref name="input"/> if <see langword="null"/>
-        /// or whitespace.
-        /// </returns>
-        private static string FormatThemeName(string? input)
-        {
-            if (string.IsNullOrWhiteSpace(input))
-                return input ?? string.Empty;  // Ensures null safety
-
-            StringBuilder sb = new();
-
-            for (int i = 0; i < input.Length - 1; i++)  // Skip last char to compare with next safely
-            {
-                sb.Append(input[i]);
-
-                // Add space between lowercase followed by uppercase (e.g., "NeoWood" → "Neo Wood")
-                if (char.IsLower(input[i]) && char.IsUpper(input[i + 1]))
-                {
-                    sb.Append(' ');
-                }
-            }
-
-            sb.Append(input[^1]); // Append the final character
-            return sb.ToString();
-        }
+        #region Theme and Preference Handlers/Helpers
 
         /// <summary>
         /// Applies the user's configured background image to a target <see cref="Grid"/> control.
@@ -736,7 +633,7 @@ namespace Chess_Project
         /// Ensures the UI remains responsive even if the background asset cannot be found.
         /// <para>✅ Updated on 6/11/2025</para>
         /// </remarks>
-        private void LoadBackground(object sender, RoutedEventArgs? e)
+        private void Background_Loaded(object sender, RoutedEventArgs? e)
         {
             if (sender is not Grid background)
                 return;
@@ -760,53 +657,6 @@ namespace Chess_Project
         }
 
         /// <summary>
-        /// Resolves and applies the correct image asset to a chess piece <see cref="Image"/> control.
-        /// </summary>
-        /// <param name="sender">The <see cref="Image"/> control representing a chess piece.</param>
-        /// <param name="e">Optional routed event arguments (unused).</param>
-        /// <remarks>
-        /// <list type="bullet">
-        ///     <item><description>Uses the current piece theme from <see cref="_preferences"/> to build the image path.</description></item>
-        ///     <item><description>Logs a warning if the theme is not set or the image file is missing, leaving the piece blank.</description></item>
-        ///     <item><description>Intended to be used as the <c>Loaded</c> event handler for chess piece images in XAML.</description></item>
-        /// </list>
-        /// ✅ Updated on 6/11/2025
-        /// </remarks>
-        private void LoadImage(object sender, RoutedEventArgs? e)
-        {
-            if (sender is not Image img)
-                return;
-
-            if (string.IsNullOrWhiteSpace(_preferences.Pieces))
-            {
-                ChessLog.LogWarning("Piece theme not set. Cannot load image.");
-                return;
-            }
-
-            // Remove numbers from the piece name (e.g., "WhitePawn1" → "WhitePawn")
-            string pieceName = new([.. img.Name.Where(c => !char.IsDigit(c))]);
-
-            // Determine color and type
-            bool isWhite = pieceName.StartsWith("White");
-            string pieceType = pieceName.Replace("White", "").Replace("Black", "");
-
-            // Construct the image path
-            string imagePath = System.IO.Path.Combine(
-                _executableDirectory, "Assets", "Pieces", _preferences.Pieces,
-                $"{(isWhite ? "White" : "Black")}{pieceType}.png"
-            );
-
-            if (!File.Exists(imagePath))
-            {
-                ChessLog.LogWarning($"Missing piece image: {imagePath}");
-                return;
-            }
-
-            // Apply the image to the piece
-            img.Source = new BitmapImage(new Uri(imagePath, UriKind.Absolute));
-        }
-
-        /// <summary>
         /// Applies the currently selected board theme to the chessboard grid.
         /// </summary>
         /// <param name="sender">The <see cref="Grid"/> representing the board UI.</param>
@@ -821,7 +671,7 @@ namespace Chess_Project
         /// Intended to be used as a <c>Loaded</c> event handler for the chessboard grid in XAML.
         /// <para>✅ Updated on 6/10/2025</para>
         /// </remarks>
-        private void LoadBoard(object sender, RoutedEventArgs? e)
+        private void Board_Loaded(object sender, RoutedEventArgs? e)
         {
             if (sender is not Grid board || string.IsNullOrWhiteSpace(_boardImagePath))
             {
@@ -876,6 +726,187 @@ namespace Chess_Project
         }
 
         /// <summary>
+        /// Resolves and applies the correct image asset to a chess piece <see cref="Image"/> control.
+        /// </summary>
+        /// <param name="sender">The <see cref="Image"/> control representing a chess piece.</param>
+        /// <param name="e">Optional routed event arguments (unused).</param>
+        /// <remarks>
+        /// <list type="bullet">
+        ///     <item><description>Uses the current piece theme from <see cref="_preferences"/> to build the image path.</description></item>
+        ///     <item><description>Logs a warning if the theme is not set or the image file is missing, leaving the piece blank.</description></item>
+        ///     <item><description>Intended to be used as the <c>Loaded</c> event handler for chess piece images in XAML.</description></item>
+        /// </list>
+        /// ✅ Updated on 6/11/2025
+        /// </remarks>
+        private void Image_Loaded(object sender, RoutedEventArgs? e)
+        {
+            if (sender is not Image img)
+                return;
+
+            if (string.IsNullOrWhiteSpace(_preferences.Pieces))
+            {
+                ChessLog.LogWarning("Piece theme not set. Cannot load image.");
+                return;
+            }
+
+            // Remove numbers from the piece name (e.g., "WhitePawn1" → "WhitePawn")
+            string pieceName = new([.. img.Name.Where(c => !char.IsDigit(c))]);
+
+            // Determine color and type
+            bool isWhite = pieceName.StartsWith("White");
+            string pieceType = pieceName.Replace("White", "").Replace("Black", "");
+
+            // Construct the image path
+            string imagePath = System.IO.Path.Combine(
+                _executableDirectory, "Assets", "Pieces", _preferences.Pieces,
+                $"{(isWhite ? "White" : "Black")}{pieceType}.png"
+            );
+
+            if (!File.Exists(imagePath))
+            {
+                ChessLog.LogWarning($"Missing piece image: {imagePath}");
+                return;
+            }
+
+            // Apply the image to the piece
+            img.Source = new BitmapImage(new Uri(imagePath, UriKind.Absolute));
+        }
+
+        /// <summary>
+        /// Responds to a theme selection change by updating the relevant preferences,
+        /// saving it to persistent storage, and reapplying the updated theme settings.
+        /// </summary>
+        /// <param name="sender">The <see cref="ComboBox"> that triggered the event.</param>
+        /// <param name="e">The event arguments.</param>
+        /// <remarks>✅ Updated on 7/18/2025</remarks>
+        private void Theme_SelectionChanged(object sender, EventArgs e)
+        {
+            if (sender is not ComboBox comboBox)
+                return;
+
+            // Extract selected theme and normalize spacing
+            string selectedTheme = (comboBox.SelectedItem as ComboBoxItem)?.Content?.ToString()?.Replace(" ", "") ?? "";
+
+            if (string.IsNullOrEmpty(selectedTheme))
+                return;
+
+            // Update the appropriate preference field
+            if (comboBox == BackgroundSelection)
+                _preferences.Background = selectedTheme;
+            else if (comboBox == PieceSelection)
+                _preferences.Pieces = selectedTheme;
+            else if (comboBox == BoardSelection)
+                _preferences.Board = selectedTheme;
+
+            // Persist changes and reapply theme
+            PreferencesManager.Save(_preferences);
+            InitializeUserPreferences();
+            ApplyThemeChanges(comboBox);
+        }
+
+        /// <summary>
+        /// Applies visual theme preferences to the background, piece set, and board style
+        /// by updating the corresponding <see cref="ComboBox"/> selections in the UI.
+        /// </summary>
+        /// <remarks>
+        /// Reads the values from the loaded <see cref="_preferences"/> object and normalizes
+        /// them through <see cref="FormatThemeName"/> before applying with
+        /// <see cref="SetComboBoxSelection"/>. This ensures the UI accurately reflects the 
+        /// user's saved theme choices when the application starts or preferences are reloaded.
+        /// <para>✅ Updated on 6/11/2025</para>
+        /// </remarks>
+        private void ApplyThemeFormatting()
+        {
+            SetComboBoxSelection(BackgroundSelection, FormatThemeName(_preferences.Background));
+            SetComboBoxSelection(PieceSelection, FormatThemeName(_preferences.Pieces));
+            SetComboBoxSelection(BoardSelection, FormatThemeName(_preferences.Board));
+        }
+
+        /// <summary>
+        /// Normalizes a theme name into a human-readable format by inserting spaces
+        /// between lowercase and uppercase letter transitions (camel case splitting).
+        /// </summary>
+        /// <param name="input">The raw theme name (may be <see langword="null"/> or empty).</param>
+        /// <remarks>✅ Updated on 6/11/2025</remarks>
+        /// <returns>
+        /// A formatted string with spaces inserted between camel case segments.
+        /// Returns <see cref="string.Empty"/> if <paramref name="input"/> if <see langword="null"/>
+        /// or whitespace.
+        /// </returns>
+        private static string FormatThemeName(string? input)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+                return input ?? string.Empty;  // Ensures null safety
+
+            StringBuilder sb = new();
+
+            for (int i = 0; i < input.Length - 1; i++)  // Skip last char to compare with next safely
+            {
+                sb.Append(input[i]);
+
+                // Add space between lowercase followed by uppercase (e.g., "NeoWood" → "Neo Wood")
+                if (char.IsLower(input[i]) && char.IsUpper(input[i + 1]))
+                {
+                    sb.Append(' ');
+                }
+            }
+
+            sb.Append(input[^1]); // Append the final character
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Resolves and assings the image paths for all chess pieces (white and black)
+        /// from the specified theme directory.
+        /// </summary>
+        /// <param name="piecePath">The absolute path to themed piece image directory.</param>
+        /// <remarks>
+        /// Uses reflection to set the corresponding private backing fields in <see cref="MainWindow"/>.
+        /// Logs a fatal error via <see cref="ChessLog"/> if any expected asset is missing.
+        /// <para>✅ Updated on 6/11/2025</para>
+        /// </remarks>
+        private void SetPieceImagePaths(string piecePath)
+        {
+            string[] pieces = ["Pawn", "Knight", "Bishop", "Rook", "Queen", "King"];
+
+            foreach (string piece in pieces)
+            {
+                string whitePath = System.IO.Path.Combine(piecePath, $"White{piece}.png");
+                string blackPath = System.IO.Path.Combine(piecePath, $"Black{piece}.png");
+
+                if (!File.Exists(whitePath))
+                {
+                    var msg = $"File path executable not found at:\n{whitePath}\n\n" +
+                               "The game cannot run without this file path.";
+                    ChessLog.LogFatal(msg);
+                    MessageBox.Show(msg, "Fatal Error - White Path Missing", MessageBoxButton.OK, MessageBoxImage.Error);
+
+                    Application.Current.Shutdown(-1);
+                    return;  // keep compiler happy; Shutdown tears down the app
+                }
+
+                if (!File.Exists(blackPath))
+                {
+                    var msg = $"File path executable not found at:\n{blackPath}\n\n" +
+                               "The game cannot run without this file path.";
+                    ChessLog.LogFatal(msg);
+                    MessageBox.Show(msg, "Fatal Error - Black Path Missing", MessageBoxButton.OK, MessageBoxImage.Error);
+
+                    Application.Current.Shutdown(-1);
+                    return;  // keep compiler happy; Shutdown tears down the app
+                }
+
+                typeof(MainWindow).GetField($"white{piece}ImagePath",
+                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                    ?.SetValue(this, whitePath);
+
+                typeof(MainWindow).GetField($"black{piece}ImagePath",
+                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                    ?.SetValue(this, blackPath);
+            }
+        }
+
+        /// <summary>
         /// Applies the given brush to the board's coordinate labels depending on square color.
         /// </summary>
         /// <param name="lightBrush">Brush for labels on light squares.</param>
@@ -910,38 +941,6 @@ namespace Chess_Project
         }
 
         /// <summary>
-        /// Responds to a theme selection change by updating the relevant preferences,
-        /// saving it to persistent storage, and reapplying the updated theme settings.
-        /// </summary>
-        /// <param name="sender">The <see cref="ComboBox"> that triggered the event.</param>
-        /// <param name="e">The event arguments.</param>
-        /// <remarks>✅ Updated on 7/18/2025</remarks>
-        private void ThemeChange(object sender, EventArgs e)
-        {
-            if (sender is not ComboBox comboBox)
-                return;
-
-            // Extract selected theme and normalize spacing
-            string selectedTheme = (comboBox.SelectedItem as ComboBoxItem)?.Content?.ToString()?.Replace(" ", "") ?? "";
-
-            if (string.IsNullOrEmpty(selectedTheme))
-                return;
-
-            // Update the appropriate preference field
-            if (comboBox == BackgroundSelection)
-                _preferences.Background = selectedTheme;
-            else if (comboBox == PieceSelection)
-                _preferences.Pieces = selectedTheme;
-            else if (comboBox == BoardSelection)
-                _preferences.Board = selectedTheme;
-
-            // Persist changes and reapply theme
-            PreferencesManager.Save(_preferences);
-            InitializeUserPreferences();
-            ApplyThemeChanges(comboBox);
-        }
-
-        /// <summary>
         /// Applies visual updates for the theme category that changed,
         /// updating either the background, piece set, or board appearance.
         /// </summary>
@@ -962,16 +961,16 @@ namespace Chess_Project
 
             if (comboBox == BackgroundSelection)
             {
-                LoadBackground(Screen, null);
+                Background_Loaded(Screen, null);
             }
             else if (comboBox == PieceSelection)
             {
                 foreach (Image piece in Chess_Board.Children.OfType<Image>())
-                    LoadImage(piece, null);
+                    Image_Loaded(piece, null);
             }
             else if (comboBox == BoardSelection)
             {
-                LoadBoard(Chess_Board, null);
+                Board_Loaded(Chess_Board, null);
             }
             // else: ignore unrelated ComboBoxes
         }
@@ -1165,7 +1164,7 @@ namespace Chess_Project
 
                 // Initialize FEN/PGN (async where possible)
                 CreateFenCode();
-                await File.WriteAllTextAsync(_fenFilePath, string.Empty, CancellationToken.None);
+                await File.WriteAllTextAsync(FenFilePath, string.Empty, CancellationToken.None);
                 WritePGNFile();
 
                 // Decide move
@@ -3507,7 +3506,7 @@ namespace Chess_Project
         /// <param name="sender">The source of the event.</param>
         /// <param name="e">The event data.</param>
         /// <remarks>✅ Updated on 7/18/2025</remarks>
-        private void CheckDropdownSelections(object sender, EventArgs e)
+        private void Dropdown_SelectionChanged(object sender, EventArgs e)
         {
             _inactivityTimer.Stop();
 
@@ -4436,7 +4435,7 @@ namespace Chess_Project
 
         #endregion
 
-        #region Annotations
+        #region Annotation Event Handlers
 
         /// <summary>
         /// Handles right-click annotation input on a chess piece image.
@@ -4973,24 +4972,30 @@ namespace Chess_Project
         /// Randomly selects Elo ratings for both White and Black CPU players,
         /// temporarily unsubscribing event handlers to prevent unnecessary triggers.
         /// </summary>
-        /// <remarks>✅ Updated on 6/11/2025</remarks>
+        /// <remarks>
+        /// To optimize performance, the random elo excludes the last two entries,
+        /// 3000 and 3700 due to their extensive search depth. These are still
+        /// available for selection manually, but not for auto-start (demo mode).
+        /// <para>✅ Updated on 9/4/2025</para>
+        /// </remarks>
         private Task AssignRandomElo()
         {
             // Temporarily unsubscribe to prevent triggering logic during changes
-            WhiteCpuElo.SelectionChanged -= CheckDropdownSelections;
-            BlackCpuElo.SelectionChanged -= CheckDropdownSelections;
+            WhiteCpuElo.SelectionChanged -= Dropdown_SelectionChanged;
+            BlackCpuElo.SelectionChanged -= Dropdown_SelectionChanged;
 
+            // Randomly pick an Elo (excluding 3000 and 3700 for performance)
             Random rng = new();
-            WhiteCpuElo.SelectedIndex = rng.Next(WhiteCpuElo.Items.Count);
-            BlackCpuElo.SelectedIndex = rng.Next(BlackCpuElo.Items.Count);
+            WhiteCpuElo.SelectedIndex = rng.Next(WhiteCpuElo.Items.Count - 2);
+            BlackCpuElo.SelectedIndex = rng.Next(BlackCpuElo.Items.Count - 2);
 
             // Manually update the cached fields since the handler didn’t run
             _selectedWhiteElo = (ComboBoxItem?)WhiteCpuElo.SelectedItem;
             _selectedBlackElo = (ComboBoxItem?)BlackCpuElo.SelectedItem;
 
             // Re-subscribe after assignments
-            WhiteCpuElo.SelectionChanged += CheckDropdownSelections;
-            BlackCpuElo.SelectionChanged += CheckDropdownSelections;
+            WhiteCpuElo.SelectionChanged += Dropdown_SelectionChanged;
+            BlackCpuElo.SelectionChanged += Dropdown_SelectionChanged;
 
             return Task.CompletedTask;
         }
@@ -5151,31 +5156,31 @@ namespace Chess_Project
         /// <remarks>✅ Updated on 7/18/2025</remarks>
         private void WritePGNFile()
         {
-            File.WriteAllText(_pgnFilePath, "[Event \"Chess Match\"]\n");
-            File.AppendAllText(_pgnFilePath, "[Site \"Tyler's Chess Program\"]\n");
-            File.AppendAllText(_pgnFilePath, $"[Date \"{DateTime.Now:yyyy.MM.dd}\"]\n");
-            File.AppendAllText(_pgnFilePath, "[Round \"1\"]\n");
+            File.WriteAllText(PgnFilePath, "[Event \"Chess Match\"]\n");
+            File.AppendAllText(PgnFilePath, "[Site \"Tyler's Chess Program\"]\n");
+            File.AppendAllText(PgnFilePath, $"[Date \"{DateTime.Now:yyyy.MM.dd}\"]\n");
+            File.AppendAllText(PgnFilePath, "[Round \"1\"]\n");
 
             switch (_gameMode)
             {
                 case GameMode.ComVsCom:  // Com Vs. Com
-                    File.AppendAllText(_pgnFilePath, $"[White \"Bot\"]\n[Black \"Bot\"]\n[Result \"*\"]\n[WhiteElo \"{_selectedWhiteElo?.Content}\"]\n[BlackElo \"{_selectedBlackElo?.Content}\"]\n\n");
+                    File.AppendAllText(PgnFilePath, $"[White \"Bot\"]\n[Black \"Bot\"]\n[Result \"*\"]\n[WhiteElo \"{_selectedWhiteElo?.Content}\"]\n[BlackElo \"{_selectedBlackElo?.Content}\"]\n\n");
                     break;
 
                 case GameMode.UserVsCom:  // User Vs. Com
                     if (_selectedColor?.Content.ToString() == "White")
                     {
-                        File.AppendAllText(_pgnFilePath, $"[White \"User\"]\n[Black \"Bot\"]\n[Result \"*\"]\n[BlackElo \"{_selectedElo?.Content}\"]\n\n");
+                        File.AppendAllText(PgnFilePath, $"[White \"User\"]\n[Black \"Bot\"]\n[Result \"*\"]\n[BlackElo \"{_selectedElo?.Content}\"]\n\n");
                     }
                     else
                     {
-                        File.AppendAllText(_pgnFilePath, $"[White \"Bot\"]\n[Black \"User\"]\n[Result \"*\"]\n[WhiteElo \"{_selectedElo?.Content}\"]\n\n");
+                        File.AppendAllText(PgnFilePath, $"[White \"Bot\"]\n[Black \"User\"]\n[Result \"*\"]\n[WhiteElo \"{_selectedElo?.Content}\"]\n\n");
                     }
                     break;
 
                 case GameMode.UserVsUser:  // User Vs. User
                 default:
-                    File.AppendAllText(_pgnFilePath, $"[White \"User\"]\n[Black \"User\"]\n[Result \"*\"]\n\n");
+                    File.AppendAllText(PgnFilePath, $"[White \"User\"]\n[Black \"User\"]\n[Result \"*\"]\n\n");
                     break;
             }
         }
@@ -5193,7 +5198,7 @@ namespace Chess_Project
         /// <remarks>✅ Updated on 8/20/2025</remarks>
         private async Task DocumentMoveAsync()
         {
-            using StreamWriter writer = new(_fenFilePath, append: true);
+            using StreamWriter writer = new(FenFilePath, append: true);
 
             // Local helpers
             static int ParseDigitAt(string s, int index) => int.Parse(s[index].ToString());
@@ -5503,7 +5508,7 @@ namespace Chess_Project
                 Moves.Children.Add(newMoveNumber);
                 Moves.Children.Add(newWhiteMove);
 
-                File.AppendAllText(_pgnFilePath, $"{Fullmove}. {_pgnMove} ");
+                File.AppendAllText(PgnFilePath, $"{Fullmove}. {_pgnMove} ");
             }
             else
             {
@@ -5512,7 +5517,7 @@ namespace Chess_Project
 
                 Moves.Children.Add(newBlackMove);
 
-                File.AppendAllText(_pgnFilePath, $"{_pgnMove} ");
+                File.AppendAllText(PgnFilePath, $"{_pgnMove} ");
             }
         }
 
@@ -5969,7 +5974,7 @@ namespace Chess_Project
                             Visibility = Visibility.Visible,
                             IsHitTestVisible = false
                         };
-                        LoadImage(p.Img, null);
+                        Image_Loaded(p.Img, null);
                     }
 
                     if (!Chess_Board.Children.Contains(p.Img))
@@ -6071,7 +6076,7 @@ namespace Chess_Project
         ///     <item><description>Replays only the reconstructed processed moves (e.g., <c>completed + first missing from attempted</c>), White then Black.</description></item>
         ///     <item><description>Persists the post-recovery snapshot via <c>_recoveryHandler.SaveRecovery</c>.</description></item>
         /// </list>
-        /// <para>✅ Written on 9/3/2025</para>
+        /// <para>✅ Written on 9/4/2025</para>
         /// </remarks>
         private async Task RecoverPositionFromAsync(Dictionary<string, PieceInit> boardPosition)
         {
@@ -6096,7 +6101,7 @@ namespace Chess_Project
                 if (whiteProcessed.Count > 0)
                     await ApplyProcessedMovesAsync(whiteProcessed, ChessColor.White);
             }
-            if (!string.IsNullOrWhiteSpace(attemptedWhite))
+            if (!string.IsNullOrWhiteSpace(attemptedBlack))
             {
                 var blackProcessed = BuildProcessedMoves(completedBlack, attemptedBlack);
                 if (blackProcessed.Count > 0)
@@ -6317,7 +6322,7 @@ namespace Chess_Project
                             IsEnabled = true,
                             IsHitTestVisible = false
                         };
-                        LoadImage(img, null);
+                        Image_Loaded(img, null);
                         Chess_Board.Children.Add(img);
                         return img;
                     }

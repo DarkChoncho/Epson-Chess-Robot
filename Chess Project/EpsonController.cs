@@ -354,11 +354,6 @@ namespace Chess_Project
                 if (line.StartsWith(expectedPrefix, StringComparison.Ordinal))
                     return line;
 
-                // Compact debug log
-                const int maxPreview = 160;
-                var preview = line.Length <= maxPreview ? line : line[..maxPreview] + "…";
-                ChessLog.LogDebug($"Ready check {attempt}/{maxAttempts}: '{preview}'");
-
                 await Task.Delay(delayMs, ct);
             }
 
