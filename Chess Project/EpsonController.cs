@@ -465,9 +465,16 @@ namespace Chess_Project
                         }
                     }
 
-                    // Write both deltas
-                    if (!IsValid(SetDouble("deltaX", deltaX), await SendCommandAsync(SetDouble("deltaX", deltaX), ct: ct), "#", disconnectOnFailure: false)) return (false, completedBits);
-                    if (!IsValid(SetDouble("deltaY", deltaY), await SendCommandAsync(SetDouble("deltaY", deltaY), ct: ct), "#", disconnectOnFailure: false)) return (false, completedBits);
+                    // Write both deltas (build once, reuse for validate)
+                    var setDx = SetDouble("deltaX", deltaX);
+                    string dxResp = await SendCommandAsync(setDx, ct: ct);
+                    if (!IsValid(setDx, dxResp, "#", disconnectOnFailure: false))
+                        throw new EpsonException(setDx, dxResp, _robotIp);
+
+                    var setDy = SetDouble("deltaY", deltaY);
+                    string dyResp = await SendCommandAsync(setDy, ct: ct);
+                    if (!IsValid(setDy, dyResp, "#", disconnectOnFailure: false))
+                        throw new EpsonException(setDy, dyResp, _robotIp);
 
                     // Re-assert bit, then $start,3
                     memOnResponse = await SendCommandAsync(MemOn(bitStr), ct: ct);
