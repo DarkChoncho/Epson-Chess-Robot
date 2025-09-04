@@ -40,6 +40,7 @@ namespace Chess_Project
 
         private bool _isStarting;
 
+        private Watchdog? _watchdog;
         private CancellationTokenSource? _loopCts;
         private TaskCompletionSource<bool>? _userMoveTcs;
         private TaskCompletionSource<bool>? _loopStoppedTcs;
@@ -1173,15 +1174,15 @@ namespace Chess_Project
                     playType == "User Vs. Com" ? GameMode.UserVsCom :
                                                  GameMode.UserVsUser;
 
-                _recoveryHandler.LoadRecovery();
-                if (_recoveryHandler.RecoveryNeeded && _recoveryHandler.RecoveryPieces != null)
-                {
-                    recovered = await ExecuteRecoveryAsync();
-                }
-
                 // Robot-controlled setup
                 if (_epsonMotion && !BoardSet)
                 {
+                    _recoveryHandler.LoadRecovery();
+                    if (_recoveryHandler.RecoveryNeeded && _recoveryHandler.RecoveryPieces != null)
+                    {
+                        recovered = await ExecuteRecoveryAsync();
+                    }
+
                     if (recovered)
                     {
                         ShowSetupPopup(true);
