@@ -15,7 +15,7 @@ namespace Chess_Project
         private readonly string _recoveryFilePath;
 
         public bool RecoveryNeeded { get; private set; }
-        public Dictionary<string, MainWindow.PieceInit>? RecoveryPieces { get; private set; }
+        public Dictionary<string, MainWindow.PieceSnapshot>? RecoveryPieces { get; private set; }
 
         public RecoveryHandler(string executableDirectory)
         {
@@ -23,7 +23,7 @@ namespace Chess_Project
             LoadRecovery();
         }
 
-        public void SaveRecovery(Dictionary<string, MainWindow.PieceInit> pieces, bool needed)
+        public void SaveRecovery(Dictionary<string, MainWindow.PieceSnapshot> pieces, bool needed)
         {
             RecoveryPieces = pieces;
             RecoveryNeeded = needed;
@@ -82,26 +82,28 @@ namespace Chess_Project
             public int Z { get; set; }
             public bool Enabled { get; set; }
             public string? Tag { get; set; }
+            public string SpriteKey { get; set; }
 
-            public static PieceDto From(MainWindow.PieceInit p) => new()
+            public static PieceDto From(MainWindow.PieceSnapshot p) => new()
             {
                 Name = p.Name,
                 Row = p.Row,
                 Col = p.Col,
                 Z = p.Z,
                 Enabled = p.Enabled,
-                Tag = p.Tag
+                Tag = p.Tag,
+                SpriteKey = p.SpriteKey
             };
 
-            public MainWindow.PieceInit ToPieceInit() => new()
+            public MainWindow.PieceSnapshot ToPieceInit() => new()
             {
-                Img = null,
                 Name = Name,
                 Row = Row,
                 Col = Col,
                 Z = Z,
                 Enabled = Enabled,
-                Tag = Tag
+                Tag = Tag,
+                SpriteKey = SpriteKey
             };
         }
     }

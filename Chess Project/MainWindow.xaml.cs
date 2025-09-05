@@ -128,22 +128,21 @@ namespace Chess_Project
         public List<Tuple<int, int>> EnPassantSquare { get => Session.EnPassantSquare; set => Session.EnPassantSquare = value; }
         private List<string> GameFens { get => Session.GameFens; set => Session.GameFens = value; }
 
-        public sealed class PieceInit
+        public sealed class PieceSnapshot
         {
-            [JsonIgnore] public Image? Img { get; set; }  // never serialized
-
             public string Name { get; set; } = "";
             public int Row { get; set; }
             public int Col { get; set; }
             public int Z { get; set; }
             public bool Enabled { get; set; }
-            public string? Tag { get; set; }  // store tag as string ("WhitePiece"/"BlackPiece")
+            public string? Tag { get; set; }
+            public string SpriteKey { get; set; }
         }
 
-        private Dictionary<string, PieceInit> _blankPieces = [];
-        private Dictionary<string, PieceInit> _initialPieces = [];
-        private Dictionary<string, PieceInit> _previousPieces = [];
-        private Dictionary<string, PieceInit> _recoveryPieces = [];
+        private Dictionary<string, PieceSnapshot> _blankPieces = [];
+        private Dictionary<string, PieceSnapshot> _initialPieces = [];
+        private Dictionary<string, PieceSnapshot> _previousPieces = [];
+        private Dictionary<string, PieceSnapshot> _recoveryPieces = [];
 
         #endregion
 
@@ -431,26 +430,43 @@ namespace Chess_Project
         /// <para>✅ Written on 9/4/2025</para>
         /// </remarks>
         /// <returns>
-        /// A <see cref="Dictionary{TKey,TValue}"/> mapping piece name → <see cref="PieceInit"/>
+        /// A <see cref="Dictionary{TKey,TValue}"/> mapping piece name → <see cref="PieceSnapshot"/>
         /// containing the <see cref="Image"/> reference, row/column, Z-index, enabled state, and tag.
         /// </returns>
-        private Dictionary<string, PieceInit> CaptureBoardSnapshot()
+        private Dictionary<string, PieceSnapshot> CaptureBoardSnapshot()
         {
             return Chess_Board.Children
                 .OfType<Image>()
                 .Where(i => Equals(i.Tag, "WhitePiece") || Equals(i.Tag, "BlackPiece"))
                 .ToDictionary(
                     i => i.Name,
-                    i => new PieceInit
+                    i => new PieceSnapshot
                     {
-                        Img = i,
                         Name = i.Name,
                         Row = Grid.GetRow(i),
                         Col = Grid.GetColumn(i),
                         Z = Panel.GetZIndex(i),
                         Enabled = i.IsEnabled,
-                        Tag = (string)i.Tag
+                        Tag = (string)i.Tag,
+                        SpriteKey = DeriveSpriteKeyFromName(i.Name)
                     });
+        }
+
+        private static string DeriveSpriteKeyFromName(string name)
+        {
+            // Very simple parser; tweak to match your naming scheme
+            bool white = name.StartsWith("White", StringComparison.OrdinalIgnoreCase);
+            string side = white ? "White" : "Black";
+
+            string type =
+                name.Contains("Pawn") ? "Pawn" :
+                name.Contains("Rook") ? "Rook" :
+                name.Contains("Knight") ? "Knight" :
+                name.Contains("Bishop") ? "Bishop" :
+                name.Contains("Queen") ? "Queen" :
+                /* King */                "King";
+
+            return $"{side}/{type}";
         }
 
         /// <summary>
@@ -5928,11 +5944,11 @@ namespace Chess_Project
         /// <summary>
         /// Restores the board's UI state from a saved snapshot of pieces.
         /// Removes any currently displayed pieces, then re-adds and restores
-        /// each piece according to its stored <see cref="PieceInit"/> properties.
+        /// each piece according to its stored <see cref="PieceSnapshot"/> properties.
         /// </summary>
         /// <param name="boardPosition">
         /// A dictionary mapping piece names to their saved initialization data
-        /// (<see cref="PieceInit"/>). If <see langword="null"/>, no work is performed.
+        /// (<see cref="PieceSnapshot"/>). If <see langword="null"/>, no work is performed.
         /// </param>
         /// <remarks>
         /// <list type="bullet">
@@ -5946,49 +5962,60 @@ namespace Chess_Project
         /// A <see cref="Task"/> that completes once all UI updates have been
         /// dispatched and executed on the WPF dispatcher thread.
         /// </returns>
-        private Task ReinstantiateBoard(Dictionary<string, PieceInit> boardPosition)
+        private Task ReinstantiateBoard(Dictionary<string, PieceSnapshot> boardPosition)
         {
             if (boardPosition is null) return Task.CompletedTask;
 
             // Ensure all UI work runs on the UI thread and is awaited
             return Application.Current.Dispatcher.InvokeAsync(() =>
             {
-                // remove current piece images
+                // Clear current pieces
                 var toRemove = Chess_Board.Children
                     .OfType<Image>()
                     .Where(i => Equals(i.Tag, "WhitePiece") || Equals(i.Tag, "BlackPiece"))
                     .ToList();
                 foreach (var img in toRemove) Chess_Board.Children.Remove(img);
 
+                // Recreate from snapshot
                 foreach (var kv in boardPosition)
                 {
                     var p = kv.Value;
 
-                    // build Image if loaded from disk
-                    if (p.Img is null)
+                    var img = new Image
                     {
-                        p.Img = new Image
-                        {
-                            Name = p.Name,
-                            Tag = p.Tag,
-                            IsEnabled = p.Enabled,
-                            Visibility = Visibility.Visible,
-                            IsHitTestVisible = false
-                        };
-                        Image_Loaded(p.Img, null);
-                    }
+                        Name = p.Name,
+                        Tag = p.Tag,
+                        IsEnabled = p.Enabled,
+                        Visibility = Visibility.Visible,
+                        IsHitTestVisible = false
+                    };
 
-                    if (!Chess_Board.Children.Contains(p.Img))
-                        Chess_Board.Children.Add(p.Img);
+                    // Resolve sprite from key + theme (don’t embed absolute paths)
+                    LoadImageByKey(img, p.SpriteKey);    // implement to map key -> themed PNG
 
-                    Grid.SetRow(p.Img, p.Row);
-                    Grid.SetColumn(p.Img, p.Col);
-                    Panel.SetZIndex(p.Img, p.Z);
-                    p.Img.Visibility = Visibility.Visible;
+                    Grid.SetRow(img, p.Row);
+                    Grid.SetColumn(img, p.Col);
+                    Panel.SetZIndex(img, p.Z);
 
-                    AttachClickHandlerByName(p.Img);
+                    Chess_Board.Children.Add(img);
+                    AttachClickHandlerByName(img);
                 }
             }).Task;
+        }
+
+        private void LoadImageByKey(Image img, string spriteKey)
+        {
+            // spriteKey like "White/Pawn"
+            var parts = spriteKey.Split('/');
+            string side = parts[0];
+            string piece = parts[1];
+
+            string path = System.IO.Path.Combine(
+                _executableDirectory, "Assets", "Pieces",
+                _preferences.Pieces,
+                $"{side}{piece}.png");
+
+            img.Source = new BitmapImage(new Uri(path));
         }
 
         /// <summary>
@@ -6079,7 +6106,7 @@ namespace Chess_Project
         /// </list>
         /// <para>✅ Written on 9/4/2025</para>
         /// </remarks>
-        private async Task RecoverPositionFromAsync(Dictionary<string, PieceInit> boardPosition)
+        private async Task RecoverPositionFromAsync(Dictionary<string, PieceSnapshot> boardPosition)
         {
             if (boardPosition is null) return;
 
