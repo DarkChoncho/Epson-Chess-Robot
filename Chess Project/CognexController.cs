@@ -79,10 +79,10 @@ namespace Chess_Project
 
                 // Login handshake
                 await ReadUntilAsync("User:");
-                await _writer.WriteAsync("admin");
+                await _writer.WriteLineAsync("admin");
 
                 await ReadUntilAsync("Password:");
-                await _writer.WriteAsync(string.Empty);
+                await _writer.WriteLineAsync(string.Empty);
 
                 string banner = await ReadUntilAsync("User Logged In");
                 bool connected = banner.Contains("User Logged In", StringComparison.OrdinalIgnoreCase);
