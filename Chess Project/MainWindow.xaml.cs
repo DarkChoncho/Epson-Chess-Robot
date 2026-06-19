@@ -55,9 +55,9 @@ namespace Chess_Project
         private const int WhiteEpsonPort = 5000;
         private const int BlackEpsonPort = 5000;
 
-        private readonly double[] _whiteRobotBaseDeltas = [-1.218, -67.697];
-        private readonly double[] _blackRobotBaseDeltas = [0.616, -80.406];
-        private const double WhiteDeltaScalar = 0.095952;
+        private readonly double[] _whiteRobotBaseDeltas = [1.218, -70.697];
+        private readonly double[] _blackRobotBaseDeltas = [0.616, -83.406];
+        private const double WhiteDeltaScalar = 0.105952;
         private const double BlackDeltaScalar = 0.0895833;
 
         #endregion
