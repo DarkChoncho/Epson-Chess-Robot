@@ -708,10 +708,10 @@
             </Border>
         </Popup>
 
-        <TextBlock Text="Created by Tyler Reed and Quinn Sullivan" Margin="5,0,0,6" HorizontalAlignment="Left" VerticalAlignment="Bottom" Width="225" FontFamily="Sans Serif Collection" FontWeight="Medium" FontStyle="Italic" FontSize="12" Height="23" Foreground="#FFD0D0D0" Panel.ZIndex="1"/>
-        <Rectangle Fill="#FF404040" Width="235" Height="30" VerticalAlignment="Bottom" HorizontalAlignment="Left">
+        <TextBlock Text="Created by Tyler Reed" Margin="5,0,0,6" HorizontalAlignment="Left" VerticalAlignment="Bottom" Width="225" FontFamily="Sans Serif Collection" FontWeight="Medium" FontStyle="Italic" FontSize="12" Height="23" Foreground="#FFD0D0D0" Panel.ZIndex="1"/>
+        <Rectangle Fill="#FF404040" Width="135" Height="30" VerticalAlignment="Bottom" HorizontalAlignment="Left">
             <Rectangle.Clip>
-                <RectangleGeometry Rect="-10, 0, 245, 40" RadiusX="5" RadiusY="5"/>
+                <RectangleGeometry Rect="-10, 0, 145, 40" RadiusX="5" RadiusY="5"/>
             </Rectangle.Clip>
         </Rectangle>
 
