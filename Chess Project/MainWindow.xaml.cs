@@ -4366,11 +4366,14 @@ namespace Chess_Project
         /// <remarks>✅ Updated on 7/23/2025</remarks>
         private void RotateImagesWithTag(string tag, bool enable)
         {
+            int angle = (_flip == 0) ? 180 : 0;
+
             foreach (Image image in Chess_Board.Children.OfType<Image>())
             {
                 if (image.Tag?.ToString() == tag)
                 {
-                    image.RenderTransform = Board.LayoutTransform;
+                    image.RenderTransformOrigin = new Point(0.5, 0.5);
+                    image.RenderTransform = new RotateTransform(angle);
                     image.IsEnabled = enable;
                 }
             }
@@ -6000,6 +6003,9 @@ namespace Chess_Project
                     Chess_Board.Children.Add(img);
                     AttachClickHandlerByName(img);
                 }
+
+                if (_flip == 1)
+                    FlipBoard();
             }).Task;
         }
 
