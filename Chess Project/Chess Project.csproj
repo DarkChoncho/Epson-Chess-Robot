@@ -52,9 +52,12 @@
     <None Remove="Assets\Boards\Sky.png" />
     <None Remove="Assets\Boards\Tournament.png" />
     <None Remove="Assets\Boards\Walnut.png" />
+    <None Remove="Assets\Icons\EngineIcon.png" />
     <None Remove="Assets\Icons\Gear.PNG" />
     <None Remove="Assets\Icons\Info.png" />
     <None Remove="Assets\Icons\ShowHide.PNG" />
+    <None Remove="Assets\Icons\UserIcon.png" />
+    <None Remove="Assets\Icons\UserIcon.svg" />
     <None Remove="Assets\Pieces\Alpha\BlackBishop.png" />
     <None Remove="Assets\Pieces\Alpha\BlackKing.png" />
     <None Remove="Assets\Pieces\Alpha\BlackKnight.png" />
@@ -429,6 +432,9 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
     <Content Include="Assets\Boards\Walnut.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Icons\UserIcon.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
     <Content Include="Assets\Pieces\Alpha\BlackBishop.png">
@@ -975,6 +981,9 @@
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </Content>
     <Content Include="Stockfish.exe">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Icons\EngineIcon.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
     <Resource Include="Assets\Icons\Gear.PNG">

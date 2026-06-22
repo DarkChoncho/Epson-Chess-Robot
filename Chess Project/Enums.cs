@@ -31,4 +31,10 @@
         UserVsCom = 1,
         UserVsUser = 2
     }
+
+    public enum CardPosition
+    {
+        Top,
+        Bot
+    }
 }

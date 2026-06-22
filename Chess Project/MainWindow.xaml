@@ -738,6 +738,62 @@
             </Rectangle.Clip>
         </Rectangle>
 
+        <Border Name="Top_Card" Background="#FF404040" Width="160" Height="50" HorizontalAlignment="Left" VerticalAlignment="Top" CornerRadius="5">
+            <Grid Height="40" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="5, 5, 0, 0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="40"/>
+                </Grid.RowDefinitions>
+
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="40"/>
+                    <ColumnDefinition Width="110"/>
+                </Grid.ColumnDefinitions>
+                
+                <Rectangle Name="Top_IconBox" Fill="#FFD0D0D0" Width="40" Height="40" HorizontalAlignment="Left" VerticalAlignment="Top" Grid.Column="0">
+                    <Rectangle.Clip>
+                        <RectangleGeometry Rect="0, 0, 40, 40" RadiusX="3" RadiusY="3"/>
+                    </Rectangle.Clip>
+                </Rectangle>
+
+                <Image x:Name="TopIcon" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+                <TextBlock VerticalAlignment="Top" Grid.Column="1" Margin="5, 0, 0, 0">
+                    <Run x:Name="TopName" FontFamily="Sans Serif Collection" FontWeight="Bold" FontSize="12" Foreground="#FFD0D0D0"/>
+                    <Run Text=" "/>
+                    <Run x:Name="TopElo" FontFamily="Sans Serif Collection" FontWeight="Normal" FontSize="12" Foreground="#FFD0D0D0"/>
+                </TextBlock>
+            </Grid>
+
+            
+        </Border>
+
+        <Border Name="Bottom_Card" Background="#FF404040" Width="160" Height="50" HorizontalAlignment="Left" VerticalAlignment="Bottom" CornerRadius="5">
+            <Grid Height="40" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="5, 5, 0, 0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="40"/>
+                </Grid.RowDefinitions>
+
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="40"/>
+                    <ColumnDefinition Width="110"/>
+                </Grid.ColumnDefinitions>
+
+                <Rectangle Name="Bottom_IconBox" Fill="#FFD0D0D0" Width="40" Height="40" HorizontalAlignment="Left" VerticalAlignment="Top" Grid.Column="0">
+                    <Rectangle.Clip>
+                        <RectangleGeometry Rect="0, 0, 40, 40" RadiusX="3" RadiusY="3"/>
+                    </Rectangle.Clip>
+                </Rectangle>
+
+                <Image x:Name="BottomIcon" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+                <TextBlock VerticalAlignment="Top" Grid.Column="1" Margin="5, 0, 0, 0">
+                    <Run x:Name="BottomName" FontFamily="Sans Serif Collection" FontWeight="Bold" FontSize="12" Foreground="#FFD0D0D0"/>
+                    <Run Text=" "/>
+                    <Run x:Name="BottomElo" FontFamily="Sans Serif Collection" FontWeight="Normal" FontSize="12" Foreground="#FFD0D0D0"/>
+                </TextBlock>
+            </Grid>
+        </Border>
+
         <Grid Name ="Game_Start" HorizontalAlignment="Right" Width="180" Panel.ZIndex="0">
             <TextBlock Text="Select Play Type:" Margin="10,10,0,10" HorizontalAlignment="Right" VerticalAlignment="Top" FontFamily="Sans Serif Collection" FontWeight="ExtraBold" Width="140" TextAlignment="Center" Foreground="#FFD0D0D0" Panel.ZIndex="1"/>
             <ComboBox Name="Play_Type" SelectionChanged="PlayTypeChanged" Width="100" Height="30" Margin="20, 40" HorizontalAlignment="Right" VerticalAlignment="Top" IsSynchronizedWithCurrentItem="True" FontFamily="Sans Serif Collection" FontSize="11" Panel.ZIndex="1">

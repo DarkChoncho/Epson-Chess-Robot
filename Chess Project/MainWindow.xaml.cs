@@ -338,7 +338,7 @@ namespace Chess_Project
         /// </list>
         /// </summary>
         /// <remarks>
-        /// <para>✅ Updated on 9/3/2025</para>
+        /// <para>✅ Updated on 6/22/2026</para>
         /// </remarks>
         public MainWindow()
         {
@@ -353,6 +353,12 @@ namespace Chess_Project
             ApplyThemeFormatting();
 
             this.PreviewMouseDown += MainWindow_PreviewMouseDown;
+
+            // Reposition player cards whenever the window changes size
+            this.SizeChanged += (_, _) => SizePlayerCards();
+
+            // Initial positioning after layout is complete
+            this.Loaded += (_, _) => SizePlayerCards();
         }
 
         /// <summary>
@@ -1135,7 +1141,7 @@ namespace Chess_Project
         ///     <item><description>Creates a fresh cancellation token for the game loop and starts <see cref="RunGameLoopAsync"/> fire-and-forget.</description></item>
         /// </list>
         /// Any unexpected errors are logged and rethrown after cleanup.
-        /// <para>✅ Updated on 9/3/2025</para>
+        /// <para>✅ Updated on 6/22/2026</para>
         /// </remarks>
         /// <exception cref="Exception">Unexpected failures during startup or loop launch.</exception>
         /// <returns>A task that completes when startup work finishes.</returns>
@@ -1307,6 +1313,8 @@ namespace Chess_Project
                 // Create a fresh “loop stopped” signal
                 _loopStoppedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
+                UpdatePlayerCards();
+
                 // Fire and forget; the loop itself will signal when it fully exits
                 _ = RunGameLoopAsync(_loopCts.Token);
             }
@@ -1340,7 +1348,7 @@ namespace Chess_Project
         ///     <item>Designed as a "fire-and-forget" entry point: the game loop runs independently,
         ///           and this method returns immediately once setup is complete.</item>
         /// </list>
-        /// ✅ Written on 8/31/2025
+        /// ✅ Updated on 6/22/2026
         /// </remarks>
         /// <returns>A completed <see cref="Task"/> once resume initialization finishes.</returns>
         /// <exception cref="Exception">Any unexpected setup or loop-start errors are logged and rethrown.</exception>
@@ -1440,6 +1448,8 @@ namespace Chess_Project
 
                 // Create a fresh “loop stopped” signal
                 _loopStoppedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+                UpdatePlayerCards();
 
                 // Fire and forget; the loop itself will signal when it fully exits
                 _ = RunGameLoopAsync(_loopCts.Token);
@@ -3349,7 +3359,7 @@ namespace Chess_Project
         /// </summary>
         /// <param name="sender">The UI element that triggered the event.</param>
         /// <param name="e">Teh routed event arguments.</param>
-        /// <remarks>✅ Updated on 6/11/2025</remarks>
+        /// <remarks>✅ Updated on 6/22/2026</remarks>
         private void Fullscreen(object sender, RoutedEventArgs e)
         {
             mainWindow.WindowStyle = WindowStyle.None;
@@ -3360,6 +3370,7 @@ namespace Chess_Project
 
             // Redraw evaluation bar to fit the new layout
             UpdateEvalBar();
+            SizePlayerCards();
         }
 
         /// <summary>
@@ -3385,7 +3396,7 @@ namespace Chess_Project
         /// </summary>
         /// <param name="sender">The UI element that triggered the event.</param>
         /// <param name="e">The routed event arguments.</param>
-        /// <remarks>✅ Updated on 6/11/2025</remarks>
+        /// <remarks>✅ Updated on 6/22/2026</remarks>
         private void Windowed(object sender, RoutedEventArgs e)
         {
             // Restore window border
@@ -3400,6 +3411,7 @@ namespace Chess_Project
 
             // Reapply evaluation bar alignment or styling
             UpdateEvalBar();
+            SizePlayerCards();
         }
 
         /// <summary>
@@ -4049,7 +4061,7 @@ namespace Chess_Project
         /// Rotates the board surface, rank/file labels, and all piece images;
         /// updates the evaluation bar to match the new perspective.
         /// </summary>
-        /// <remarks>✅ Updated on 8/18/2025</remarks>
+        /// <remarks>✅ Updated on 6/22/2026</remarks>
         public void FlipBoard()
         {
             // Choose rotation based on current flip state
@@ -4079,6 +4091,7 @@ namespace Chess_Project
             // Toggle state and refresh evaluation UI
             _flip = 1 - _flip;
             UpdateEvalBar();
+            UpdatePlayerCards();
         }
 
         /// <summary>
@@ -4272,6 +4285,125 @@ namespace Chess_Project
 
             WhiteAdvantage.Margin = new Thickness(0, -EvalBar.Width, InternalVerticalMargin, 0);
             BlackAdvantage.Margin = new Thickness(0, -EvalBar.Height, InternalVerticalMargin, 0);
+        }
+
+        private void SizePlayerCards()
+        {
+            double leftEdge = (Screen.ActualWidth / 2) - (Board.ActualWidth / 2);
+            double vertSpace = (Screen.ActualHeight / 2) - (Board.ActualHeight / 2);
+            double vertMargin = vertSpace - Top_Card.ActualHeight - 5;
+
+            Top_Card.Margin = new Thickness(leftEdge, vertMargin, 0, 0);
+            Bottom_Card.Margin = new Thickness(leftEdge, 0, 0, vertMargin);
+        }
+
+        private void UpdatePlayerCards()
+        {
+            if (_flip == 0)  // white on bottom
+            {
+                SetCard(CardPosition.Top, ChessColor.Black);
+                SetCard(CardPosition.Bot, ChessColor.White);
+            }
+            else
+            {
+                SetCard(CardPosition.Top, ChessColor.White);
+                SetCard(CardPosition.Bot, ChessColor.Black);
+            }
+        }
+
+        private void SetCard(CardPosition position, ChessColor color)
+        {
+            string enginePath = System.IO.Path.Combine(_executableDirectory, "Assets", "Icons", "EngineIcon.png");
+            string userPath = System.IO.Path.Combine(_executableDirectory, "Assets", "Icons", "UserIcon.png");
+            string? selectedColor = _selectedColor?.Content?.ToString();
+            ChessColor userColor = selectedColor == "White" ? ChessColor.White : ChessColor.Black;
+
+            if (position == CardPosition.Top)
+            {
+                switch (_gameMode)
+                {
+                    case GameMode.ComVsCom:
+                        Top_IconBox.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF404040"));
+                        TopIcon.Source = new BitmapImage(new Uri(enginePath));
+                        TopName.Text = "Stockfish";
+                        TopElo.Text = color == ChessColor.White ? "(" + _selectedWhiteElo.Content.ToString() + ")" : "(" + _selectedBlackElo.Content.ToString() + ")";
+                        break;
+
+                    case GameMode.UserVsCom:
+                        if (userColor == color)
+                        {
+                            Top_IconBox.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFD0D0D0"));
+                            TopIcon.Source = new BitmapImage(new Uri(userPath));
+                            TopName.Text = "User";
+                            TopElo.Text = "";
+                        }
+                        else
+                        {
+                            Top_IconBox.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF404040"));
+                            TopIcon.Source = new BitmapImage(new Uri(enginePath));
+                            TopName.Text = "Stockfish";
+                            TopElo.Text = "(" + _selectedElo.Content.ToString() + ")";
+                        }
+                        break;
+
+                    case GameMode.UserVsUser:
+                        Top_IconBox.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFD0D0D0"));
+                        TopIcon.Source = new BitmapImage(new Uri(userPath));
+                        TopName.Text = "User";
+                        TopElo.Text = "";
+                        break;
+
+                    default:
+                        Top_IconBox.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFD0D0D0"));
+                        TopIcon.Source = new BitmapImage(new Uri(userPath));
+                        TopName.Text = "Unknown";
+                        TopElo.Text = "(???)";
+                        break;
+                }
+            }
+            else
+            {
+                switch (_gameMode)
+                {
+                    case GameMode.ComVsCom:
+                        Bottom_IconBox.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF404040"));
+                        BottomIcon.Source = new BitmapImage(new Uri(enginePath));
+                        BottomName.Text = "Stockfish";
+                        BottomElo.Text = color == ChessColor.White ? "(" + _selectedWhiteElo.Content.ToString() + ")" : "(" + _selectedBlackElo.Content.ToString() + ")";
+                        break;
+
+                    case GameMode.UserVsCom:
+                        if (userColor == color)
+                        {
+                            Bottom_IconBox.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFD0D0D0"));
+                            BottomIcon.Source = new BitmapImage(new Uri(userPath));
+                            BottomName.Text = "User";
+                            BottomElo.Text = "";
+                        }
+                        else
+                        {
+                            Bottom_IconBox.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF404040"));
+                            BottomIcon.Source = new BitmapImage(new Uri(enginePath));
+                            BottomName.Text = "Stockfish";
+                            BottomElo.Text = "(" + _selectedElo.Content.ToString() + ")";
+                        }
+                        break;
+
+                    case GameMode.UserVsUser:
+                        Bottom_IconBox.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFD0D0D0"));
+                        BottomIcon.Source = new BitmapImage(new Uri(userPath));
+                        BottomName.Text = "User";
+                        BottomElo.Text = "";
+                        break;
+
+                    default:
+                        Bottom_IconBox.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFD0D0D0"));
+                        BottomIcon.Source = new BitmapImage(new Uri(userPath));
+                        BottomName.Text = "Unknown";
+                        BottomElo.Text = "(???)";
+                        break;
+                }
+            }
         }
 
         /// <summary>
@@ -5215,7 +5347,7 @@ namespace Chess_Project
         /// </list>
         /// Resets transient flags at the end (capture/promotion/castling/en passant).
         /// </summary>
-        /// <remarks>✅ Updated on 8/20/2025</remarks>
+        /// <remarks>✅ Updated on 6/22/2026</remarks>
         private async Task DocumentMoveAsync()
         {
             using StreamWriter writer = new(FenFilePath, append: true);
@@ -5315,10 +5447,10 @@ namespace Chess_Project
                 }
 
                 // Pick bit for the promoted piece type (from off-board location)
-                if (PromotionPiece == 'k')
+                if (PromotionPiece == 'n')
                 {
                     int knightNumber = ParseDigitAt(ActivePiece, 11) - 1;
-                    PromotedTo = "Q";
+                    PromotedTo = "N";
                     PickBit3 = _knightPick[knightNumber];
                 }
                 else if (PromotionPiece == 'b')
@@ -5465,7 +5597,7 @@ namespace Chess_Project
                 ThreefoldRepetition = true;
 
             // Update the evaluation interface move table (unchanged)
-            System.Windows.Media.Color borderColor = (System.Windows.Media.Color)ColorConverter.ConvertFromString("#FFD0D0D0");
+            Color borderColor = (Color)ColorConverter.ConvertFromString("#FFD0D0D0");
             SolidColorBrush borderBrush = new(borderColor);
             FontFamily fontFamily = new("Sans Serif Collection");
             FontWeight fontWeight = FontWeights.Bold;
