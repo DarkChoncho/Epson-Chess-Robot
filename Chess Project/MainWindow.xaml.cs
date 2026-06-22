@@ -4287,6 +4287,19 @@ namespace Chess_Project
             BlackAdvantage.Margin = new Thickness(0, -EvalBar.Height, InternalVerticalMargin, 0);
         }
 
+        /// <summary>
+        /// Positions the player information cards relative to the chess board,
+        /// ensuring they remain aligned with the board's left edge and maintain
+        /// consistent spacing above and below the playing area.
+        /// </summary>
+        /// <remarks>
+        /// Calculates the board's horizontal offset within <see cref="Screen"/> and 
+        /// the available vertical space surrounding <see cref="Board"/>. The resulting
+        /// margins are applied to <see cref="Top_Card"/> and <see cref="Bottom_Card"/>
+        /// so that both cards remain visually anchored to the board regardless of
+        /// window resizing or layout changes.
+        /// <para>✅ Written on 6/22/2026</para>
+        /// </remarks>
         private void SizePlayerCards()
         {
             double leftEdge = (Screen.ActualWidth / 2) - (Board.ActualWidth / 2);
@@ -4297,6 +4310,17 @@ namespace Chess_Project
             Bottom_Card.Margin = new Thickness(leftEdge, 0, 0, vertMargin);
         }
 
+        /// <summary>
+        /// Refreshes the player information cards to match the current board orientation.
+        /// </summary>
+        /// <remarks>
+        /// Assigns the appropriate player data to <see cref="Top_Card"/> and
+        /// <see cref="Bottom_Card"/> based on the current value of <see cref="_flip"/>.
+        /// When White is displayed at the bottom of the board, the Black player is shown
+        /// in the top card and vice versa. This method should be called whenever the board
+        /// orientation changes or player information needs to be refreshed.
+        /// <para>✅ Written on 6/22/2026</para>
+        /// </remarks>
         private void UpdatePlayerCards()
         {
             if (_flip == 0)  // white on bottom
@@ -4311,6 +4335,46 @@ namespace Chess_Project
             }
         }
 
+        /// <summary>
+        /// Configures the specified player card with the appropriate icon, name,
+        /// and rating information based on the current game mode and player color.
+        /// </summary>
+        /// <param name="position">
+        /// Identifies which player card to update
+        /// (<see cref="CardPosition.Top"/> or <see cref="CardPosition.Bot"/>).
+        /// </param>
+        /// <param name="color">
+        /// The chess color represented by the card being updated.
+        /// </param>
+        /// <remarks>
+        /// Determines whether the specified card represents a human player or a
+        /// Stockfish engine instance based on the current <see cref="_gameMode"/>
+        /// and the user's selected color. The method updates the card's icon,
+        /// background styling, display name, and Elo rating accordingly.
+        /// <list type="bullet">
+        ///     <item><description>
+        ///     <see cref="GameMode.ComVsCom"/> displays Stockfish information
+        ///     for both cards, using the corresponding White or Black Elo value.
+        ///     </description></item>
+        ///     <item><description>
+        ///     <see cref="GameMode.UserVsCom"/> displays either User or Stockfish
+        ///     information depending on whether <paramref name="color"/> matches
+        ///     the user's selected side.
+        ///     </description></item>
+        ///     <item><description>
+        ///     <see cref="GameMode.UserVsUser"/> displays User information for
+        ///     both cards.
+        ///     </description></item>
+        ///     <item><description>
+        ///     Any unsupported game mode displays placeholder values.
+        ///     </description></item>
+        /// </list>
+        /// <para>
+        /// Card content is applied to either the top or bottom player card based
+        /// on <paramref name="position"/>.
+        /// </para>
+        /// <para>✅ Written on 6/22/2026</para>
+        /// </remarks>
         private void SetCard(CardPosition position, ChessColor color)
         {
             string enginePath = System.IO.Path.Combine(_executableDirectory, "Assets", "Icons", "EngineIcon.png");
