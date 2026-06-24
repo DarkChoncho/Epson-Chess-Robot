@@ -1185,16 +1185,16 @@ namespace Chess_Project
                 EnableAllPieces();
                 EraseAnnotations();
 
-                // Initialize FEN/PGN (async where possible)
-                CreateFenCode();
-                await File.WriteAllTextAsync(FenFilePath, string.Empty, CancellationToken.None);
-                WritePGNFile();
-
                 // Decide move
                 _gameMode =
                     playType == "Com Vs. Com" ? GameMode.ComVsCom :
                     playType == "User Vs. Com" ? GameMode.UserVsCom :
                                                  GameMode.UserVsUser;
+
+                // Initialize FEN/PGN (async where possible)
+                CreateFenCode();
+                await File.WriteAllTextAsync(FenFilePath, string.Empty, CancellationToken.None);
+                WritePGNFile();
 
                 // Robot-controlled setup
                 if (_epsonMotion && !BoardSet)
@@ -2712,7 +2712,7 @@ namespace Chess_Project
         ///     <item><description>Updates <see cref="DisplayedAdvantage"/>, <see cref="QuantifiedEvaluation"/>, and sets <see cref="EndGame"/> where appropriate.</description></item>
         ///     <item><description>Displays appropriate popups to communicate the result to the user.</description></item>
         /// </list>
-        /// <para>✅ Updated on 9/2/2025</para>
+        /// <para>✅ Updated on 6/24/2026</para>
         /// </remarks>
         /// <returns></returns>
         private async Task CheckmateVerifierAsync()
@@ -2762,15 +2762,23 @@ namespace Chess_Project
                 if (infoLines.Any(line => line.Contains("mate")))
                 {
                     if (Move == 0)
+                    {
                         ShowGameOverPopup($"White wins by checkmate in {Fullmove} moves!", "White wins by checkmate");
+                        FinalizePGNResult("1-0");
+                    }
                     else
+                    {
                         ShowGameOverPopup($"Black wins by checkmate in {Fullmove - 1} moves!", "Black wins by checkmate");
+                        FinalizePGNResult("0-1");
+                    }
+
                 }
                 else if (infoLines.Any(line => line.Contains("cp")))
                 {
-                    DisplayedAdvantage = ".5 = .5";
+                    DisplayedAdvantage = ".5 - .5";
                     QuantifiedEvaluation = 10;
                     ShowGameOverPopup($"Game ends in a stalemate after {(Move == 0 ? Fullmove : Fullmove - 1)}", "Stalemate");
+                    FinalizePGNResult("1/2-1/2");
                 }
             }
             else if (Halfmove == 100)  // fifty-move rule occurs
@@ -2781,6 +2789,7 @@ namespace Chess_Project
                 ShowGameOverPopup("The game is a draw due to the fifty-move rule,\n" +
                                   "as there have been no pawn movements\n" +
                                   "or captures in the last fifty full turns.", "Draw due to fifty-move rule");
+                FinalizePGNResult("1/2-1/2");
             }
             else if (ThreefoldRepetition)
             {
@@ -2790,6 +2799,7 @@ namespace Chess_Project
                 ShowGameOverPopup("The game is a draw due to threefold repetition,\n" +
                                   "as the same position was reached three\n" +
                                   "times with the same color to move each time.", "Draw due to threefold repetition");
+                FinalizePGNResult("1/2-1/2");
             }
             else
             {
@@ -2841,6 +2851,7 @@ namespace Chess_Project
                         ShowGameOverPopup("The game is a draw due to insufficient material,\n" +
                                             "as neither side has enough remaining pieces\n" +
                                             "on the board to force a checkmate.", "Draw due to insufficient material");
+                        FinalizePGNResult("1/2-1/2");
                     }
                 }
             }
@@ -5369,7 +5380,7 @@ namespace Chess_Project
         /// Writes the PGN file header with metadata based on the selected game mode and players.
         /// Includes event name, site, date, round, player names, result placeholder, and ELOs when applicable.
         /// </summary>
-        /// <remarks>✅ Updated on 7/18/2025</remarks>
+        /// <remarks>✅ Updated on 6/24/2026</remarks>
         private void WritePGNFile()
         {
             File.WriteAllText(PgnFilePath, "[Event \"Chess Match\"]\n");
@@ -5380,17 +5391,17 @@ namespace Chess_Project
             switch (_gameMode)
             {
                 case GameMode.ComVsCom:  // Com Vs. Com
-                    File.AppendAllText(PgnFilePath, $"[White \"Bot\"]\n[Black \"Bot\"]\n[Result \"*\"]\n[WhiteElo \"{_selectedWhiteElo?.Content}\"]\n[BlackElo \"{_selectedBlackElo?.Content}\"]\n\n");
+                    File.AppendAllText(PgnFilePath, $"[White \"Engine\"]\n[Black \"Engine\"]\n[Result \"*\"]\n[WhiteElo \"{_selectedWhiteElo?.Content}\"]\n[BlackElo \"{_selectedBlackElo?.Content}\"]\n\n");
                     break;
 
                 case GameMode.UserVsCom:  // User Vs. Com
                     if (_selectedColor?.Content.ToString() == "White")
                     {
-                        File.AppendAllText(PgnFilePath, $"[White \"User\"]\n[Black \"Bot\"]\n[Result \"*\"]\n[BlackElo \"{_selectedElo?.Content}\"]\n\n");
+                        File.AppendAllText(PgnFilePath, $"[White \"User\"]\n[Black \"Engine\"]\n[Result \"*\"]\n[BlackElo \"{_selectedElo?.Content}\"]\n\n");
                     }
                     else
                     {
-                        File.AppendAllText(PgnFilePath, $"[White \"Bot\"]\n[Black \"User\"]\n[Result \"*\"]\n[WhiteElo \"{_selectedElo?.Content}\"]\n\n");
+                        File.AppendAllText(PgnFilePath, $"[White \"Engine\"]\n[Black \"User\"]\n[Result \"*\"]\n[WhiteElo \"{_selectedElo?.Content}\"]\n\n");
                     }
                     break;
 
@@ -5735,6 +5746,36 @@ namespace Chess_Project
 
                 File.AppendAllText(PgnFilePath, $"{_pgnMove} ");
             }
+        }
+
+        /// <summary>
+        /// Finalizes the PGN file once the game has concluded.
+        /// <list type="bullet">
+        ///     <item><description>Replaces the temporary result placeholder (<c>*</c>) in the PGN header with the final game result.</description></item>
+        ///     <item><description>Appends the final result token (<c>1-0</c>, <c>0-1</c>, or <c>1/2-1/2</c>) to the end of the move list.</description></item>
+        /// </list>
+        /// </summary>
+        /// <param name="result">
+        /// The official PGN game result:
+        /// <c>"1-0"</c> for a White win,
+        /// <c>"0-1"</c> for a Black win,
+        /// or <c>"1/2-1/2"</c> for a draw.
+        /// </param>
+        /// <remarks>✅ Written on 6/24/2026</remarks>
+        private static void FinalizePGNResult(string result)
+        {
+            if (!File.Exists(PgnFilePath))
+                return;
+
+            string pgn = File.ReadAllText(PgnFilePath);
+
+            // Replace header result
+            pgn = pgn.Replace("[Result \"*\"]", $"[Result \"{result}\"]");
+
+            // Append result to end of move text
+            pgn += $"{result}";
+
+            File.WriteAllText(PgnFilePath, pgn);
         }
 
         /// <summary>
